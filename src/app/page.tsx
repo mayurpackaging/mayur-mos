@@ -809,7 +809,7 @@ function BreakdownTab({user}:{user:User}) {
 }
 
 // ─── Reports Tab ──────────────────────────────────────────────
-export function ReportsTab() {
+function ReportsTab() {
   const [module, setModule] = useState('production')
   const [from, setFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 7)
