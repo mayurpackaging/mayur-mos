@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 interface User { name: string; username: string; role: string; plant: string; modules: string }
 
 const ML: Record<string, string> = {
-  mis:"MIS", ims:"IMS Stock", production:"Production", planning:"Planning",
+  mis:"MIS", ims:"IMS Stock", production:"Production",
   quality:"Quality", rejection:"Rejection", mouldchange:"Mould Change",
-  dispatch:"Dispatch", batch:"Batch", sales:"Sales", spares:"Spares",
-  mouldpm:"Mould PM", breakdown:"Breakdown", reports:"Reports", users:"Users", performance:"Performance"
+  dispatch:"Dispatch", spares:"Spares",
+  mouldpm:"Mould PM", breakdown:"Breakdown", reports:"Reports", users:"Users"
 }
 
 const MACH: Record<string, string[]> = {
@@ -141,7 +141,10 @@ export default function MOS() {
         {tab==='mouldpm'&&<MouldPMTab user={user}/>}
         {tab==='rejection'&&<RejectionTab user={user}/>}
         {tab==='reports'&&<ReportsTab/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports'].includes(tab)&&(
+        {tab==='dispatch'&&<DispatchTab user={user}/>}
+        {tab==='spares'&&<SparesTab user={user}/>}
+        {tab==='quality'&&<QualityTab user={user}/>}
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -1150,4 +1153,520 @@ function ReportsTab() {
       )}
     </div>
   )
+}
+
+// ─── Dispatch Tab ─────────────────────────────────────────────
+function DispatchTab({user}:{user:User}) {
+  const [items,setItems]=useState<any[]>([])
+  const [parties,setParties]=useState<any[]>([])
+  const [recent,setRecent]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [challan,setChallan]=useState<any>(null)
+  const [customer,setCustomer]=useState('')
+  const [vehicleType,setVehicleType]=useState('5')
+  const [vehicleNo,setVehicleNo]=useState('')
+  const [driverName,setDriverName]=useState('')
+  const [deliveryAddress,setDeliveryAddress]=useState('')
+  const [notes,setNotes]=useState('')
+  const [date,setDate]=useState(nd())
+  const [lines,setLines]=useState<any[]>([
+    {items:[{item:'',qty:''}]},
+    {items:[{item:'',qty:''}]},
+    {items:[{item:'',qty:''}]},
+    {items:[{item:'',qty:''}]},
+    {items:[{item:'',qty:''}]},
+  ])
+
+  useEffect(()=>{
+    Promise.all([
+      fetch('/api/ims').then(r=>r.json()),
+      fetch('/api/dispatch').then(r=>r.json())
+    ]).then(([imsRes,dispRes])=>{
+      setItems(imsRes.items||[])
+      setParties(dispRes.parties||[])
+      setRecent(dispRes.recent||[])
+      setLoading(false)
+    })
+  },[])
+
+  const maxLines = parseInt(vehicleType)
+
+  const updateLineItem=(lineIdx:number,itemIdx:number,field:string,val:string)=>{
+    setLines(prev=>{
+      const n=[...prev]
+      n[lineIdx]={...n[lineIdx],items:[...n[lineIdx].items]}
+      n[lineIdx].items[itemIdx]={...n[lineIdx].items[itemIdx],[field]:val}
+      return n
+    })
+  }
+
+  const addItemToLine=(lineIdx:number)=>{
+    setLines(prev=>{
+      const n=[...prev]
+      n[lineIdx]={...n[lineIdx],items:[...n[lineIdx].items,{item:'',qty:''}]}
+      return n
+    })
+  }
+
+  const removeItemFromLine=(lineIdx:number,itemIdx:number)=>{
+    setLines(prev=>{
+      const n=[...prev]
+      n[lineIdx]={...n[lineIdx],items:n[lineIdx].items.filter((_:any,i:number)=>i!==itemIdx)}
+      return n
+    })
+  }
+
+  const calcLineTotal=(lineIdx:number)=>lines[lineIdx]?.items.reduce((a:number,i:any)=>a+(parseFloat(i.qty)||0),0)||0
+  const grandTotal=lines.slice(0,maxLines).reduce((a,_,i)=>a+calcLineTotal(i),0)
+
+  const save=async()=>{
+    if(!customer){setToast({msg:'Party naam daalo!',ok:false});return}
+    const dispLines:any[]=[]
+    lines.slice(0,maxLines).forEach((line,lineIdx)=>{
+      line.items.forEach((item:any)=>{
+        if(item.item&&parseFloat(item.qty)>0){
+          const found=items.find(i=>i.name===item.item)
+          dispLines.push({lineNo:lineIdx+1,plant:'All',itemName:item.item,qty:parseFloat(item.qty),category:found?.category||''})
+        }
+      })
+    })
+    if(dispLines.length===0){setToast({msg:'Koi item nahi bhara!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date,customer,vehicleType:vehicleType==='5'?'Choti Gaadi':'Badi Gaadi',vehicleNo,driverName,deliveryAddress,notes,dispatchBy:user.name,lines:dispLines})}).then(r=>r.json())
+    setSaving(false)
+    if(res.success){
+      setToast({msg:res.msg,ok:true})
+      setChallan({...res,customer,vehicleNo,driverName,date,lines:dispLines,grandTotal})
+      fetch('/api/dispatch').then(r=>r.json()).then(d=>setRecent(d.recent||[]))
+    } else {
+      setToast({msg:res.msg,ok:false})
+    }
+  }
+
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  return <div>
+    {/* Recent dispatches */}
+    {recent.length>0&&<div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:8}}>Recent Dispatches</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>{['Challan','Date','Party','Total Ctn','Vehicle','By'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <tbody>{recent.map((r:any,i:number)=>(
+            <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{r.challan_no}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.date}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.customer}</td>
+              <td style={{padding:'6px 8px',fontWeight:700,color:'#276221'}}>{r.total_cartons} Ctn</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.vehicle_no}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.dispatch_by}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {/* Challan preview */}
+    {challan&&<div style={{...S.card,border:'2px solid #1F3864'}}>
+      <div style={{textAlign:'center',marginBottom:10}}>
+        <div style={{fontSize:14,fontWeight:700,color:'#1F3864'}}>MAYUR FOOD PACKAGING PRODUCTS</div>
+        <div style={{fontSize:10,color:'#666'}}>Bawana, Delhi — Delivery Challan</div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,marginBottom:8,fontSize:11}}>
+        <div><span style={{color:'#666'}}>Challan: </span><strong>{challan.challanNo}</strong></div>
+        <div><span style={{color:'#666'}}>Date: </span><strong>{challan.date}</strong></div>
+        <div><span style={{color:'#666'}}>Party: </span><strong>{challan.customer}</strong></div>
+        <div><span style={{color:'#666'}}>Vehicle: </span><strong>{challan.vehicleNo}</strong></div>
+        <div><span style={{color:'#666'}}>Driver: </span><strong>{challan.driverName}</strong></div>
+        <div><span style={{color:'#666'}}>Type: </span><strong>{vehicleType==='5'?'Choti':'Badi'} Gaadi</strong></div>
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px'}}>Line</th>
+            <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px'}}>Item</th>
+            <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'center'}}>Qty (Ctn)</th>
+          </tr></thead>
+          <tbody>{challan.lines.map((l:any,i:number)=>(
+            <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'6px 8px'}}>Line {l.lineNo}</td>
+              <td style={{padding:'6px 8px'}}>{l.itemName}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700}}>{l.qty}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div style={{background:'#1F3864',color:'#FFD966',padding:'8px 14px',textAlign:'center',marginTop:8,borderRadius:4,fontSize:13,fontWeight:700}}>
+        TOTAL: {challan.grandTotal} CARTONS
+      </div>
+      <button onClick={()=>window.print()} style={{width:'100%',marginTop:8,padding:8,background:'#276221',color:'#fff',border:'none',borderRadius:6,fontSize:12,cursor:'pointer'}}>🖨️ Print Challan</button>
+    </div>}
+
+    {/* New Dispatch Form */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>New Dispatch Order</div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
+        <div style={S.f}><label style={S.lbl}>Vehicle Type</label>
+          <select style={S.fi} value={vehicleType} onChange={e=>{setVehicleType(e.target.value);const n=parseInt(e.target.value);setLines(Array.from({length:Math.max(n,lines.length)},(_,i)=>lines[i]||{items:[{item:'',qty:''}]}))}}>
+            <option value="5">Choti Gaadi (5 lines)</option>
+            <option value="11">Badi Gaadi (11 lines)</option>
+          </select>
+        </div>
+      </div>
+      <div style={S.f}>
+        <label style={S.lbl}>Party / Customer Name</label>
+        <input style={S.fi} value={customer} onChange={e=>setCustomer(e.target.value)} placeholder="Party naam..." list="party-list"/>
+        <datalist id="party-list">{parties.map((p:any)=><option key={p.party_name} value={p.party_name}/>)}</datalist>
+      </div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Vehicle No.</label><input style={S.fi} value={vehicleNo} onChange={e=>setVehicleNo(e.target.value)} placeholder="e.g. DL 1C 1234"/></div>
+        <div style={S.f}><label style={S.lbl}>Driver Name</label><input style={S.fi} value={driverName} onChange={e=>setDriverName(e.target.value)} placeholder="Driver naam"/></div>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Delivery Address</label><input style={S.fi} value={deliveryAddress} onChange={e=>setDeliveryAddress(e.target.value)} placeholder="Location"/></div>
+    </div>
+
+    {/* Lines */}
+    {Array.from({length:maxLines},(_,lineIdx)=>(
+      <div key={lineIdx} style={{...S.card,border:'1px solid #E0E8FF'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>Line {lineIdx+1}</span>
+          <span style={{color:'#276221',fontWeight:700,fontSize:12}}>{calcLineTotal(lineIdx)} Ctn</span>
+        </div>
+        {(lines[lineIdx]?.items||[{item:'',qty:''}]).map((item:any,itemIdx:number)=>(
+          <div key={itemIdx} style={{display:'grid',gridTemplateColumns:'2fr 1fr 0.3fr',gap:5,marginBottom:5}}>
+            <select style={{...S.fi,fontSize:11}} value={item.item} onChange={e=>updateLineItem(lineIdx,itemIdx,'item',e.target.value)}>
+              <option value="">-- Item --</option>
+              {items.map(i=><option key={i.name} value={i.name}>{i.name}</option>)}
+            </select>
+            <input type="number" min="0" placeholder="Ctn" value={item.qty} onChange={e=>updateLineItem(lineIdx,itemIdx,'qty',e.target.value)} style={{padding:'6px',fontSize:12,fontWeight:600,border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center'}}/>
+            <button onClick={()=>removeItemFromLine(lineIdx,itemIdx)} style={{background:'#FFEBEE',color:'#C00000',border:'none',borderRadius:6,fontSize:14,cursor:'pointer'}}>×</button>
+          </div>
+        ))}
+        <button onClick={()=>addItemToLine(lineIdx)} style={{width:'100%',padding:5,border:'1px dashed #1F3864',borderRadius:6,background:'transparent',color:'#1F3864',fontSize:11,cursor:'pointer'}}>+ Item Add Karo</button>
+      </div>
+    ))}
+
+    {/* Grand total */}
+    <div style={{background:'#1F3864',borderRadius:10,padding:'10px 14px',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <span style={{color:'#90A8C8',fontSize:12,fontWeight:600}}>Grand Total</span>
+      <span style={{color:'#FFD966',fontSize:22,fontWeight:700}}>{grandTotal} Ctn</span>
+    </div>
+
+    <div style={S.f}><label style={S.lbl}>Notes</label><input style={S.fi} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Any instructions..."/></div>
+    <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Dispatch + Generate Challan'}</button>
+    {toast&&<Toast {...toast}/>}
+  </div>
+}
+
+// ─── Spares Tab ───────────────────────────────────────────────
+function SparesTab({user}:{user:User}) {
+  const [spares,setSpares]=useState<any[]>([])
+  const [movements,setMovements]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [vendor,setVendor]=useState('')
+  const [slipNo,setSlipNo]=useState('')
+  const [date,setDate]=useState(nd())
+  const [action,setAction]=useState('Stock In')
+  const [spareItems,setSpareItems]=useState([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0}])
+
+  const load=useCallback(()=>{fetch('/api/spares').then(r=>r.json()).then(d=>{setSpares(d.spares||[]);setMovements(d.recentMovements||[]);setLoading(false)})},[])
+  useEffect(()=>{load()},[load])
+
+  const addItem=()=>setSpareItems(p=>[...p,{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0}])
+  const removeItem=(i:number)=>setSpareItems(p=>p.filter((_,idx)=>idx!==i))
+  const updateItem=(i:number,field:string,val:string)=>{
+    setSpareItems(p=>{
+      const n=[...p]
+      n[i]={...n[i],[field]:val}
+      if(field==='qty'||field==='pricePerPc'){
+        n[i].total=parseFloat(n[i].qty||'0')*(parseFloat(n[i].pricePerPc||'0'))
+      }
+      // Auto-fill from master
+      if(field==='partName'){
+        const found=spares.find(s=>s.part_name.toLowerCase()===val.toLowerCase())
+        if(found){
+          n[i].category=found.category||''
+          n[i].unit=found.unit||'Pcs'
+          n[i].minQty=String(found.min_qty||0)
+          n[i].pricePerPc=String(found.last_price||0)
+        }
+      }
+      return n
+    })
+  }
+
+  const save=async()=>{
+    if(!vendor){setToast({msg:'Vendor naam daalo!',ok:false});return}
+    const validItems=spareItems.filter(i=>i.partName&&parseFloat(i.qty||'0')>0)
+    if(validItems.length===0){setToast({msg:'Koi item nahi bhara!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/spares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendor,slipNo,date,action,doneBy:user.name,items:validItems})}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.msg,ok:res.success})
+    if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0}]);setVendor('');setSlipNo('')}
+  }
+
+  const outOfStock=spares.filter(s=>s.status==='Out of Stock').length
+  const low=spares.filter(s=>s.status==='Low').length
+
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  // Get unique vendors
+  const vendors=[...new Set(spares.map(s=>s.last_vendor).filter(Boolean))]
+
+  return <div>
+    {/* Stock status */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total Spares</div><div style={{fontSize:20,fontWeight:700}}>{spares.length}</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Out of Stock</div><div style={{fontSize:20,fontWeight:700,color:'#C00000'}}>{outOfStock}</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Low Stock</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{low}</div></div>
+    </div>
+
+    {/* Stock table */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:8}}>Spares Stock Status</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>{['Part Name','Category','Stock','Min','Last Vendor','Last Price','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <tbody>{spares.length===0?<tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>Koi spare nahi — neeche add karo!</td></tr>:spares.map((s:any,i:number)=>{
+            const col=s.status==='Out of Stock'?'#C00000':s.status==='Low'?'#854F0B':'#276221'
+            const bg=s.status==='Out of Stock'?'#FFEBEE':s.status==='Low'?'#FFF3E0':'#E8F5E9'
+            return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{s.part_name}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{s.category}</td>
+              <td style={{padding:'6px 8px',fontWeight:700,color:col}}>{s.current_stock} {s.unit}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',color:'#666'}}>{s.min_qty}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{s.last_vendor||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{s.last_price?`₹${s.last_price}`:'--'}</td>
+              <td style={{padding:'6px 8px'}}><span style={{background:bg,color:col,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{s.status}</span></td>
+            </tr>
+          })}</tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* Purchase / Movement form */}
+    <div style={{...S.card,border:'1px solid #1F3864'}}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>Stock Entry (Purchase / Use)</div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Vendor Name</label>
+          <input style={S.fi} value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Vendor naam..." list="vendor-list"/>
+          <datalist id="vendor-list">{vendors.map((v:any)=><option key={v} value={v}/>)}</datalist>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Slip No. (Optional)</label><input style={S.fi} value={slipNo} onChange={e=>setSlipNo(e.target.value)} placeholder="INV-001"/></div>
+      </div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
+        <div style={S.f}><label style={S.lbl}>Action</label>
+          <select style={S.fi} value={action} onChange={e=>setAction(e.target.value)}>
+            <option>Stock In</option><option>Stock Out</option><option>Used in Machine</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Items */}
+      <div style={{fontWeight:600,fontSize:12,marginBottom:8,color:'#1F3864'}}>Items</div>
+      {spareItems.map((item,i)=>(
+        <div key={i} style={{background:'#F8F9FF',border:'1px solid #E0E8FF',borderRadius:8,padding:10,marginBottom:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+            <span style={{fontSize:11,fontWeight:700,color:'#1F3864'}}>Item {i+1}</span>
+            {i>0&&<button onClick={()=>removeItem(i)} style={{background:'#FFEBEE',color:'#C00000',border:'none',borderRadius:4,padding:'2px 8px',fontSize:11,cursor:'pointer'}}>Remove</button>}
+          </div>
+          <div style={S.f}><label style={S.lbl}>Part Name</label>
+            <input style={S.fi} value={item.partName} onChange={e=>updateItem(i,'partName',e.target.value)} placeholder="Spare ka naam..." list={`part-list-${i}`}/>
+            <datalist id={`part-list-${i}`}>{spares.map((s:any)=><option key={s.part_name} value={s.part_name}/>)}</datalist>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:5}}>
+            <div style={S.f}><label style={S.lbl}>Category</label><input style={S.fi} value={item.category} onChange={e=>updateItem(i,'category',e.target.value)} placeholder="e.g. Heating"/></div>
+            <div style={S.f}><label style={S.lbl}>Unit</label>
+              <select style={S.fi} value={item.unit} onChange={e=>updateItem(i,'unit',e.target.value)}>
+                <option>Pcs</option><option>Set</option><option>Kg</option><option>Ltr</option><option>Mtr</option><option>Box</option>
+              </select>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Qty</label><input type="number" min="0" style={S.fi} value={item.qty} onChange={e=>updateItem(i,'qty',e.target.value)} placeholder="0"/></div>
+            <div style={S.f}><label style={S.lbl}>Price/Pc (₹)</label><input type="number" min="0" style={S.fi} value={item.pricePerPc} onChange={e=>updateItem(i,'pricePerPc',e.target.value)} placeholder="0"/></div>
+          </div>
+          {item.total>0&&<div style={{fontSize:11,color:'#276221',fontWeight:700,marginTop:4}}>Total: ₹{item.total.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>}
+        </div>
+      ))}
+      <button onClick={addItem} style={{width:'100%',padding:8,border:'1.5px dashed #1F3864',borderRadius:8,background:'transparent',color:'#1F3864',fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:10}}>+ Item Add Karo</button>
+      <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Stock Entry'}</button>
+      {toast&&<Toast {...toast}/>}
+    </div>
+
+    {/* Recent movements */}
+    {movements.length>0&&<div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:8}}>Recent Movements</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>{['Date','Part','Action','Qty','Price','Vendor','By'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <tbody>{movements.map((m:any,i:number)=>(
+            <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'6px 8px',fontSize:10}}>{m.date}</td>
+              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{m.part_name}</td>
+              <td style={{padding:'6px 8px'}}><span style={{background:m.action==='Stock In'?'#E8F5E9':'#FFEBEE',color:m.action==='Stock In'?'#276221':'#C00000',padding:'2px 7px',borderRadius:999,fontSize:10}}>{m.action}</span></td>
+              <td style={{padding:'6px 8px',fontWeight:700}}>{m.qty} {m.unit}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{m.price_per_pc?`₹${m.price_per_pc}`:'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{m.vendor||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{m.done_by}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>}
+  </div>
+}
+
+// ─── Quality Tab ──────────────────────────────────────────────
+function QualityTab({user}:{user:User}) {
+  const [items,setItems]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [date,setDate]=useState(nd())
+  const [shift,setShift]=useState('Day')
+  const [plant,setPlant]=useState('')
+  const [qcPerson,setQcPerson]=useState(user.name)
+  const [machineData,setMachineData]=useState<Record<string,any>>({})
+
+  useEffect(()=>{fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})},[])
+
+  const machines=MACH[plant]||[]
+
+  const setCheck=(machine:string,type:string,idx:number,val:string)=>{
+    setMachineData(prev=>({
+      ...prev,
+      [machine]:{
+        ...prev[machine],
+        [`${type}_${idx}`]:val
+      }
+    }))
+  }
+
+  const getCheck=(machine:string,type:string,idx:number)=>machineData[machine]?.[`${type}_${idx}`]||''
+  const setProduct=(machine:string,val:string)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],product:val}}))
+
+  const copyM1ToAll=()=>{
+    const m1=machines[0]
+    if(!m1) return
+    const m1Data=machineData[m1]||{}
+    const newData:{[key:string]:any}={...machineData}
+    machines.forEach((m,i)=>{
+      if(i===0) return
+      newData[m]={...m1Data,product:machineData[m]?.product||m1Data.product}
+    })
+    setMachineData(newData)
+    setToast({msg:'M1 ke results sabko copy ho gaye!',ok:true})
+  }
+
+  const save=async()=>{
+    if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
+    const entries=machines.map(machine=>{
+      const d=machineData[machine]||{}
+      if(!d.product) return null
+      return {
+        date,shift,machine:`${plant} - ${machine}`,part_name:d.product,qc_person:qcPerson,
+        no_short_shots:getCheck(machine,'vis',0)||'N/A',
+        no_flash:getCheck(machine,'vis',1)||'N/A',
+        no_burn_marks:getCheck(machine,'vis',2)||'N/A',
+        no_flow_marks:getCheck(machine,'vis',3)||'N/A',
+        no_sink_marks:getCheck(machine,'vis',4)||'N/A',
+        uniform_color:getCheck(machine,'vis',5)||'N/A',
+        no_contamination:getCheck(machine,'vis',6)||'N/A',
+        wall_thickness:getCheck(machine,'dim',0)||'N/A',
+        height:getCheck(machine,'dim',1)||'N/A',
+        diameter:getCheck(machine,'dim',2)||'N/A',
+        lid_fit:getCheck(machine,'dim',3)||'N/A',
+        stack_ability:getCheck(machine,'dim',4)||'N/A',
+        drop_test:getCheck(machine,'dim',5)||'N/A',
+        weight_check:getCheck(machine,'dim',6)||'N/A',
+        overall_result: Object.values(d).some((v:any)=>v==='NG')?'NG':'OK',
+        remarks:d.remarks||''
+      }
+    }).filter(Boolean)
+
+    if(entries.length===0){setToast({msg:'Koi machine ka product select nahi!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/quality',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries})}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.msg,ok:res.success})
+  }
+
+  const VIS=['No short shots','No flash','No burn marks','No flow marks','No sink marks','Uniform color','No contamination']
+  const DIM=['Wall Thickness','Height','Diameter','Lid Fit','Stack Ability','Drop Test','Weight Check']
+
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  return <div>
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>Quality Check — Bulk Entry</div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
+        <div style={S.f}><label style={S.lbl}>Shift</label><select style={S.fi} value={shift} onChange={e=>setShift(e.target.value)}><option>Day</option><option>Night</option></select></div>
+      </div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={plant} onChange={e=>setPlant(e.target.value)}>
+            <option value="">Select Plant</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>QC Person</label><input style={S.fi} value={qcPerson} onChange={e=>setQcPerson(e.target.value)}/></div>
+      </div>
+      {plant&&<button onClick={copyM1ToAll} style={{marginBottom:10,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,cursor:'pointer'}}>M1 ke results sabko copy karo</button>}
+    </div>
+
+    {machines.map((machine,mi)=>{
+      const d=machineData[machine]||{}
+      const hasNG=Object.values(d).some((v:any)=>v==='NG')
+      const hasProduct=!!d.product
+      return <div key={machine} style={{...S.card,marginBottom:8}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{machine}</span>
+          {hasProduct&&<span style={{background:hasNG?'#FFEBEE':'#E8F5E9',color:hasNG?'#C00000':'#276221',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:600}}>{hasNG?'NG Found!':'OK'}</span>}
+        </div>
+        <div style={S.f}><label style={S.lbl}>Product</label>
+          <select style={S.fi} value={d.product||''} onChange={e=>setProduct(machine,e.target.value)}>
+            <option value="">-- Select Product --</option>
+            {items.map(i=><option key={i.name}>{i.name}</option>)}
+          </select>
+        </div>
+        {hasProduct&&<>
+          <div style={{fontSize:11,fontWeight:600,color:'#1F3864',marginBottom:6}}>Visual Inspection</div>
+          {VIS.map((check,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
+              <span style={{fontSize:11,flex:1}}>{check}</span>
+              <div style={{display:'flex',gap:4}}>
+                {['OK','NG','N/A'].map(v=>{
+                  const val=getCheck(machine,'vis',i)
+                  return <button key={v} onClick={()=>setCheck(machine,'vis',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:`1px solid ${val===v?(v==='OK'?'#276221':v==='NG'?'#C00000':'#666'):'#E0E0E0'}`,borderRadius:999,background:val===v?(v==='OK'?'#E2EFDA':v==='NG'?'#FFEBEE':'#F0F0F0'):'transparent',color:val===v?(v==='OK'?'#276221':v==='NG'?'#C00000':'#666'):'#666',cursor:'pointer'}}>{v}</button>
+                })}
+              </div>
+            </div>
+          ))}
+          <div style={{fontSize:11,fontWeight:600,color:'#1F3864',margin:'8px 0 6px'}}>Dimensional & Functional</div>
+          {DIM.map((check,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
+              <span style={{fontSize:11,flex:1}}>{check}</span>
+              <div style={{display:'flex',gap:4}}>
+                {['OK','NG'].map(v=>{
+                  const val=getCheck(machine,'dim',i)
+                  return <button key={v} onClick={()=>setCheck(machine,'dim',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:`1px solid ${val===v?(v==='OK'?'#276221':'#C00000'):'#E0E0E0'}`,borderRadius:999,background:val===v?(v==='OK'?'#E2EFDA':'#FFEBEE'):'transparent',color:val===v?(v==='OK'?'#276221':'#C00000'):'#666',cursor:'pointer'}}>{v}</button>
+                })}
+              </div>
+            </div>
+          ))}
+          <div style={{marginTop:8}}><label style={S.lbl}>Remarks</label><input style={S.fi} value={d.remarks||''} onChange={e=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],remarks:e.target.value}}))} placeholder="Any observations..."/></div>
+        </>}
+      </div>
+    })}
+
+    {plant&&machines.length>0&&<>
+      <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save All Machines Quality Check'}</button>
+      {toast&&<Toast {...toast}/>}
+    </>}
+    {!plant&&<div style={{...S.card,textAlign:'center',color:'#666'}}>Pehle Plant select karo! 👆</div>}
+  </div>
 }
