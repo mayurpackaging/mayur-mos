@@ -2169,7 +2169,7 @@ function WeeklyScoreForm({user}:{user:User}) {
 }
 
 function IncrementCalc() {
-  const [data,setData]=useState<Record<string,{sal:string,score:string}>>({})
+  const [data,setData]=useState<Record<string,any>>({})
 
   const calcInc=(empId:string)=>{
     const d=data[empId]||{}
