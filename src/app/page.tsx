@@ -1416,7 +1416,7 @@ function SparesTab({user}:{user:User}) {
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
   // Get unique vendors
-  const vendors=[...new Set(spares.map(s=>s.last_vendor).filter(Boolean))]
+  const vendors=spares.map(s=>s.last_vendor).filter((v:any,i:number,a:any[])=>v&&a.indexOf(v)===i)
 
   return <div>
     {/* Stock status */}
