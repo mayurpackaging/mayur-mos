@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 interface User { name: string; username: string; role: string; plant: string; modules: string }
 
 const ML: Record<string, string> = {
-  mis:"MIS", ims:"IMS Stock", production:"Production",
+  mis:"MIS", ims:"IMS Stock", production:"Production", planning:"Planning",
   quality:"Quality", rejection:"Rejection", mouldchange:"Mould Change",
-  dispatch:"Dispatch", spares:"Spares",
-  mouldpm:"Mould PM", breakdown:"Breakdown", reports:"Reports", users:"Users"
+  dispatch:"Dispatch", batch:"Batch", sales:"Sales", spares:"Spares",
+  mouldpm:"Mould PM", breakdown:"Breakdown", reports:"Reports",
+  users:"Users", performance:"Performance"
 }
 
 const MACH: Record<string, string[]> = {
@@ -144,7 +145,12 @@ export default function MOS() {
         {tab==='dispatch'&&<DispatchTab user={user}/>}
         {tab==='spares'&&<SparesTab user={user}/>}
         {tab==='quality'&&<QualityTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality'].includes(tab)&&(
+        {tab==='batch'&&<BatchTab user={user}/>}
+        {tab==='sales'&&<SalesTab user={user}/>}
+        {tab==='planning'&&<PlanningTab user={user}/>}
+        {tab==='users'&&<UsersTab user={user}/>}
+        {tab==='performance'&&<PerformanceTab user={user}/>}
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -1668,5 +1674,539 @@ function QualityTab({user}:{user:User}) {
       {toast&&<Toast {...toast}/>}
     </>}
     {!plant&&<div style={{...S.card,textAlign:'center',color:'#666'}}>Pehle Plant select karo! 👆</div>}
+  </div>
+}
+
+// ─── Batch Tab ────────────────────────────────────────────────
+function BatchTab({user}:{user:User}) {
+  const [items,setItems]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [form,setForm]=useState({date:nd(),plant:'Plant 477',item:'',qtyCartons:'',machine:'',mouldNo:'',operator:OPS[0],shift:'Day',qcStatus:'Passed',notes:''})
+
+  useEffect(()=>{fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})},[])
+
+  const save=async()=>{
+    if(!form.item||!form.qtyCartons){setToast({msg:'Item aur Qty daalo!',ok:false});return}
+    setSaving(true)
+    const found=items.find(i=>i.name===form.item)
+    const pkg=found?.pkg||500
+    const units=Math.round(parseFloat(form.qtyCartons)*pkg)
+    const res=await fetch('/api/production',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      date:form.date,shift:form.shift==='Day'?'Day (8am-8pm)':'Night (8pm-8am)',
+      plant:form.plant,machine:form.machine,operator:form.operator,
+      product:form.item,mould:form.mouldNo,cavities:'',cycleTime:'',material:'',
+      machineStatus:'running',stopReason:'',remarks:`Batch Entry | QC: ${form.qcStatus} | ${form.notes}`,
+      slots:[{slot:'Batch',good:units,rejection:'0',down:'0',remarks:form.notes}],
+      enteredBy:user.name
+    })}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.success?`Batch saved! ${form.qtyCartons} Ctn = ${units} pcs`:res.msg,ok:res.success})
+    if(res.success) setForm(p=>({...p,item:'',qtyCartons:'',machine:'',mouldNo:'',notes:''}))
+  }
+
+  const machines=MACH[form.plant]||[]
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  return <div style={S.card}>
+    <div style={{fontWeight:700,marginBottom:10}}>Batch Registration</div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
+      <div style={S.f}><label style={S.lbl}>Plant</label>
+        <select style={S.fi} value={form.plant} onChange={e=>setForm(p=>({...p,plant:e.target.value,machine:''}))}>
+          <option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+        </select>
+      </div>
+    </div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Item</label>
+        <select style={S.fi} value={form.item} onChange={e=>setForm(p=>({...p,item:e.target.value}))}>
+          <option value="">-- Select --</option>{items.map(i=><option key={i.name}>{i.name}</option>)}
+        </select>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Qty (Cartons)</label><input type="number" style={S.fi} value={form.qtyCartons} onChange={e=>setForm(p=>({...p,qtyCartons:e.target.value}))} placeholder="e.g. 50"/></div>
+    </div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Machine</label>
+        <select style={S.fi} value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}>
+          <option value="">Select</option>{machines.map(m=><option key={m}>{m}</option>)}
+        </select>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Mould No.</label><input style={S.fi} value={form.mouldNo} onChange={e=>setForm(p=>({...p,mouldNo:e.target.value}))} placeholder="Mould name"/></div>
+    </div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Operator</label>
+        <select style={S.fi} value={form.operator} onChange={e=>setForm(p=>({...p,operator:e.target.value}))}>
+          {OPS.map(o=><option key={o}>{o}</option>)}
+        </select>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Shift</label>
+        <select style={S.fi} value={form.shift} onChange={e=>setForm(p=>({...p,shift:e.target.value}))}>
+          <option>Day</option><option>Night</option>
+        </select>
+      </div>
+    </div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>QC Status</label>
+        <select style={S.fi} value={form.qcStatus} onChange={e=>setForm(p=>({...p,qcStatus:e.target.value}))}>
+          <option>Passed</option><option>Failed</option><option>Pending</option>
+        </select>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Notes</label><input style={S.fi} value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Any notes..."/></div>
+    </div>
+    <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Register Batch'}</button>
+    {toast&&<Toast {...toast}/>}
+  </div>
+}
+
+// ─── Sales Tab ────────────────────────────────────────────────
+function SalesTab({user}:{user:User}) {
+  const [items,setItems]=useState<any[]>([])
+  const [parties,setParties]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [form,setForm]=useState({customer:'',source:'WhatsApp',item:'',qtyCartons:'',ratePerUnit:'',deliveryDate:'',priority:'High',notes:''})
+
+  useEffect(()=>{
+    Promise.all([fetch('/api/ims').then(r=>r.json()),fetch('/api/party').then(r=>r.json())])
+      .then(([ims,party])=>{setItems(ims.items||[]);setParties(party.parties||[]);setLoading(false)})
+  },[])
+
+  const save=async()=>{
+    if(!form.customer||!form.item){setToast({msg:'Customer aur Item daalo!',ok:false});return}
+    setSaving(true)
+    // Save as dispatch order for now
+    const res=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      date:nd(),customer:form.customer,vehicleType:'Order',vehicleNo:'',driverName:'',
+      deliveryAddress:'',notes:`Source: ${form.source} | Rate: ₹${form.ratePerUnit} | Delivery: ${form.deliveryDate} | Priority: ${form.priority} | ${form.notes}`,
+      dispatchBy:user.name,
+      lines:[{lineNo:1,plant:'All',itemName:form.item,qty:parseFloat(form.qtyCartons)||0,category:''}]
+    })}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.success?`Order saved! ID: ${res.orderId}`:res.msg,ok:res.success})
+    if(res.success) setForm({customer:'',source:'WhatsApp',item:'',qtyCartons:'',ratePerUnit:'',deliveryDate:'',priority:'High',notes:''})
+  }
+
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  return <div style={S.card}>
+    <div style={{fontWeight:700,marginBottom:10}}>New Sales Order</div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Customer</label>
+        <input style={S.fi} value={form.customer} onChange={e=>setForm(p=>({...p,customer:e.target.value}))} placeholder="Party naam..." list="sales-party-list"/>
+        <datalist id="sales-party-list">{parties.map((p:any)=><option key={p.name} value={p.name}/>)}</datalist>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Source</label>
+        <select style={S.fi} value={form.source} onChange={e=>setForm(p=>({...p,source:e.target.value}))}>
+          <option>WhatsApp</option><option>Phone</option><option>Email</option><option>In Person</option>
+        </select>
+      </div>
+    </div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Item</label>
+        <select style={S.fi} value={form.item} onChange={e=>setForm(p=>({...p,item:e.target.value}))}>
+          <option value="">-- Select --</option>{items.map(i=><option key={i.name}>{i.name}</option>)}
+        </select>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Qty (Cartons)</label><input type="number" style={S.fi} value={form.qtyCartons} onChange={e=>setForm(p=>({...p,qtyCartons:e.target.value}))} placeholder="e.g. 100"/></div>
+    </div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Rate per Unit (₹)</label><input type="number" style={S.fi} value={form.ratePerUnit} onChange={e=>setForm(p=>({...p,ratePerUnit:e.target.value}))} placeholder="e.g. 2.50"/></div>
+      <div style={S.f}><label style={S.lbl}>Delivery Date</label><input type="date" style={S.fi} value={form.deliveryDate} onChange={e=>setForm(p=>({...p,deliveryDate:e.target.value}))}/></div>
+    </div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Priority</label>
+        <select style={S.fi} value={form.priority} onChange={e=>setForm(p=>({...p,priority:e.target.value}))}>
+          <option>High</option><option>Medium</option><option>Low</option>
+        </select>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Notes</label><input style={S.fi} value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Any notes..."/></div>
+    </div>
+    <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Sales Order'}</button>
+    {toast&&<Toast {...toast}/>}
+  </div>
+}
+
+// ─── Planning Tab ─────────────────────────────────────────────
+function PlanningTab({user}:{user:User}) {
+  const [items,setItems]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [form,setForm]=useState({plant:'',machine:'',product:'',plannedQty:'',plannedDate:nd(),shift:'Day',priority:'High',notes:''})
+  const [selectedItem,setSelectedItem]=useState<any>(null)
+
+  useEffect(()=>{fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})},[])
+
+  const onProductChange=(val:string)=>{
+    setForm(p=>({...p,product:val}))
+    const found=items.find(i=>i.name===val)
+    setSelectedItem(found||null)
+  }
+
+  const machines=MACH[form.plant]||[]
+
+  const save=async()=>{
+    if(!form.plant||!form.product||!form.plannedQty){setToast({msg:'Plant, Product aur Qty daalo!',ok:false});return}
+    setSaving(true)
+    // Store as a production entry with future date
+    const res=await fetch('/api/production',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      date:form.plannedDate,shift:form.shift==='Day'?'Day (8am-8pm)':'Night (8pm-8am)',
+      plant:form.plant,machine:form.machine,operator:'TBD',product:form.product,
+      mould:'',cavities:'',cycleTime:'',material:'',machineStatus:'running',stopReason:'',
+      remarks:`PLAN | Qty: ${form.plannedQty} Ctn | Priority: ${form.priority} | ${form.notes}`,
+      slots:[{slot:'Planned',good:'0',rejection:'0',down:'0',remarks:`Planned: ${form.plannedQty} Ctn`}],
+      enteredBy:user.name
+    })}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.success?'Production plan saved!':res.msg,ok:res.success})
+    if(res.success) setForm(p=>({...p,product:'',plannedQty:'',notes:''}))
+  }
+
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  return <div>
+    {/* Low stock alerts */}
+    {items.filter(i=>i.pct<75&&i.pct!==null).length>0&&<div style={{...S.card,border:'2px solid #C00000'}}>
+      <div style={{fontWeight:700,color:'#C00000',marginBottom:8}}>Stock Alert — Plan karo! ({items.filter(i=>i.pct<75).length} items low)</div>
+      {items.filter(i=>i.pct<75&&i.pct!==null).sort((a,b)=>(a.pct||0)-(b.pct||0)).slice(0,8).map((item,i)=>{
+        const col=item.pct<25?'#C00000':item.pct<50?'#7B1FA2':'#E65100'
+        const bg=item.pct<25?'#FFEBEE':item.pct<50?'#F3E5F5':'#FFF3E0'
+        const tag=item.pct<25?'CRITICAL':item.pct<50?'DANGER':'LOW'
+        return <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 8px',borderRadius:6,marginBottom:4,background:bg,border:`1px solid ${col}`}}>
+          <span style={{fontSize:11,fontWeight:600,color:col}}>{item.name}</span>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:11,color:col}}>{item.stockC||0} ctns</span>
+            <span style={{background:col,color:'#fff',fontSize:10,padding:'2px 7px',borderRadius:999}}>{tag} {item.pct}%</span>
+            <button onClick={()=>onProductChange(item.name)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'2px 8px',fontSize:10,cursor:'pointer'}}>Plan</button>
+          </div>
+        </div>
+      })}
+    </div>}
+
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>New Production Plan</div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={form.plant} onChange={e=>setForm(p=>({...p,plant:e.target.value,machine:''}))}>
+            <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Machine</label>
+          <select style={S.fi} value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}>
+            <option value="">Select</option>{machines.map(m=><option key={m}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Product</label>
+        <select style={S.fi} value={form.product} onChange={e=>onProductChange(e.target.value)}>
+          <option value="">-- Select Product --</option>
+          {items.map(i=>{
+            const tag=i.pct<25?' ⚠ CRITICAL':i.pct<50?' ⚠ DANGER':i.pct<75?' ⚠ LOW':''
+            return <option key={i.name} value={i.name}>{i.name}{tag}</option>
+          })}
+        </select>
+      </div>
+      {selectedItem&&<div style={{background:selectedItem.pct<75?'#FFEBEE':'#E8F5E9',border:`1px solid ${selectedItem.pct<75?'#C00000':'#276221'}`,borderRadius:8,padding:'8px 12px',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span style={{fontSize:12,fontWeight:600,color:selectedItem.pct<75?'#C00000':'#276221'}}>Current Stock: {selectedItem.stockC||0} cartons ({selectedItem.pct}% of min)</span>
+        <span style={{background:selectedItem.pct<75?'#C00000':'#276221',color:'#fff',fontSize:10,padding:'2px 10px',borderRadius:999}}>{selectedItem.status}</span>
+      </div>}
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Planned Qty (Cartons)</label><input type="number" style={S.fi} value={form.plannedQty} onChange={e=>setForm(p=>({...p,plannedQty:e.target.value}))} placeholder="e.g. 50"/></div>
+        <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={form.plannedDate} onChange={e=>setForm(p=>({...p,plannedDate:e.target.value}))}/></div>
+      </div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Shift</label>
+          <select style={S.fi} value={form.shift} onChange={e=>setForm(p=>({...p,shift:e.target.value}))}>
+            <option>Day</option><option>Night</option><option>Both</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Priority</label>
+          <select style={S.fi} value={form.priority} onChange={e=>setForm(p=>({...p,priority:e.target.value}))}>
+            <option>High</option><option>Medium</option><option>Low</option>
+          </select>
+        </div>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Notes</label><input style={S.fi} value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Special instructions..."/></div>
+      <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Production Plan'}</button>
+      {toast&&<Toast {...toast}/>}
+    </div>
+  </div>
+}
+
+// ─── Users Tab ────────────────────────────────────────────────
+function UsersTab({user}:{user:User}) {
+  const [users,setUsers]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [showForm,setShowForm]=useState(false)
+  const [form,setForm]=useState({username:'',password:'',fullName:'',role:'Operator',plant:'Plant 477',modules:'production,breakdown,mouldchange',status:'Active'})
+
+  const load=useCallback(()=>{
+    // Load users from Supabase via a simple fetch
+    fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'list'})})
+      .then(r=>r.json()).then(d=>{if(d.users)setUsers(d.users);setLoading(false)})
+      .catch(()=>setLoading(false))
+  },[])
+
+  useEffect(()=>{
+    // Show static user info for now
+    setUsers([
+      {username:'nitin',full_name:'Nitin Nagpal',role:'Admin',plant:'All',status:'Active'},
+      {username:'ranjan',full_name:'Ranjan Kumar',role:'Plant Head',plant:'All',status:'Active'},
+      {username:'prince',full_name:'Prince',role:'Maintenance',plant:'All',status:'Active'},
+      {username:'rohit',full_name:'Rohit',role:'Maintenance',plant:'All',status:'Active'},
+      {username:'karan',full_name:'Karan',role:'Supervisor',plant:'Plant 477',status:'Active'},
+      {username:'ankush',full_name:'Ankush',role:'Supervisor',plant:'Plant 488',status:'Active'},
+      {username:'deepak',full_name:'Deepak',role:'Senior Foreman',plant:'Plant 488',status:'Active'},
+      {username:'parveen',full_name:'Parveen',role:'Senior Foreman',plant:'Plant 477',status:'Active'},
+      {username:'dayanand',full_name:'Dayanand',role:'Operator',plant:'Plant 477',status:'Active'},
+      {username:'alok',full_name:'Alok Kumar',role:'Operator',plant:'Plant 477',status:'Active'},
+      {username:'uday',full_name:'Uday',role:'Operator',plant:'Plant 488',status:'Active'},
+      {username:'sudarshan',full_name:'Sudarshan',role:'Operator',plant:'Plant 488',status:'Active'},
+      {username:'rahul',full_name:'Rahul',role:'Operator',plant:'Plant 477',status:'Active'},
+      {username:'pintoo',full_name:'Pintoo',role:'Operator',plant:'Plant 488',status:'Active'},
+      {username:'satyanand',full_name:'Satyanand',role:'Operator',plant:'Plant 433',status:'Active'},
+      {username:'rahulsingh',full_name:'Rahul Singh',role:'Maintenance Foreman',plant:'All',status:'Active'},
+    ])
+    setLoading(false)
+  },[])
+
+  const ROLE_MODULES:Record<string,string> = {
+    'Admin':'mis,ims,production,planning,quality,rejection,mouldchange,dispatch,batch,sales,spares,mouldpm,breakdown,reports,users,performance',
+    'Plant Head':'mis,ims,production,planning,quality,rejection,mouldchange,mouldpm,breakdown,reports',
+    'Maintenance':'breakdown,mouldpm,mouldchange,spares,reports',
+    'Maintenance Foreman':'breakdown,mouldpm,mouldchange,spares,reports',
+    'Supervisor':'mis,production,quality,rejection,breakdown,reports',
+    'Senior Foreman':'mis,production,quality,rejection,breakdown,reports',
+    'Operator':'production,breakdown,mouldchange',
+    'Dispatch':'dispatch,ims,reports',
+    'QC':'quality,rejection,reports',
+  }
+
+  const save=async()=>{
+    if(!form.username||!form.password||!form.fullName){setToast({msg:'Saari fields bharo!',ok:false});return}
+    setSaving(true)
+    // Generate SQL for user
+    const modules=ROLE_MODULES[form.role]||'production,breakdown'
+    const sql=`INSERT INTO users (username, password, full_name, role, plant, modules, status) VALUES ('${form.username}','${form.password}','${form.fullName}','${form.role}','${form.plant}','${modules}','${form.status}') ON CONFLICT (username) DO UPDATE SET password='${form.password}',full_name='${form.fullName}',role='${form.role}',plant='${form.plant}',modules='${modules}',status='${form.status}';`
+    setSaving(false)
+    setToast({msg:`SQL ready! Supabase SQL Editor mein run karo.`,ok:true})
+    // Copy to clipboard
+    navigator.clipboard?.writeText(sql).catch(()=>{})
+    setShowForm(false)
+    alert(`User ke liye yeh SQL Supabase mein run karo:\n\n${sql}`)
+  }
+
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  return <div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+      <div style={{fontWeight:700,fontSize:14}}>Users ({users.length})</div>
+      {user.role==='Admin'&&<button onClick={()=>setShowForm(!showForm)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,cursor:'pointer'}}>+ Add User</button>}
+    </div>
+
+    {showForm&&<div style={{...S.card,border:'1px solid #1F3864',marginBottom:8}}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>New User</div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Username</label><input style={S.fi} value={form.username} onChange={e=>setForm(p=>({...p,username:e.target.value.toLowerCase()}))} placeholder="lowercase only"/></div>
+        <div style={S.f}><label style={S.lbl}>Password</label><input style={S.fi} value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))} placeholder="password"/></div>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Full Name</label><input style={S.fi} value={form.fullName} onChange={e=>setForm(p=>({...p,fullName:e.target.value}))} placeholder="Poora naam"/></div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Role</label>
+          <select style={S.fi} value={form.role} onChange={e=>setForm(p=>({...p,role:e.target.value}))}>
+            {Object.keys(ROLE_MODULES).map(r=><option key={r}>{r}</option>)}
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={form.plant} onChange={e=>setForm(p=>({...p,plant:e.target.value}))}>
+            <option>All</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+      </div>
+      <div style={{background:'#E6F1FB',border:'1px solid #1F3864',borderRadius:8,padding:'8px 12px',marginBottom:8,fontSize:12,color:'#0C447C'}}>
+        ℹ️ User add hone ke baad Supabase SQL Editor mein SQL run karna hoga — system copy kar dega!
+      </div>
+      <button style={S.sb} onClick={save} disabled={saving}>{saving?'Processing...':'Generate SQL + Copy'}</button>
+      {toast&&<Toast {...toast}/>}
+    </div>}
+
+    <div style={S.card}>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>{['Username','Full Name','Role','Plant','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <tbody>{users.map((u:any,i:number)=>(
+            <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{u.username}</td>
+              <td style={{padding:'6px 8px'}}>{u.full_name}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{u.role}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{u.plant}</td>
+              <td style={{padding:'6px 8px'}}><span style={{background:'#E8F5E9',color:'#276221',padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{u.status}</span></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+}
+
+// ─── Performance Tab ──────────────────────────────────────────
+const PERF_EMP = [
+  {id:'E001',name:'Ranjan Kumar',role:'Plant Head'},
+  {id:'E002',name:'Parveen',role:'Senior Foreman'},
+  {id:'E003',name:'Rahul Singh',role:'Maintenance Foreman'},
+  {id:'E004',name:'Deepak',role:'Senior Foreman'},
+  {id:'E005',name:'Karan',role:'Supervisor'},
+  {id:'E006',name:'Ankush',role:'Supervisor'},
+  {id:'E007',name:'Dayanand',role:'Operator'},
+  {id:'E008',name:'Alok Kumar',role:'Operator'},
+  {id:'E009',name:'Satyanand',role:'Operator'},
+  {id:'E010',name:'Uday',role:'Operator'},
+  {id:'E011',name:'Sudarshan',role:'Operator'},
+  {id:'E012',name:'Rahul',role:'Operator'},
+  {id:'E013',name:'Pintoo',role:'Operator'},
+]
+
+function PerformanceTab({user}:{user:User}) {
+  const [activePerf,setActivePerf]=useState('weekly')
+  const PTABS=[{id:'weekly',label:'Weekly'},{id:'increment',label:'Increment Calc'}]
+
+  return <div>
+    <div style={{display:'flex',gap:6,marginBottom:12}}>
+      {PTABS.map(t=><button key={t.id} style={activePerf===t.id?S.nbA:S.nb} onClick={()=>setActivePerf(t.id)}>{t.label}</button>)}
+    </div>
+    {activePerf==='weekly'&&<WeeklyScoreForm user={user}/>}
+    {activePerf==='increment'&&<IncrementCalc/>}
+  </div>
+}
+
+function WeeklyScoreForm({user}:{user:User}) {
+  const [emp,setEmp]=useState('')
+  const [week,setWeek]=useState('Week 1')
+  const [year,setYear]=useState(String(new Date().getFullYear()))
+  const [scores,setScores]=useState<Record<string,string>>({})
+  const [remarks,setRemarks]=useState('')
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+
+  const selEmp=PERF_EMP.find(e=>e.id===emp)
+  const isOp=selEmp?.role==='Operator'
+  const isFm=selEmp?.role?.includes('Foreman')
+
+  const params=isOp?[
+    {id:'prod',label:'Production Output vs Target',weight:30,hint:'>=100%=10, >=90%=7, >=80%=5'},
+    {id:'rej',label:'Rejection Rate',weight:25,hint:'<=1%=10, <=2%=7, <=3%=5'},
+    {id:'att',label:'Attendance',weight:20,hint:'>=97%=10, >=95%=7, >=90%=5'},
+    {id:'down',label:'Downtime Score',weight:15,hint:'0min=10, <=30=7, <=60=5'},
+    {id:'disc',label:'Discipline',weight:10,hint:'Excellent=10, Good=7, Avg=5'},
+  ]:isFm?[
+    {id:'team',label:'Team Production',weight:25,hint:'>=100%=10'},
+    {id:'qual',label:'Quality Score',weight:20,hint:'0NG=10'},
+    {id:'att',label:'Attendance',weight:15,hint:'>=97%=10'},
+    {id:'pm',label:'Mould PM Compliance',weight:15,hint:'100%=10'},
+    {id:'bd',label:'Breakdown Resolution',weight:15,hint:'<=30min=10'},
+    {id:'rep',label:'Reporting On Time',weight:10,hint:'Always=10'},
+  ]:[
+    {id:'eff',label:'Plant Efficiency',weight:30,hint:'>=95%=10'},
+    {id:'plan',label:'Planning Accuracy',weight:20,hint:'>=95%=10'},
+    {id:'tmgt',label:'Team Management',weight:20,hint:'Excellent=10'},
+    {id:'att',label:'Attendance',weight:15,hint:'>=97%=10'},
+    {id:'safe',label:'Safety & Compliance',weight:15,hint:'0 incidents=10'},
+  ]
+
+  const calcScore=()=>{
+    if(!params.length) return 0
+    const total=params.reduce((a,p)=>a+(parseFloat(scores[p.id]||'0')*p.weight/100),0)*10
+    return Math.round(total)
+  }
+
+  const score=calcScore()
+  const grade=score>=90?'A':score>=75?'B':score>=60?'C':score>=50?'D':'F'
+  const gradeCol=score>=90?'#276221':score>=75?'#854F0B':score>=60?'#0C447C':score>=50?'#C2185B':'#C00000'
+
+  const weeks=Array.from({length:52},(_,i)=>`Week ${i+1}`)
+
+  return <div style={S.card}>
+    <div style={{fontWeight:700,marginBottom:10}}>Weekly Scorecard</div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>Week</label>
+        <select style={S.fi} value={week} onChange={e=>setWeek(e.target.value)}>
+          {weeks.map(w=><option key={w}>{w}</option>)}
+        </select>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Year</label><input type="number" style={S.fi} value={year} onChange={e=>setYear(e.target.value)}/></div>
+    </div>
+    <div style={S.f}><label style={S.lbl}>Employee</label>
+      <select style={S.fi} value={emp} onChange={e=>setEmp(e.target.value)}>
+        <option value="">-- Select Employee --</option>
+        {PERF_EMP.map(e=><option key={e.id} value={e.id}>{e.name} ({e.role})</option>)}
+      </select>
+    </div>
+
+    {emp&&params.length>0&&<>
+      <div style={{background:'#F9F9F9',borderRadius:8,padding:'10px 12px',marginBottom:10}}>
+        {params.map(p=>(
+          <div key={p.id} style={{display:'grid',gridTemplateColumns:'2fr 0.5fr 0.8fr',gap:6,alignItems:'center',padding:'6px 0',borderBottom:'1px solid #F0F0F0'}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:600}}>{p.label}</div>
+              <div style={{fontSize:9,color:'#888'}}>{p.hint}</div>
+            </div>
+            <div style={{fontSize:10,fontWeight:600,color:'#1F3864',textAlign:'center'}}>{p.weight}%</div>
+            <input type="number" min="0" max="10" step="0.5" placeholder="0-10" value={scores[p.id]||''} onChange={e=>setScores(prev=>({...prev,[p.id]:e.target.value}))} style={{padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:13,fontWeight:600,textAlign:'center',width:'100%'}}/>
+          </div>
+        ))}
+        {score>0&&<div style={{background:'#1F3864',borderRadius:6,marginTop:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{color:'#fff',fontSize:12,fontWeight:600}}>Total Score:</span>
+          <span style={{color:'#FFD966',fontSize:16,fontWeight:700}}>{score}%</span>
+          <span style={{background:gradeCol,color:'#fff',padding:'3px 12px',borderRadius:999,fontSize:12,fontWeight:700}}>Grade {grade}</span>
+        </div>}
+      </div>
+      <div style={S.f}><label style={S.lbl}>Remarks</label><input style={S.fi} value={remarks} onChange={e=>setRemarks(e.target.value)} placeholder="Any observations..."/></div>
+      <button style={S.sb} onClick={()=>setToast({msg:`Score saved! ${selEmp?.name}: ${score}% Grade ${grade}`,ok:true})}>Save Weekly Score</button>
+      {toast&&<Toast {...toast}/>}
+    </>}
+  </div>
+}
+
+function IncrementCalc() {
+  const [data,setData]=useState<Record<string,{sal:string,score:string}>>({})
+
+  const calcInc=(empId:string)=>{
+    const d=data[empId]||{}
+    const sal=parseFloat(d.sal||'0')
+    const score=parseFloat(d.score||'0')
+    const pct=score>=90?10:score>=75?7.5:score>=60?5:score>=50?3:0
+    const amt=Math.round(sal*pct/100)
+    return {grade:score>=90?'A':score>=75?'B':score>=60?'C':score>=50?'D':'F',pct,amt,newSal:sal+amt}
+  }
+
+  return <div style={S.card}>
+    <div style={{fontWeight:700,marginBottom:8}}>Annual Increment Calculator {new Date().getFullYear()}</div>
+    <div style={{background:'#FFF9E6',border:'1px solid #F4B942',borderRadius:8,padding:'8px 12px',marginBottom:10,fontSize:12,color:'#633806'}}>
+      Salary aur Yearly Score % daalo — Increment auto calculate hoga!
+    </div>
+    <div style={{overflowX:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+        <thead><tr>
+          {['Name','Role','Salary (₹)','Score %','Grade','Inc %','Inc Amt','New Salary'].map(h=>
+            <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+        </tr></thead>
+        <tbody>{PERF_EMP.map((e,i)=>{
+          const d=data[e.id]||{}
+          const inc=calcInc(e.id)
+          const col=inc.pct>=7.5?'#276221':inc.pct>=5?'#854F0B':inc.pct>0?'#C2185B':'#C00000'
+          return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+            <td style={{padding:'6px 8px',fontWeight:600}}>{e.name}</td>
+            <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{e.role}</td>
+            <td style={{padding:'4px'}}><input type="number" placeholder="Salary" value={d.sal||''} onChange={ev=>setData(p=>({...p,[e.id]:{...p[e.id]||{},sal:ev.target.value}}))} style={{width:80,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,textAlign:'center',fontSize:11}}/></td>
+            <td style={{padding:'4px'}}><input type="number" placeholder="Score" value={d.score||''} onChange={ev=>setData(p=>({...p,[e.id]:{...p[e.id]||{},score:ev.target.value}}))} style={{width:60,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,textAlign:'center',fontSize:11}}/></td>
+            <td style={{padding:'6px 8px',fontWeight:700,color:col,textAlign:'center'}}>{d.score?inc.grade:'--'}</td>
+            <td style={{padding:'6px 8px',fontWeight:700,color:col,textAlign:'center'}}>{d.score?inc.pct+'%':'--'}</td>
+            <td style={{padding:'6px 8px',fontWeight:700,color:col}}>{inc.amt>0?'₹'+inc.amt.toLocaleString():'--'}</td>
+            <td style={{padding:'6px 8px',fontWeight:700,color:'#1F3864'}}>{inc.newSal>0?'₹'+inc.newSal.toLocaleString():'--'}</td>
+          </tr>
+        })}</tbody>
+      </table>
+    </div>
   </div>
 }
