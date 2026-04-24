@@ -35,6 +35,65 @@ const MOULDS = [
   {code:"6905",name:"500 ml Glass"},{code:"6906",name:"Sipper Lid New"},
 ]
 
+const PRODUCT_MOULD_MAP: Record<string, string> = {
+  "50 ml Container Black":"6640 - 50 ml Tub",
+  "50 ml Container Natural":"6641 - 50 ml Lid",
+  "100 ml Container Milky":"6774 - 100 ml Tub",
+  "100 ml Container Natural":"6775 - 100 ml Lid",
+  "100 ml Container Black":"6774 - 100 ml Tub",
+  "175 ml Container Milky":"6619 - 175 ml Tub",
+  "175 ml Container Black":"6619 - 175 ml Tub",
+  "250 ml Container Milky":"6369 - 250 ml Tub",
+  "250 ml Container Black":"6369 - 250 ml Tub",
+  "250 ml Container Milky (500/ctn)":"6369 - 250 ml Tub",
+  "300 ml Container Black":"6371 - 300 ml Tub",
+  "300 ml Container Milky":"6371 - 300 ml Tub",
+  "400 ml Container Milky":"6537 - 400 ml Tub",
+  "400 ml Container Black":"6537 - 400 ml Tub",
+  "500 ml Container Black":"6372 - 500 ml Tub 4 Cav",
+  "500 ml Container Milky":"6889 - 500 ml Tub 6 Cav",
+  "750 ml Container Milky":"6374 - 750 ml Tub",
+  "750 ml Container Black":"6987 - New 750 ml Tub",
+  "1000 ml Container Milky":"6375 - 1000 ml Tub",
+  "1000 ml Container Black":"6988 - 1000 ml Tub New",
+  "1200 ml Container Milky":"6500 - 1200 ml Tub",
+  "1200 ml Container Black":"6500 - 1200 ml Tub",
+  "1500 ml Container Milky":"6501 - 1500 ml Tub",
+  "1500 ml Container Black":"6501 - 1500 ml Tub",
+  "500 ml Rectangle Container (Black)":"6479 - 500 ml Rectangle",
+  "650 ml Rectangle Container (Black)":"6480 - 650 ml Rectangle",
+  "750 ml Rectangle Container (Black)":"6481 - 750 ml Rectangle",
+  "1000 ml Rectangle Container (Black)":"6482 - 1000 ml Rectangle",
+  "2000 ml Tamper Lock Milky":"6899 - 2000 ml Tub",
+  "2000 ml Tamper Lock Black":"6899 - 2000 ml Tub",
+  "2000 ml Tamper Lock Natural":"6899 - 2000 ml Tub",
+  "2500 ml Tamper Lock Milky":"6688 - 2500 ml Tub",
+  "2500 ml Tamper Lock Black":"6688 - 2500 ml Tub",
+  "2500 ml Tamper Lock Natural":"6688 - 2500 ml Tub",
+  "500 ml Oval Tamper Evident":"6714 - 500 ml Oval",
+  "750 ml Oval Tamper Evident":"6715 - 750 ml Oval",
+  "1000 ml Oval Tamper Evident":"6716 - 1000 ml Oval",
+  "Cafe Glass With Sipper Lid 350 ml":"6709 - 350 ml Glass Old",
+  "Cafe Glass With Sipper Lid 500 ml":"6905 - 500 ml Glass",
+  "Cafe Sipper XL With Lid 300 ml":"6903 - 300 ml Glass",
+  "Cafe Sipper XL With Lid 350 ml":"6904 - 350 ml Glass",
+  "Cafe Sipper XL With Lid 500 ml":"6905 - 500 ml Glass",
+  "RO Series - RO 16 Natural":"6753 - RO 16 Tub",
+  "RO Series - RO 16 Black":"6753 - RO 16 Tub",
+  "RO Series - RO 24 Natural":"6754 - RO 24 Tub",
+  "RO Series - RO 24 Black":"6754 - RO 24 Tub",
+  "RO Series - RO 32 Natural":"6755 - RO 32 Tub",
+  "RO Series - RO 32 Black":"6755 - RO 32 Tub",
+  "Re Series - Re 16 Natural":"6758 - RE 16 Tub",
+  "Re Series - Re 16 Black":"6758 - RE 16 Tub",
+  "Re Series - Re 24 Natural":"6759 - RE 24 Tub",
+  "Re Series - Re 24 Black":"6759 - RE 24 Tub",
+  "Re Series - Re 28 Natural":"6760 - RE 28 Tub",
+  "Re Series - Re 28 Black":"6760 - RE 28 Tub",
+  "Re Series - Re 38 Natural":"6761 - RE 38 Tub",
+  "Re Series - Re 38 Black":"6761 - RE 38 Tub",
+}
+
 const RREJ = ["Short Shot","Flash","Burn Mark","Sink Mark","Warpage","Flow Mark","Contamination","Dimensional","Colour Issue","Other"]
 const DAY_SLOTS = ["8am-11am","11am-2pm","2pm-5pm","5pm-8pm"]
 const NIGHT_SLOTS = ["8pm-11pm","11pm-2am","2am-5am","5am-8am"]
@@ -348,10 +407,18 @@ function ProductionTab({user}:{user:User}) {
         </select></div>
       </div>
       <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Product</label><select style={S.fi} value={form.product} onChange={e=>setForm(p=>({...p,product:e.target.value}))}>
+        <div style={S.f}><label style={S.lbl}>Product</label><select style={S.fi} value={form.product} onChange={e=>{
+          const mould=PRODUCT_MOULD_MAP[e.target.value]||''
+          setForm(p=>({...p,product:e.target.value,mould:mould}))
+        }}>
           <option value="">Select</option>{items.map(i=><option key={i.name}>{i.name}</option>)}
         </select></div>
-        <div style={S.f}><label style={S.lbl}>Mould No.</label><input style={S.fi} value={form.mould} onChange={e=>setForm(p=>({...p,mould:e.target.value}))} placeholder="Auto ya type karo"/></div>
+        <div style={S.f}><label style={S.lbl}>Mould No. (Auto-fill)</label>
+          <select style={{...S.fi,background:form.mould?'#E2EFDA':S.fi.background}} value={form.mould} onChange={e=>setForm(p=>({...p,mould:e.target.value}))}>
+            <option value="">-- Select Mould --</option>
+            {MOULDS.map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
+          </select>
+        </div>
       </div>
       <div style={S.fr}>
         <div style={S.f}><label style={S.lbl}>Cavities</label><input type="number" style={S.fi} value={form.cavities} onChange={e=>setForm(p=>({...p,cavities:e.target.value}))} placeholder="e.g. 4"/></div>
