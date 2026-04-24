@@ -720,7 +720,12 @@ function MouldPMTab({user}:{user:User}) {
     <div style={{...S.card,border:'1px solid #1F3864'}}>
       <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>PM Schedule Setup</div>
       <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Mould Name</label><input style={S.fi} value={setupForm.mouldName} onChange={e=>setSetupForm(p=>({...p,mouldName:e.target.value}))} placeholder="Mould name/code"/></div>
+        <div style={S.f}><label style={S.lbl}>Mould Name</label>
+          <select style={S.fi} value={setupForm.mouldName} onChange={e=>setSetupForm(p=>({...p,mouldName:e.target.value}))}>
+            <option value="">-- Select Mould --</option>
+            {moulds.map((m:any)=><option key={m.id} value={m.mould_name}>{m.mould_name}</option>)}
+          </select>
+        </div>
         <div style={S.f}><label style={S.lbl}>PM Frequency (Shots)</label><input type="number" style={S.fi} value={setupForm.pmShots} onChange={e=>setSetupForm(p=>({...p,pmShots:e.target.value}))} placeholder="e.g. 500000"/></div>
       </div>
       <div style={S.fr}>
