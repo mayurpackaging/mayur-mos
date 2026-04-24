@@ -45,6 +45,11 @@ export async function POST(req: Request) {
         current_stock: newStock,
         last_price: price > 0 ? price : existing.last_price,
         last_vendor: d.vendor || existing.last_vendor,
+        plant: item.plant || existing.plant || '',
+        room: item.room || existing.room || '',
+        almirah: item.almirah || existing.almirah || '',
+        box_no: item.boxNo || existing.box_no || '',
+        storage_type: item.storageType || existing.storage_type || 'Box',
         status,
         last_updated: new Date().toISOString()
       }).eq('id', existing.id)
@@ -76,6 +81,11 @@ export async function POST(req: Request) {
         current_stock: newStock,
         last_price: price,
         last_vendor: d.vendor || '',
+        plant: item.plant || '',
+        room: item.room || '',
+        almirah: item.almirah || '',
+        box_no: item.boxNo || '',
+        storage_type: item.storageType || 'Box',
         status
       })
 
