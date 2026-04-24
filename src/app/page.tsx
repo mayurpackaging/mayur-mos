@@ -1445,12 +1445,12 @@ function SparesTab({user}:{user:User}) {
   const [slipNo,setSlipNo]=useState('')
   const [date,setDate]=useState(nd())
   const [action,setAction]=useState('Stock In')
-  const [spareItems,setSpareItems]=useState([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0}])
+  const [spareItems,setSpareItems]=useState([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box'}])
 
   const load=useCallback(()=>{fetch('/api/spares').then(r=>r.json()).then(d=>{setSpares(d.spares||[]);setMovements(d.recentMovements||[]);setLoading(false)})},[])
   useEffect(()=>{load()},[load])
 
-  const addItem=()=>setSpareItems(p=>[...p,{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0}])
+  const addItem=()=>setSpareItems(p=>[...p,{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box'}])
   const removeItem=(i:number)=>setSpareItems(p=>p.filter((_,idx)=>idx!==i))
   const updateItem=(i:number,field:string,val:string)=>{
     setSpareItems(p=>{
@@ -1480,7 +1480,7 @@ function SparesTab({user}:{user:User}) {
     setSaving(true)
     const res=await fetch('/api/spares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendor,slipNo,date,action,doneBy:user.name,items:validItems})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
-    if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0}]);setVendor('');setSlipNo('')}
+    if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box'}]);setVendor('');setSlipNo('')}
   }
 
   const outOfStock=spares.filter(s=>s.status==='Out of Stock').length
@@ -1510,11 +1510,13 @@ function SparesTab({user}:{user:User}) {
             const bg=s.status==='Out of Stock'?'#FFEBEE':s.status==='Low'?'#FFF3E0':'#E8F5E9'
             return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
               <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{s.part_name}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{s.category}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{s.category||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{s.plant||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{s.room||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{s.almirah||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{s.box_no||'--'}</td>
               <td style={{padding:'6px 8px',fontWeight:700,color:col}}>{s.current_stock} {s.unit}</td>
               <td style={{padding:'6px 8px',textAlign:'center',color:'#666'}}>{s.min_qty}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{s.last_vendor||'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{s.last_price?`₹${s.last_price}`:'--'}</td>
               <td style={{padding:'6px 8px'}}><span style={{background:bg,color:col,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{s.status}</span></td>
             </tr>
           })}</tbody>
@@ -1562,6 +1564,32 @@ function SparesTab({user}:{user:User}) {
             </div>
             <div style={S.f}><label style={S.lbl}>Qty</label><input type="number" min="0" style={S.fi} value={item.qty} onChange={e=>updateItem(i,'qty',e.target.value)} placeholder="0"/></div>
             <div style={S.f}><label style={S.lbl}>Price/Pc (₹)</label><input type="number" min="0" style={S.fi} value={item.pricePerPc} onChange={e=>updateItem(i,'pricePerPc',e.target.value)} placeholder="0"/></div>
+          </div>
+          {/* Location Details */}
+          <div style={{background:'#F0F4FF',border:'1px solid #1F3864',borderRadius:8,padding:'8px 10px',marginTop:6}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:6}}>📍 Storage Location</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:5}}>
+              <div style={S.f}><label style={S.lbl}>Plant</label>
+                <select style={S.fi} value={item.plant||''} onChange={e=>updateItem(i,'plant',e.target.value)}>
+                  <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option><option>Main Store</option>
+                </select>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Room</label>
+                <select style={S.fi} value={item.room||''} onChange={e=>updateItem(i,'room',e.target.value)}>
+                  <option value="">Select</option>
+                  <option>Tool Room</option><option>Maintenance Room</option><option>Store Room</option><option>Production Floor</option>
+                </select>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:5}}>
+              <div style={S.f}><label style={S.lbl}>Almirah/Rack</label><input style={S.fi} value={item.almirah||''} onChange={e=>updateItem(i,'almirah',e.target.value)} placeholder="e.g. A1, Rack-2"/></div>
+              <div style={S.f}><label style={S.lbl}>Box No.</label><input style={S.fi} value={item.boxNo||''} onChange={e=>updateItem(i,'boxNo',e.target.value)} placeholder="e.g. Box-5"/></div>
+              <div style={S.f}><label style={S.lbl}>Storage Type</label>
+                <select style={S.fi} value={item.storageType||'Box'} onChange={e=>updateItem(i,'storageType',e.target.value)}>
+                  <option>Box</option><option>Loose</option><option>Drawer</option><option>Shelf</option><option>Hook</option>
+                </select>
+              </div>
+            </div>
           </div>
           {item.total>0&&<div style={{fontSize:11,color:'#276221',fontWeight:700,marginTop:4}}>Total: ₹{item.total.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>}
         </div>
