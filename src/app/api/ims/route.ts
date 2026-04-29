@@ -6,7 +6,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// IMS Items list (61 SKUs)
 const IMS_ITEMS = [
   {name:"50 ml Container Black",category:"Tub",pkg:1200,minC:50},
   {name:"50 ml Container Natural",category:"Tub",pkg:1200,minC:50},
@@ -71,20 +70,30 @@ const IMS_ITEMS = [
   {name:"Handle",category:"Accessory",pkg:1000,minC:10},
 ]
 
+// Min stock overrides table
+const IMS_MIN_TABLE = 'ims_min_stock'
+
 export async function GET() {
-  // Get latest stock for each item
+  // Get min stock overrides
+  const { data: minOverrides } = await supabase
+    .from('ims_min_stock')
+    .select('item_name, min_cartons')
+    .catch(() => ({data: null})) as any
+
+  const minMap: Record<string, number> = {}
+  if (minOverrides) {
+    minOverrides.forEach((r: any) => { minMap[r.item_name] = r.min_cartons })
+  }
+
   const { data: stockData } = await supabase
     .from('ims_stock')
     .select('item_name, stock_cartons, unpack_cartons, unpack_lid, status, date')
     .order('created_at', { ascending: false })
 
-  // Build item map with latest stock
   const stockMap: Record<string, any> = {}
   if (stockData) {
     for (const row of stockData) {
-      if (!stockMap[row.item_name]) {
-        stockMap[row.item_name] = row
-      }
+      if (!stockMap[row.item_name]) stockMap[row.item_name] = row
     }
   }
 
@@ -93,19 +102,13 @@ export async function GET() {
     const stockC = stock ? Number(stock.stock_cartons) : 0
     const unpackC = stock ? Number(stock.unpack_cartons) : 0
     const unpackL = stock ? Number(stock.unpack_lid) : 0
+    // Use override min if available
+    const minC = minMap[item.name] !== undefined ? minMap[item.name] : item.minC
     const effective = stockC + Math.min(unpackC, unpackL)
-    const pct = item.minC > 0 ? Math.round(effective / item.minC * 100) : 0
+    const pct = minC > 0 ? Math.round(effective / minC * 100) : 0
     const status = !stock ? 'Not Updated' : effective === 0 ? 'CRITICAL' : pct < 25 ? 'CRITICAL' : pct < 50 ? 'DANGER' : pct < 75 ? 'LOW' : pct < 100 ? 'OK' : 'SAFE'
-    
-    return {
-      ...item,
-      stockC,
-      unpackC,
-      unpackL,
-      pct,
-      status,
-      lastDate: stock?.date || ''
-    }
+
+    return { ...item, minC, stockC, unpackC, unpackL: unpackL, pct, status, lastDate: stock?.date || '' }
   })
 
   return NextResponse.json({ success: true, items })
@@ -114,21 +117,35 @@ export async function GET() {
 export async function POST(req: Request) {
   const { plant, enteredBy, entries } = await req.json()
   const today = new Date().toISOString().split('T')[0]
-
   const rows = entries.map((e: any) => ({
-    date: today,
-    plant,
-    item_name: e.itemName,
+    date: today, plant, item_name: e.itemName,
     category: e.category || '',
     stock_cartons: e.stockCartons || 0,
     unpack_cartons: e.unpackCartons || 0,
     unpack_lid: e.unpackLid || 0,
-    entered_by: enteredBy,
-    status: 'OK'
+    entered_by: enteredBy, status: 'OK'
   }))
-
   const { error } = await supabase.from('ims_stock').insert(rows)
-  
   if (error) return NextResponse.json({ success: false, msg: error.message })
   return NextResponse.json({ success: true, msg: `${rows.length} items saved!` })
+}
+
+export async function PUT(req: Request) {
+  // Update min stock overrides
+  const { updates } = await req.json()
+  if (!updates || updates.length === 0) return NextResponse.json({ success: false, msg: 'No updates!' })
+
+  // Upsert into ims_min_stock table
+  const rows = updates.map((u: any) => ({
+    item_name: u.name,
+    min_cartons: u.minC,
+    updated_at: new Date().toISOString()
+  }))
+
+  const { error } = await supabase
+    .from('ims_min_stock')
+    .upsert(rows, { onConflict: 'item_name' })
+
+  if (error) return NextResponse.json({ success: false, msg: error.message })
+  return NextResponse.json({ success: true, msg: `${updates.length} items ka min stock update ho gaya!` })
 }
