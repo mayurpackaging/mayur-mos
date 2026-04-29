@@ -295,12 +295,19 @@ function IMSTab({user}:{user:User}) {
     </div>
     <div style={S.card}>
       <div style={{fontWeight:700,marginBottom:10}}>Bulk Stock Entry</div>
-      <div style={S.f}><label style={S.lbl}>Plant</label><select style={S.fi} value={plant} onChange={e=>setPlant(e.target.value)}><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option></select></div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={S.f}><label style={S.lbl}>Plant</label><select style={S.fi} value={plant} onChange={e=>setPlant(e.target.value)}><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option></select></div>
+        <div style={{display:'flex',alignItems:'flex-end',paddingBottom:12}}>
+          <button onClick={()=>{setEditMin(!editMin);setMinVals({})}} style={{width:'100%',padding:'9px',border:'1px solid #854F0B',borderRadius:8,background:editMin?'#854F0B':'#fff',color:editMin?'#fff':'#854F0B',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+            {editMin?'✅ Edit Mode ON':'✏️ Min Stock Edit'}
+          </button>
+        </div>
+      </div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
             <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',minWidth:150}}>Item</th>
-            <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'center'}}>Min</th>
+            <th style={{background:editMin?'#854F0B':'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{editMin?'Min ✏️':'Min'}</th>
             <th style={{background:'#1F6B3A',color:'#fff',padding:'6px 8px',textAlign:'center'}}>Pack ✅</th>
             <th style={{background:'#1565C0',color:'#fff',padding:'6px 8px',textAlign:'center'}}>Unpack📦</th>
             <th style={{background:'#880E4F',color:'#fff',padding:'6px 8px',textAlign:'center'}}>Lid🔖</th>
@@ -314,7 +321,7 @@ function IMSTab({user}:{user:User}) {
             const stB=it.status==='SAFE'?'#E8F5E9':it.status==='CRITICAL'?'#FFEBEE':it.status==='Not Updated'?'#F5F5F5':'#FFF3E0'
             return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
               <td style={{padding:'5px 8px',fontSize:11,fontWeight:600}}>{it.name}</td>
-              <td style={{textAlign:'center',color:'#666'}}>{it.minC}</td>
+              <td style={{padding:2,textAlign:'center'}}>{editMin?(<input type='number' min='0' value={minVals[it.name]!==undefined?minVals[it.name]:String(it.minC||0)} onChange={e=>setMinVals(p=>({...p,[it.name]:e.target.value}))} style={{width:55,padding:4,border:'2px solid #854F0B',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,background:'#FFF9E6'}}/>):<span style={{color:'#666'}}>{it.minC}</span>}</td>
               <td style={{padding:3}}><input type="number" min="0" value={v.pk} onChange={e=>setVals(p=>({...p,[it.name]:{...v,pk:e.target.value}}))} style={{width:60,padding:4,border:`1px solid ${col}`,borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600,background:bg}}/></td>
               <td style={{padding:3}}><input type="number" min="0" value={v.uc} onChange={e=>setVals(p=>({...p,[it.name]:{...v,uc:e.target.value}}))} style={{width:55,padding:4,border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,background:'#F5F9FF'}}/></td>
               <td style={{padding:3}}><input type="number" min="0" value={v.ul} onChange={e=>setVals(p=>({...p,[it.name]:{...v,ul:e.target.value}}))} style={{width:55,padding:4,border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,background:'#FFF5F9'}}/></td>
@@ -323,7 +330,15 @@ function IMSTab({user}:{user:User}) {
           })}</tbody>
         </table>
       </div>
-      <button style={{...S.sb,marginTop:12}} onClick={save} disabled={saving}>{saving?'Saving...':'💾 Save All Stock Entry'}</button>
+      {editMin&&<button onClick={async()=>{
+        if(Object.keys(minVals).length===0){setToast({msg:'Koi change nahi kiya!',ok:false});return}
+        setSavingMin(true)
+        const updates=Object.entries(minVals).map(([name,val])=>({name,minC:parseFloat(val)||0}))
+        const res=await fetch('/api/ims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates})}).then(r=>r.json()).catch(()=>({success:false,msg:'Error!'}))
+        setSavingMin(false);setToast({msg:res.msg||'Saved!',ok:res.success})
+        if(res.success){setEditMin(false);setMinVals({});}
+      }} disabled={savingMin} style={{...S.sb,marginTop:8,background:'#854F0B'}}>{savingMin?'Saving...':'💾 Save Min Stock Changes'}</button>}
+      <button style={{...S.sb,marginTop:8}} onClick={save} disabled={saving}>{saving?'Saving...':'💾 Save All Stock Entry'}</button>
       {toast&&<Toast {...toast}/>}
     </div>
   </div>
