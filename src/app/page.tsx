@@ -277,6 +277,9 @@ function IMSTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [vals,setVals]=useState<Record<string,{pk:string,uc:string,ul:string}>>({})
+  const [editMin,setEditMin]=useState(false)
+  const [minVals,setMinVals]=useState<Record<string,string>>({})
+  const [savingMin,setSavingMin]=useState(false)
   useEffect(()=>{fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);const init:Record<string,any>={};d.items?.forEach((it:any)=>{init[it.name]={pk:it.stockC||'',uc:it.unpackC||'',ul:it.unpackL||''}});setVals(init);setLoading(false)})},[])
   const showToast=(msg:string,ok:boolean)=>{setToast({msg,ok});setTimeout(()=>setToast(null),3500)}
   const save=async()=>{
