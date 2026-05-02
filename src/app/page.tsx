@@ -280,7 +280,19 @@ function IMSTab({user}:{user:User}) {
   const [editMin,setEditMin]=useState(false)
   const [minVals,setMinVals]=useState<Record<string,string>>({})
   const [savingMin,setSavingMin]=useState(false)
-  useEffect(()=>{fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);const init:Record<string,any>={};d.items?.forEach((it:any)=>{init[it.name]={pk:it.stockC||'',uc:it.unpackC||'',ul:it.unpackL||''}});setVals(init);setLoading(false)})},[])
+  const [viewDate,setViewDate]=useState(nd())
+
+  const loadStock=(date:string)=>{
+    setLoading(true)
+    fetch(`/api/ims?date=${date}`).then(r=>r.json()).then(d=>{
+      setItems(d.items||[])
+      const init:Record<string,any>={}
+      d.items?.forEach((it:any)=>{init[it.name]={pk:it.stockC||'',uc:it.unpackC||'',ul:it.unpackL||''}})
+      setVals(init);setLoading(false)
+    })
+  }
+
+  useEffect(()=>{loadStock(nd())},[])
   const showToast=(msg:string,ok:boolean)=>{setToast({msg,ok});setTimeout(()=>setToast(null),3500)}
   const save=async()=>{
     const entries=items.map(it=>({itemName:it.name,category:it.category,stockCartons:parseFloat(vals[it.name]?.pk||'0')||0,unpackCartons:parseFloat(vals[it.name]?.uc||'0')||0,unpackLid:parseFloat(vals[it.name]?.ul||'0')||0}))
@@ -297,7 +309,13 @@ function IMSTab({user}:{user:User}) {
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Low</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{low}</div></div>
     </div>
     <div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:10}}>Bulk Stock Entry</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontWeight:700}}>Bulk Stock Entry</div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:11,color:'#666'}}>Date:</span>
+          <input type="date" value={viewDate} onChange={e=>{setViewDate(e.target.value);loadStock(e.target.value)}} style={{padding:'4px 8px',border:'1px solid #1F3864',borderRadius:6,fontSize:12,fontWeight:600,color:'#1F3864'}}/>
+        </div>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
         <div style={S.f}><label style={S.lbl}>Plant</label><select style={S.fi} value={plant} onChange={e=>setPlant(e.target.value)}><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option></select></div>
         <div style={{display:'flex',alignItems:'flex-end',paddingBottom:12}}>
