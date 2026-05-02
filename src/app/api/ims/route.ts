@@ -70,7 +70,11 @@ const IMS_ITEMS = [
   {name:"Handle",category:"Accessory",pkg:1000,minC:10},
 ]
 
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
+
+  // Get min stock overrides
   const { data: minOverrides } = await supabase
     .from('ims_min_stock')
     .select('item_name, min_cartons')
@@ -80,11 +84,15 @@ export async function GET() {
     minOverrides.forEach((r: any) => { minMap[r.item_name] = r.min_cartons })
   }
 
+  // Get stock for specific date — get latest entry on or before that date
   const { data: stockData } = await supabase
     .from('ims_stock')
-    .select('item_name, stock_cartons, unpack_cartons, unpack_lid, status, date')
+    .select('item_name, stock_cartons, unpack_cartons, unpack_lid, status, date, entered_by')
+    .lte('date', date)
+    .order('date', { ascending: false })
     .order('created_at', { ascending: false })
 
+  // Get latest entry per item on or before selected date
   const stockMap: Record<string, any> = {}
   if (stockData) {
     for (const row of stockData) {
@@ -101,10 +109,10 @@ export async function GET() {
     const effective = stockC + Math.min(unpackC, unpackL)
     const pct = minC > 0 ? Math.round(effective / minC * 100) : 0
     const status = !stock ? 'Not Updated' : effective === 0 ? 'CRITICAL' : pct < 25 ? 'CRITICAL' : pct < 50 ? 'DANGER' : pct < 75 ? 'LOW' : pct < 100 ? 'OK' : 'SAFE'
-    return { ...item, minC, stockC, unpackC, unpackL, pct, status, lastDate: stock?.date || '' }
+    return { ...item, minC, stockC, unpackC, unpackL, pct, status, lastDate: stock?.date || '', enteredBy: stock?.entered_by || '' }
   })
 
-  return NextResponse.json({ success: true, items })
+  return NextResponse.json({ success: true, items, date })
 }
 
 export async function POST(req: Request) {
