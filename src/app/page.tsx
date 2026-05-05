@@ -240,21 +240,104 @@ export default function MOS() {
 }
 
 function MISTab() {
-  const [data,setData] = useState<any>(null)
-  const [loading,setLoading] = useState(true)
-  useEffect(()=>{fetch('/api/mis').then(r=>r.json()).then(d=>{setData(d);setLoading(false)})},[])
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(true)
+  const [activeSection,setActiveSection]=useState('overview')
+
+  useEffect(()=>{
+    fetch('/api/mis').then(r=>r.json()).then(d=>{setData(d);setLoading(false)})
+  },[])
+
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading MIS...</div>
-  if(!data) return <div style={S.card}>Error!</div>
-  const prod=data.production||{},plants=prod.plants||{},totalParts=(prod.total||0)+(prod.totalRej||0)
+  if(!data) return <div style={S.card}>Error loading data!</div>
+
+  const prod=data.production||{},plants=prod.plants||{}
+  const totalParts=(prod.total||0)+(prod.totalRej||0)
   const rejPct=totalParts>0?Math.round((prod.totalRej||0)/totalParts*100*10)/10:0
-  return (
-    <div>
-      {data.alerts?.length>0&&<div style={{...S.card,border:'2px solid #C00000',background:'#FFEBEE'}}><div style={{fontWeight:700,color:'#C00000',marginBottom:8}}>🚨 Alerts</div>{data.alerts.map((a:string,i:number)=><div key={i} style={{fontSize:12,color:'#C00000',padding:'4px 0'}}>{a}</div>)}</div>}
-      {data.missing?.length>0?<div style={{...S.card,border:'2px solid #FF9800',background:'#FFF3E0'}}><div style={{fontWeight:700,color:'#E65100',marginBottom:8}}>⚠️ Missing ({data.missing.length})</div>{data.missing.map((m:string,i:number)=><div key={i} style={{fontSize:12,color:'#E65100',padding:'3px 0'}}>{m}</div>)}</div>:<div style={{...S.card,border:'1px solid #276221',background:'#E8F5E9'}}><div style={{fontSize:12,color:'#276221',fontWeight:600}}>✅ Aaj saari entries ho gayi!</div></div>}
+
+  const SECTIONS=[
+    {id:'overview',label:'Overview'},
+    {id:'production',label:'Production'},
+    {id:'quality',label:'Quality'},
+    {id:'mould',label:'Mould'},
+  ]
+
+  return <div>
+    {/* Section tabs */}
+    <div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto'}}>
+      {SECTIONS.map(s=><button key={s.id} style={activeSection===s.id?S.nbA:S.nb} onClick={()=>setActiveSection(s.id)}>{s.label}</button>)}
+    </div>
+
+    {/* OVERVIEW SECTION */}
+    {activeSection==='overview'&&<div>
+      {/* Alerts */}
+      {data.alerts?.length>0&&<div style={{...S.card,border:'2px solid #C00000',background:'#FFEBEE'}}>
+        <div style={{fontWeight:700,color:'#C00000',marginBottom:8}}>🚨 System Alerts</div>
+        {data.alerts.map((a:string,i:number)=><div key={i} style={{fontSize:12,color:'#C00000',padding:'4px 0',borderBottom:'1px solid #FFCDD2'}}>{a}</div>)}
+      </div>}
+
+      {/* Missing entries */}
+      {data.missing?.length>0?<div style={{...S.card,border:'2px solid #FF9800',background:'#FFF3E0'}}>
+        <div style={{fontWeight:700,color:'#E65100',marginBottom:8}}>⚠️ Missing Entries ({data.missing.length})</div>
+        {data.missing.map((m:string,i:number)=><div key={i} style={{fontSize:12,color:'#E65100',padding:'3px 0'}}>{m}</div>)}
+      </div>:<div style={{...S.card,border:'1px solid #276221',background:'#E8F5E9'}}>
+        <div style={{fontSize:12,color:'#276221',fontWeight:600}}>✅ Aaj saari entries ho gayi!</div>
+      </div>}
+
+      {/* Key Metrics */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-        <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Good Parts</div><div style={{fontSize:22,fontWeight:700,color:'#276221'}}>{((prod.total||0)/1000).toFixed(1)}K</div></div>
-        <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Rejection %</div><div style={{fontSize:22,fontWeight:700,color:rejPct>3?'#C00000':rejPct>1?'#854F0B':'#276221'}}>{rejPct}%</div></div>
+        <div style={{...S.met,background:'#E8F5E9',border:'1px solid #276221'}}>
+          <div style={{fontSize:10,color:'#276221'}}>Total Good Parts</div>
+          <div style={{fontSize:24,fontWeight:700,color:'#276221'}}>{((prod.total||0)/1000).toFixed(1)}K</div>
+          <div style={{fontSize:10,color:'#666'}}>{prod.entries||0} entries</div>
+        </div>
+        <div style={{...S.met,background:rejPct>3?'#FFEBEE':'#FFF9E6',border:`1px solid ${rejPct>3?'#C00000':'#F4B942'}`}}>
+          <div style={{fontSize:10,color:rejPct>3?'#C00000':'#854F0B'}}>Rejection %</div>
+          <div style={{fontSize:24,fontWeight:700,color:rejPct>3?'#C00000':rejPct>1?'#854F0B':'#276221'}}>{rejPct}%</div>
+          <div style={{fontSize:10,color:'#666'}}>{(prod.totalRej||0).toLocaleString()} pcs</div>
+        </div>
       </div>
+
+      {/* Module Status Grid */}
+      <div style={S.card}>
+        <div style={{fontWeight:700,marginBottom:10}}>Module Status</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {/* IMS */}
+          <div style={{background:'#F8F9FF',border:'1px solid #E0E8FF',borderRadius:8,padding:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:4}}>📦 IMS Stock</div>
+            <div style={{fontSize:11,color:data.ims?.lastUpdated===data.date?'#276221':'#C00000',fontWeight:600}}>
+              {data.ims?.lastUpdated===data.date?'✅ Updated':'❌ Not Updated'}
+            </div>
+            <div style={{fontSize:10,color:'#666'}}>Last: {data.ims?.lastUpdated||'Never'}</div>
+          </div>
+          {/* Breakdown */}
+          <div style={{background:(data.breakdown?.pending||0)>0?'#FFEBEE':'#F8F9FF',border:`1px solid ${(data.breakdown?.pending||0)>0?'#C00000':'#E0E8FF'}`,borderRadius:8,padding:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:4}}>🔧 Breakdown</div>
+            <div style={{fontSize:11,color:(data.breakdown?.pending||0)>0?'#C00000':'#276221',fontWeight:600}}>
+              {(data.breakdown?.pending||0)>0?`⚠️ ${data.breakdown.pending} Pending`:'✅ All Clear'}
+            </div>
+            <div style={{fontSize:10,color:'#666'}}>Avg: {data.breakdown?.avgDowntime||0} min</div>
+          </div>
+          {/* Mould PM */}
+          <div style={{background:(data.mouldPM?.overdue||0)>0?'#FFEBEE':'#F8F9FF',border:`1px solid ${(data.mouldPM?.overdue||0)>0?'#C00000':'#E0E8FF'}`,borderRadius:8,padding:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:4}}>⚙️ Mould PM</div>
+            <div style={{fontSize:11,color:(data.mouldPM?.overdue||0)>0?'#C00000':'#276221',fontWeight:600}}>
+              {(data.mouldPM?.overdue||0)>0?`🚨 ${data.mouldPM.overdue} Overdue`:'✅ All OK'}
+            </div>
+            <div style={{fontSize:10,color:'#666'}}>Due Soon: {data.mouldPM?.dueSoon||0}</div>
+          </div>
+          {/* Production Entries */}
+          <div style={{background:'#F8F9FF',border:'1px solid #E0E8FF',borderRadius:8,padding:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:4}}>🏭 Production</div>
+            <div style={{fontSize:11,color:(prod.entries||0)>0?'#276221':'#C00000',fontWeight:600}}>
+              {prod.entries||0} entries today
+            </div>
+            <div style={{fontSize:10,color:'#666'}}>Missing: {data.missing?.length||0} shifts</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Plant-wise production */}
       <div style={S.card}>
         <div style={{fontWeight:700,marginBottom:10}}>Plant-wise Production</div>
         {['477','488','433'].map(p=>{
@@ -270,27 +353,243 @@ function MISTab() {
               <div><div style={{fontSize:9,color:'#666'}}>Rejection</div><div style={{fontSize:16,fontWeight:700,color:'#C00000'}}>{(pl.rej||0).toLocaleString()}</div></div>
               <div><div style={{fontSize:9,color:'#666'}}>Entries</div><div style={{fontSize:16,fontWeight:700}}>{pl.entries||0}</div></div>
             </div>
-            <div style={{marginTop:8,height:6,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}><div style={{width:`${Math.min(pl.eff,100)}%`,height:'100%',background:effCol,borderRadius:999}}/></div>
+            <div style={{marginTop:8,height:6,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}>
+              <div style={{width:`${Math.min(pl.eff||0,100)}%`,height:'100%',background:effCol,borderRadius:999}}/>
+            </div>
           </div>
         })}
       </div>
+
+      {/* 7-day trend */}
       {data.trend?.length>0&&<div style={S.card}>
-        <div style={{fontWeight:700,marginBottom:10}}>7-Day Trend</div>
+        <div style={{fontWeight:700,marginBottom:10}}>7-Day Production Trend</div>
         <div style={{display:'flex',alignItems:'flex-end',gap:4,height:100}}>
           {data.trend.map((t:any,i:number)=>{
             const maxV=Math.max(...data.trend.map((x:any)=>x.good))||1
             const h=Math.round((t.good/maxV)*80)
+            const rh=Math.round((t.rej/maxV)*80)
             return <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
               <div style={{fontSize:9,color:'#276221'}}>{Math.round(t.good/1000)}K</div>
-              <div style={{width:'100%',display:'flex',flexDirection:'column',justifyContent:'flex-end',height:80}}><div style={{width:'100%',height:h,background:'#1F3864',borderRadius:'2px 2px 0 0'}}/></div>
+              <div style={{width:'100%',display:'flex',flexDirection:'column',justifyContent:'flex-end',height:80,gap:1}}>
+                <div style={{width:'100%',height:rh,background:'#FFCDD2',borderRadius:'2px 2px 0 0'}}/>
+                <div style={{width:'100%',height:h,background:'#1F3864',borderRadius:'2px 2px 0 0'}}/>
+              </div>
               <div style={{fontSize:8,color:'#666'}}>{t.date?.slice(5)}</div>
             </div>
           })}
         </div>
+        <div style={{display:'flex',gap:12,marginTop:6,fontSize:10}}>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,background:'#1F3864',display:'inline-block',borderRadius:2}}/> Good</span>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,background:'#FFCDD2',display:'inline-block',borderRadius:2}}/> Rejection</span>
+        </div>
+      </div>}
+    </div>}
+
+    {/* PRODUCTION SECTION */}
+    {activeSection==='production'&&<MISProductionSection data={data}/>}
+
+    {/* QUALITY SECTION */}
+    {activeSection==='quality'&&<MISQualitySection data={data}/>}
+
+    {/* MOULD SECTION */}
+    {activeSection==='mould'&&<MISMouldSection data={data}/>}
+  </div>
+}
+
+function MISProductionSection({data}:{data:any}) {
+  const prod=data.production||{}
+  const plants=prod.plants||{}
+
+  return <div>
+    {/* Shift Comparison */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>🌅 Shift Comparison</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div style={{background:'#E6F1FB',border:'1px solid #1F3864',borderRadius:8,padding:10,textAlign:'center'}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:6}}>Day Shift</div>
+          <div style={{fontSize:22,fontWeight:700,color:'#1F3864'}}>{((prod.dayGood||0)/1000).toFixed(1)}K</div>
+          <div style={{fontSize:10,color:'#666'}}>Good Parts</div>
+          <div style={{fontSize:11,color:'#C00000',marginTop:4}}>{prod.dayRej||0} rejected</div>
+        </div>
+        <div style={{background:'#1F3864',border:'1px solid #1F3864',borderRadius:8,padding:10,textAlign:'center'}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#FFD966',marginBottom:6}}>🌙 Night Shift</div>
+          <div style={{fontSize:22,fontWeight:700,color:'#fff'}}>{((prod.nightGood||0)/1000).toFixed(1)}K</div>
+          <div style={{fontSize:10,color:'#90A8C8'}}>Good Parts</div>
+          <div style={{fontSize:11,color:'#FF9800',marginTop:4}}>{prod.nightRej||0} rejected</div>
+        </div>
+      </div>
+    </div>
+
+    {/* Machine-wise production */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>🏭 Machine-wise Production</div>
+      {(data.machineWise||[]).length===0?<div style={{textAlign:'center',color:'#666',padding:16}}>Aaj koi production entry nahi!</div>:
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            {['Plant','Machine','Product','Good','Rej','Efficiency','Shift'].map(h=>
+              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{(data.machineWise||[]).map((r:any,i:number)=>{
+            const eff=r.eff||0
+            const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
+            return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'6px 8px'}}>{r.plant}</td>
+              <td style={{padding:'6px 8px',fontWeight:600}}>{r.machine}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.product}</td>
+              <td style={{padding:'6px 8px',color:'#276221',fontWeight:700}}>{(r.good||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',color:'#C00000',fontWeight:700}}>{r.rej||0}</td>
+              <td style={{padding:'6px 8px'}}>
+                <span style={{background:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':'#FFEBEE',color:effCol,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{eff}%</span>
+              </td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.shift}</td>
+            </tr>
+          })}</tbody>
+        </table>
       </div>}
     </div>
-  )
+
+    {/* Top 5 Products */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>🏆 Top Products Today</div>
+      {(data.topProducts||[]).length===0?<div style={{textAlign:'center',color:'#666',padding:16}}>Koi data nahi!</div>:
+      (data.topProducts||[]).slice(0,5).map((p:any,i:number)=>{
+        const maxG=data.topProducts[0]?.good||1
+        const w=Math.round((p.good/maxG)*100)
+        return <div key={i} style={{marginBottom:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+            <span style={{fontSize:11,fontWeight:600}}>#{i+1} {p.product}</span>
+            <span style={{fontSize:11,color:'#276221',fontWeight:700}}>{(p.good||0).toLocaleString()} pcs</span>
+          </div>
+          <div style={{height:8,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}>
+            <div style={{width:`${w}%`,height:'100%',background:i===0?'#1F3864':i===1?'#276221':i===2?'#854F0B':'#C2185B',borderRadius:999}}/>
+          </div>
+        </div>
+      })}
+    </div>
+  </div>
 }
+
+function MISQualitySection({data}:{data:any}) {
+  return <div>
+    {/* Rejection by reason */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>❌ Rejection by Reason</div>
+      {(data.rejByReason||[]).length===0?<div style={{textAlign:'center',color:'#666',padding:16}}>Aaj koi rejection nahi!</div>:
+      (data.rejByReason||[]).map((r:any,i:number)=>{
+        const maxQ=(data.rejByReason||[])[0]?.qty||1
+        const w=Math.round((r.qty/maxQ)*100)
+        return <div key={i} style={{marginBottom:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+            <span style={{fontSize:11,fontWeight:600}}>{r.reason}</span>
+            <span style={{fontSize:11,color:'#C00000',fontWeight:700}}>{r.qty.toLocaleString()} pcs ({r.pct}%)</span>
+          </div>
+          <div style={{height:8,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}>
+            <div style={{width:`${w}%`,height:'100%',background:'#C00000',borderRadius:999}}/>
+          </div>
+        </div>
+      })}
+    </div>
+
+    {/* Top rejection items */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>📦 Top Rejection Items</div>
+      {(data.rejByItem||[]).length===0?<div style={{textAlign:'center',color:'#666',padding:16}}>Koi rejection nahi!</div>:
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            {['Product','Qty','Reason','Plant'].map(h=>
+              <th key={h} style={{background:'#C00000',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{(data.rejByItem||[]).slice(0,10).map((r:any,i:number)=>(
+            <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{r.product}</td>
+              <td style={{padding:'6px 8px',color:'#C00000',fontWeight:700}}>{r.qty.toLocaleString()}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.reason}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.plant}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>}
+    </div>
+
+    {/* Quality score summary */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>✅ Quality Score Today</div>
+      {(data.qualityScore||[]).length===0?<div style={{textAlign:'center',color:'#666',padding:16}}>Koi quality check nahi!</div>:
+      (data.qualityScore||[]).map((q:any,i:number)=>{
+        const col=q.ngCount===0?'#276221':q.ngCount<3?'#854F0B':'#C00000'
+        return <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid #F5F5F5'}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600}}>{q.machine}</div>
+            <div style={{fontSize:10,color:'#666'}}>{q.product}</div>
+          </div>
+          <span style={{background:q.ngCount===0?'#E8F5E9':q.ngCount<3?'#FFF3E0':'#FFEBEE',color:col,padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:600}}>
+            {q.ngCount===0?'✅ All OK':`⚠️ ${q.ngCount} NG`}
+          </span>
+        </div>
+      })}
+    </div>
+  </div>
+}
+
+function MISMouldSection({data}:{data:any}) {
+  return <div>
+    {/* Mould change today */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Changes Today</div><div style={{fontSize:20,fontWeight:700}}>{data.mouldChangesToday||0}</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>PM Overdue</div><div style={{fontSize:20,fontWeight:700,color:'#C00000'}}>{data.mouldPM?.overdue||0}</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Due Soon</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{data.mouldPM?.dueSoon||0}</div></div>
+    </div>
+
+    {/* PM Due List */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>⚙️ PM Due List</div>
+      {(data.pmDueList||[]).length===0?<div style={{textAlign:'center',color:'#276221',padding:16}}>✅ Koi PM overdue nahi!</div>:
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            {['Mould','Plant','Current Shots','PM At','Remaining','Status'].map(h=>
+              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{(data.pmDueList||[]).map((m:any,i:number)=>{
+            const col=m.status==='OVERDUE'?'#C00000':'#854F0B'
+            const bg=m.status==='OVERDUE'?'#FFEBEE':'#FFF3E0'
+            return <tr key={i} style={{background:bg}}>
+              <td style={{padding:'6px 8px',fontWeight:600}}>{m.mould_name}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{m.plant}</td>
+              <td style={{padding:'6px 8px',textAlign:'center'}}>{(m.current_shots||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center'}}>{(m.next_pm_at_shots||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>{m.remaining>0?m.remaining.toLocaleString()+' shots':'OVERDUE!'}</td>
+              <td style={{padding:'6px 8px'}}><span style={{background:col,color:'#fff',padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{m.status}</span></td>
+            </tr>
+          })}</tbody>
+        </table>
+      </div>}
+    </div>
+
+    {/* Shots Progress */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>📊 Shots Counter Progress</div>
+      {(data.shotsProgress||[]).length===0?<div style={{textAlign:'center',color:'#666',padding:16}}>Koi mould setup nahi!</div>:
+      (data.shotsProgress||[]).slice(0,10).map((m:any,i:number)=>{
+        const pct=Math.min(m.pct||0,100)
+        const col=pct>=90?'#C00000':pct>=75?'#854F0B':'#276221'
+        return <div key={i} style={{marginBottom:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+            <span style={{fontSize:11,fontWeight:600}}>{m.mould_name}</span>
+            <span style={{fontSize:10,color:col,fontWeight:700}}>{pct}% used</span>
+          </div>
+          <div style={{height:8,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}>
+            <div style={{width:`${pct}%`,height:'100%',background:col,borderRadius:999}}/>
+          </div>
+          <div style={{fontSize:9,color:'#666',marginTop:2}}>{(m.current_shots||0).toLocaleString()} / {(m.next_pm_at_shots||0).toLocaleString()} shots</div>
+        </div>
+      })}
+    </div>
+  </div>
+}
+
 
 function IMSTab({user}:{user:User}) {
   const [items,setItems]=useState<any[]>([])
