@@ -388,142 +388,274 @@ function ProductionTab({user}:{user:User}) {
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
-  const [form,setForm]=useState({date:nd(),shift:'day',plant:'',machine:'',operator:'',operator2:'',product:'',mould:'',cavities:'',cycleTime:'',material:'',machineStatus:'running',stopReason:'',remarks:''})
-  const [slots,setSlots]=useState<any[]>([])
+  
+  // Machine details - common for all products
+  const [machForm,setMachForm]=useState({
+    date:nd(),shift:'day',plant:'',machine:'',
+    machineStatus:'running',stopReason:''
+  })
+  
+  // Multiple products in same shift
+  const [products,setProducts]=useState([{
+    id:1,product:'',mould:'',cavities:'',cycleTime:'',
+    operator:'',operator2:'',material:'',
+    slots:DAY_SLOTS.map(s=>({slot:s,good:'',rejection:'',down:'',remarks:''}))
+  }])
 
   useEffect(()=>{
     fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})
-    const s=form.shift==='night'?NIGHT_SLOTS:DAY_SLOTS
-    setSlots(s.map(sl=>({slot:sl,good:'',rejection:'',down:'',remarks:''})))
   },[])
 
-  const updateSlot=(i:number,field:string,val:string)=>{
-    setSlots(prev=>{const n=[...prev];n[i]={...n[i],[field]:val};return n})
+  const updateSlots=(shift:string)=>{
+    const slotNames=shift==='night'?NIGHT_SLOTS:DAY_SLOTS
+    setProducts(prev=>prev.map(p=>({...p,slots:slotNames.map(s=>({slot:s,good:'',rejection:'',down:'',remarks:''}))})))
   }
 
-  const calcProjected=(i:number)=>{
-    const cav=parseFloat(form.cavities||'0'),ct=parseFloat(form.cycleTime||'0')
-    if(cav>0&&ct>0) return Math.floor((180*60)/ct)*cav
+  const addProduct=()=>{
+    const slotNames=machForm.shift==='night'?NIGHT_SLOTS:DAY_SLOTS
+    setProducts(prev=>[...prev,{
+      id:Date.now(),product:'',mould:'',cavities:'',cycleTime:'',
+      operator:'',operator2:'',material:'',
+      slots:slotNames.map(s=>({slot:s,good:'',rejection:'',down:'',remarks:''}))
+    }])
+  }
+
+  const removeProduct=(id:number)=>{
+    if(products.length===1) return
+    setProducts(prev=>prev.filter(p=>p.id!==id))
+  }
+
+  const updateProduct=(id:number,field:string,val:string)=>{
+    setProducts(prev=>prev.map(p=>{
+      if(p.id!==id) return p
+      if(field==='product'){
+        const mould=PRODUCT_MOULD_MAP[val]||''
+        return {...p,product:val,mould:mould}
+      }
+      return {...p,[field]:val}
+    }))
+  }
+
+  const updateSlot=(prodId:number,slotIdx:number,field:string,val:string)=>{
+    setProducts(prev=>prev.map(p=>{
+      if(p.id!==prodId) return p
+      const newSlots=[...p.slots]
+      newSlots[slotIdx]={...newSlots[slotIdx],[field]:val}
+      return {...p,slots:newSlots}
+    }))
+  }
+
+  const calcProj=(cav:string,ct:string)=>{
+    const c=parseFloat(cav||'0'),t=parseFloat(ct||'0')
+    if(c>0&&t>0) return Math.floor((180*60)/t)*c
     return 0
   }
 
-  const calcEff=(i:number)=>{
-    const proj=calcProjected(i),good=parseFloat(slots[i]?.good||'0')
-    if(proj>0&&good>0) return Math.round(good/proj*100)
+  const calcEff=(good:string,proj:number)=>{
+    const g=parseFloat(good||'0')
+    if(proj>0&&g>0) return Math.round(g/proj*100)
     return 0
   }
 
-  const totalGood=slots.reduce((a,s)=>a+(parseFloat(s.good)||0),0)
-  const totalRej=slots.reduce((a,s)=>a+(parseFloat(s.rejection)||0),0)
-  const totalDown=slots.reduce((a,s)=>a+(parseFloat(s.down)||0),0)
+  const machines=MACH[machForm.plant]||[]
+  const isRunning=machForm.machineStatus==='running'
 
   const save=async()=>{
-    if(!form.plant||!form.machine){setToast({msg:'Plant aur Machine select karo!',ok:false});return}
-    setSaving(true)
-    const res=await fetch('/api/production',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      ...form,
-      cavities: form.cavities||'0',
-      cycleTime: form.cycleTime||'0',
-      slots,
-      enteredBy:user.name
-    })}).then(r=>r.json())
-    setSaving(false);setToast({msg:res.msg,ok:res.success})
+    if(!machForm.plant||!machForm.machine){setToast({msg:'Plant aur Machine select karo!',ok:false});return}
+    
+    let savedCount=0
+    let errors=[]
+    
+    for(const prod of products){
+      if(!prod.product) continue
+      
+      const totalGood=prod.slots.reduce((a,s)=>a+(parseFloat(s.good)||0),0)
+      const totalRej=prod.slots.reduce((a,s)=>a+(parseFloat(s.rejection)||0),0)
+      
+      const res=await fetch('/api/production',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          date:machForm.date,
+          shift:machForm.shift==='night'?'Night (8pm-8am)':'Day (8am-8pm)',
+          plant:machForm.plant,
+          machine:machForm.machine,
+          operator:prod.operator,
+          operator2:prod.operator2,
+          product:prod.product,
+          mould:prod.mould,
+          cavities:prod.cavities||'0',
+          cycleTime:prod.cycleTime||'0',
+          material:prod.material,
+          machineStatus:machForm.machineStatus,
+          stopReason:machForm.stopReason||'',
+          remarks:'',
+          slots:isRunning?prod.slots:prod.slots.map(s=>({...s,good:'0',rejection:'0',down:'180',remarks:machForm.machineStatus+' - '+machForm.stopReason})),
+          enteredBy:user.name
+        })
+      }).then(r=>r.json())
+      
+      if(res.success) savedCount++
+      else errors.push(res.msg)
+    }
+    
+    setSaving(false)
+    if(savedCount>0) setToast({msg:`${savedCount} product entries saved!`,ok:true})
+    else setToast({msg:errors[0]||'Error!',ok:false})
   }
-
-  const machines=MACH[form.plant]||[]
-  const isRunning=form.machineStatus==='running'
 
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
   return <div>
-    <div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:10}}>Production Entry</div>
+    {/* Machine Details Card - Common */}
+    <div style={{...S.card,border:'2px solid #1F3864'}}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:14}}>🏭 Machine Details</div>
       <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
-        <div style={S.f}><label style={S.lbl}>Shift</label><select style={S.fi} value={form.shift} onChange={e=>{setForm(p=>({...p,shift:e.target.value}));const s=e.target.value==='night'?NIGHT_SLOTS:DAY_SLOTS;setSlots(s.map(sl=>({slot:sl,good:'',rejection:'',down:'',remarks:''})))}}><option value="day">Day (8am-8pm)</option><option value="night">Night (8pm-8am)</option></select></div>
-      </div>
-      <div style={S.f}><label style={S.lbl}>Machine Status</label>
-        <select style={S.fi} value={form.machineStatus} onChange={e=>setForm(p=>({...p,machineStatus:e.target.value}))}>
-          <option value="running">Running</option><option value="noplan">No Plan</option>
-          <option value="breakdown">Breakdown</option><option value="mouldchange">Mould Change</option>
-          <option value="maintenance">Maintenance</option><option value="powercut">Power Cut</option>
-        </select>
-      </div>
-      {!isRunning&&<div style={{background:'#FFF3E0',border:'1px solid #FF9800',borderRadius:8,padding:'8px 12px',marginBottom:8,fontSize:12,color:'#E65100'}}>⚠️ Machine band hai — reason mandatory!</div>}
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Plant</label><select style={S.fi} value={form.plant} onChange={e=>setForm(p=>({...p,plant:e.target.value,machine:''}))}>
-          <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
-        </select></div>
-        <div style={S.f}><label style={S.lbl}>Machine</label><select style={S.fi} value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}>
-          <option>Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
-        </select></div>
-      </div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Operator 1</label><select style={S.fi} value={form.operator} onChange={e=>setForm(p=>({...p,operator:e.target.value}))}>
-          <option value="">Select</option>{OPS.map(o=><option key={o}>{o}</option>)}
-        </select></div>
-        <div style={S.f}><label style={S.lbl}>Operator 2</label><select style={S.fi} value={form.operator2} onChange={e=>setForm(p=>({...p,operator2:e.target.value}))}>
-          <option value="">None</option>{OPS.map(o=><option key={o}>{o}</option>)}
-        </select></div>
-      </div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Product</label><select style={S.fi} value={form.product} onChange={e=>{
-          const mould=PRODUCT_MOULD_MAP[e.target.value]||''
-          setForm(p=>({...p,product:e.target.value,mould:mould}))
-        }}>
-          <option value="">Select</option>{items.map(i=><option key={i.name}>{i.name}</option>)}
-        </select></div>
-        <div style={S.f}><label style={S.lbl}>Mould No. (Auto-fill / Select)</label>
-          <select style={{...S.fi,background:form.mould?'#E2EFDA':'#FAFAFA'}} value={form.mould} onChange={e=>setForm(p=>({...p,mould:e.target.value}))}>
-            <option value="">-- Select Mould --</option>
-            <optgroup label="── Tub Moulds ──">
-              {MOULDS.filter(m=>m.name.includes('Tub')||m.name.includes('Glass')||m.name.includes('Bowl')||m.name.includes('Oval')||m.name.includes('Rectangle')||m.name.includes('RO')||m.name.includes('RE')).map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
-            </optgroup>
-            <optgroup label="── Lid Moulds ──">
-              {MOULDS.filter(m=>m.name.includes('Lid')||m.name.includes('Sipper')).map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
-            </optgroup>
+        <div style={S.f}><label style={S.lbl}>Date</label>
+          <input type="date" style={S.fi} value={machForm.date} onChange={e=>setMachForm(p=>({...p,date:e.target.value}))}/>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Shift</label>
+          <select style={S.fi} value={machForm.shift} onChange={e=>{setMachForm(p=>({...p,shift:e.target.value}));updateSlots(e.target.value)}}>
+            <option value="day">Day Shift (8am-8pm)</option>
+            <option value="night">Night Shift (8pm-8am)</option>
           </select>
         </div>
       </div>
       <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Cavities</label><input type="number" style={S.fi} value={form.cavities} onChange={e=>setForm(p=>({...p,cavities:e.target.value}))} placeholder="e.g. 4"/></div>
-        <div style={S.f}><label style={S.lbl}>Cycle Time (sec)</label><input type="number" style={S.fi} value={form.cycleTime} onChange={e=>setForm(p=>({...p,cycleTime:e.target.value}))} placeholder="e.g. 12"/></div>
+        <div style={S.f}><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={machForm.plant} onChange={e=>setMachForm(p=>({...p,plant:e.target.value,machine:''}))}>
+            <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Machine</label>
+          <select style={S.fi} value={machForm.machine} onChange={e=>setMachForm(p=>({...p,machine:e.target.value}))}>
+            <option>Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
+          </select>
+        </div>
       </div>
+      <div style={S.f}><label style={S.lbl}>Machine Status</label>
+        <select style={S.fi} value={machForm.machineStatus} onChange={e=>setMachForm(p=>({...p,machineStatus:e.target.value}))}>
+          <option value="running">Running</option>
+          <option value="noplan">No Plan</option>
+          <option value="breakdown">Breakdown</option>
+          <option value="mouldchange">Mould Change</option>
+          <option value="maintenance">Maintenance</option>
+          <option value="powercut">Power Cut</option>
+        </select>
+      </div>
+      {!isRunning&&<>
+        <div style={{background:'#FFF3E0',border:'1px solid #FF9800',borderRadius:8,padding:'8px 12px',marginBottom:8,fontSize:12,color:'#E65100'}}>⚠️ Machine band hai — reason mandatory!</div>
+        <div style={S.f}><label style={S.lbl}>Reason</label><input style={S.fi} value={machForm.stopReason} onChange={e=>setMachForm(p=>({...p,stopReason:e.target.value}))} placeholder="Detail mein reason..."/></div>
+      </>}
     </div>
 
-    {isRunning&&<div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:10}}>Slot-wise Production</div>
-      {/* Summary bar */}
-      <div style={{background:'#1F3864',borderRadius:8,padding:'8px 12px',marginBottom:10,display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,textAlign:'center'}}>
-        <div><div style={{fontSize:9,color:'#90A8C8'}}>Good Parts</div><div style={{fontSize:14,fontWeight:700,color:'#4CAF50'}}>{Math.round(totalGood).toLocaleString()}</div></div>
-        <div><div style={{fontSize:9,color:'#90A8C8'}}>Rejection</div><div style={{fontSize:14,fontWeight:700,color:'#FF5252'}}>{Math.round(totalRej).toLocaleString()}</div></div>
-        <div><div style={{fontSize:9,color:'#90A8C8'}}>Downtime</div><div style={{fontSize:14,fontWeight:700,color:'#FF9800'}}>{Math.round(totalDown)} min</div></div>
-        <div><div style={{fontSize:9,color:'#90A8C8'}}>Efficiency</div><div style={{fontSize:14,fontWeight:700,color:'#FFD966'}}>{totalGood>0&&calcProjected(0)>0?Math.round(totalGood/(calcProjected(0)*slots.length)*100)+'%':'--'}</div></div>
-      </div>
-      {slots.map((s,i)=>{
-        const proj=calcProjected(i),eff=calcEff(i)
-        const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
-        return <div key={i} style={{background:'#F8F9FF',border:'1px solid #E0E8FF',borderRadius:8,padding:'8px 10px',marginBottom:8}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-            <span style={{fontWeight:700,fontSize:11,color:'#1F3864'}}>{s.slot}</span>
-            <span style={{background:'#1F3864',color:'#FFD966',padding:'2px 8px',borderRadius:999,fontSize:10}}>Proj: {proj>0?proj.toLocaleString():'--'}</span>
+    {/* Products */}
+    {products.map((prod,prodIdx)=>{
+      const proj=calcProj(prod.cavities,prod.cycleTime)
+      const totalGood=prod.slots.reduce((a,s)=>a+(parseFloat(s.good)||0),0)
+      const totalRej=prod.slots.reduce((a,s)=>a+(parseFloat(s.rejection)||0),0)
+      const totalDown=prod.slots.reduce((a,s)=>a+(parseFloat(s.down)||0),0)
+      
+      return <div key={prod.id} style={{...S.card,border:`2px solid ${prodIdx===0?'#276221':'#854F0B'}`,marginBottom:8}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{fontWeight:700,color:prodIdx===0?'#276221':'#854F0B',fontSize:14}}>
+            📦 Product {prodIdx+1} {prodIdx>0?'(Mould Change ke baad)':''}
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:5}}>
-            <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Good Parts</div><input type="number" min="0" value={s.good} onChange={e=>updateSlot(i,'good',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #276221',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600}}/></div>
-            <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Rejection</div><input type="number" min="0" value={s.rejection} onChange={e=>updateSlot(i,'rejection',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #C00000',borderRadius:6,textAlign:'center',fontSize:12}}/></div>
-            <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Downtime</div><input type="number" min="0" value={s.down} onChange={e=>updateSlot(i,'down',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12}}/></div>
-            <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Efficiency</div><div style={{padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,color:eff>0?effCol:'#666',background:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':eff>0?'#FFEBEE':'#F0F0F0'}}>{eff>0?eff+'%':'--'}</div></div>
-          </div>
-          <input type="text" value={s.remarks} onChange={e=>updateSlot(i,'remarks',e.target.value)} placeholder="Remarks / Loss reason..." style={{width:'100%',marginTop:5,padding:'4px 8px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11,background:'#FFFFF0'}}/>
+          {products.length>1&&<button onClick={()=>removeProduct(prod.id)} style={{background:'#FFEBEE',color:'#C00000',border:'none',borderRadius:6,padding:'4px 10px',fontSize:12,cursor:'pointer'}}>Remove</button>}
         </div>
-      })}
-    </div>}
+        
+        {/* Product details */}
+        <div style={S.fr}>
+          <div style={S.f}><label style={S.lbl}>Product</label>
+            <select style={S.fi} value={prod.product} onChange={e=>updateProduct(prod.id,'product',e.target.value)}>
+              <option value="">Select</option>{items.map(i=><option key={i.name}>{i.name}</option>)}
+            </select>
+          </div>
+          <div style={S.f}><label style={S.lbl}>Mould No.</label>
+            <select style={{...S.fi,background:prod.mould?'#E2EFDA':'#FAFAFA'}} value={prod.mould} onChange={e=>updateProduct(prod.id,'mould',e.target.value)}>
+              <option value="">-- Select Mould --</option>
+              <optgroup label="── Tub Moulds ──">
+                {MOULDS.filter(m=>!m.name.includes('Lid')&&!m.name.includes('Sipper')).map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
+              </optgroup>
+              <optgroup label="── Lid Moulds ──">
+                {MOULDS.filter(m=>m.name.includes('Lid')||m.name.includes('Sipper')).map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
+              </optgroup>
+            </select>
+          </div>
+        </div>
+        <div style={S.fr}>
+          <div style={S.f}><label style={S.lbl}>Cavities</label>
+            <input type="number" style={S.fi} value={prod.cavities} onChange={e=>updateProduct(prod.id,'cavities',e.target.value)} placeholder="e.g. 4"/>
+          </div>
+          <div style={S.f}><label style={S.lbl}>Cycle Time (sec)</label>
+            <input type="number" style={S.fi} value={prod.cycleTime} onChange={e=>updateProduct(prod.id,'cycleTime',e.target.value)} placeholder="e.g. 12"/>
+          </div>
+        </div>
+        <div style={S.fr}>
+          <div style={S.f}><label style={S.lbl}>Operator 1</label>
+            <select style={S.fi} value={prod.operator} onChange={e=>updateProduct(prod.id,'operator',e.target.value)}>
+              <option value="">Select</option>{OPS.map(o=><option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div style={S.f}><label style={S.lbl}>Operator 2</label>
+            <select style={S.fi} value={prod.operator2} onChange={e=>updateProduct(prod.id,'operator2',e.target.value)}>
+              <option value="">None</option>{OPS.map(o=><option key={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
 
-    <div style={S.f}><label style={S.lbl}>Remarks</label><input style={S.fi} value={form.remarks} onChange={e=>setForm(p=>({...p,remarks:e.target.value}))} placeholder="Any overall notes..."/></div>
-    <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Production Entry'}</button>
+        {/* Slots */}
+        {isRunning&&<div style={{background:'#F8F9FF',border:'1px solid #E0E8FF',borderRadius:8,padding:10,marginTop:8}}>
+          <div style={{fontWeight:700,fontSize:12,color:'#1F3864',marginBottom:8}}>Slot-wise Production</div>
+          {/* Summary */}
+          <div style={{background:'#1F3864',borderRadius:6,padding:'6px 10px',marginBottom:8,display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,textAlign:'center'}}>
+            <div><div style={{fontSize:9,color:'#90A8C8'}}>Good Parts</div><div style={{fontSize:13,fontWeight:700,color:'#4CAF50'}}>{Math.round(totalGood).toLocaleString()}</div></div>
+            <div><div style={{fontSize:9,color:'#90A8C8'}}>Rejection</div><div style={{fontSize:13,fontWeight:700,color:'#FF5252'}}>{Math.round(totalRej).toLocaleString()}</div></div>
+            <div><div style={{fontSize:9,color:'#90A8C8'}}>Downtime</div><div style={{fontSize:13,fontWeight:700,color:'#FF9800'}}>{Math.round(totalDown)}m</div></div>
+            <div><div style={{fontSize:9,color:'#90A8C8'}}>Projected</div><div style={{fontSize:13,fontWeight:700,color:'#FFD966'}}>{proj>0?(proj*prod.slots.length).toLocaleString():'--'}</div></div>
+          </div>
+          {prod.slots.map((slot,si)=>{
+            const slotProj=proj
+            const eff=calcEff(slot.good,slotProj)
+            const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
+            return <div key={si} style={{background:'#fff',border:'1px solid #E0E8FF',borderRadius:6,padding:'8px 10px',marginBottom:6}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+                <span style={{fontWeight:700,fontSize:11,color:'#1F3864'}}>{slot.slot}</span>
+                <span style={{background:'#1F3864',color:'#FFD966',padding:'2px 8px',borderRadius:999,fontSize:9}}>Proj: {slotProj>0?slotProj.toLocaleString():'--'}</span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:5}}>
+                <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Good Parts</div>
+                  <input type="number" min="0" value={slot.good} onChange={e=>updateSlot(prod.id,si,'good',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #276221',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600}}/>
+                </div>
+                <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Rejection</div>
+                  <input type="number" min="0" value={slot.rejection} onChange={e=>updateSlot(prod.id,si,'rejection',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #C00000',borderRadius:6,textAlign:'center',fontSize:12}}/>
+                </div>
+                <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Downtime(min)</div>
+                  <input type="number" min="0" value={slot.down} onChange={e=>updateSlot(prod.id,si,'down',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12}}/>
+                </div>
+                <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Efficiency</div>
+                  <div style={{padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,color:eff>0?effCol:'#666',background:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':eff>0?'#FFEBEE':'#F0F0F0'}}>{eff>0?eff+'%':'--'}</div>
+                </div>
+              </div>
+              <input type="text" value={slot.remarks} onChange={e=>updateSlot(prod.id,si,'remarks',e.target.value)} placeholder="Remarks / Loss reason..." style={{width:'100%',marginTop:5,padding:'4px 8px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11,background:'#FFFFF0'}}/>
+            </div>
+          })}
+        </div>}
+      </div>
+    })}
+
+    {/* Add product button */}
+    {isRunning&&<button onClick={addProduct} style={{width:'100%',padding:10,border:'2px dashed #854F0B',borderRadius:8,background:'#FFF9E6',color:'#854F0B',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:8}}>
+      + Mould Change — Doosra Product Add Karo
+    </button>}
+
+    <button style={S.sb} onClick={async()=>{setSaving(true);await save()}} disabled={saving}>
+      {saving?'Saving...':products.length>1?`Save ${products.length} Products`:'Save Production Entry'}
+    </button>
     {toast&&<Toast {...toast}/>}
   </div>
 }
+
 
 function RejectionTab({user}:{user:User}) {
   const [items,setItems]=useState<any[]>([])
