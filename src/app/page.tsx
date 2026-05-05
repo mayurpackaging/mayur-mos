@@ -2148,10 +2148,20 @@ function SparesTab({user}:{user:User}) {
             {i>0&&<button onClick={()=>removeItem(i)} style={{background:'#FFEBEE',color:'#C00000',border:'none',borderRadius:4,padding:'2px 8px',fontSize:11,cursor:'pointer'}}>Remove</button>}
           </div>
           <div style={S.f}><label style={S.lbl}>Part Name</label>
-            <input style={S.fi} value={item.partName} onChange={e=>updateItem(i,'partName',e.target.value)} placeholder="Spare ka naam..." list={`part-list-${i}`}/>
+            <input 
+              style={{...S.fi, borderColor: spares.find((s:any)=>s.part_name.toLowerCase()===item.partName.toLowerCase())?'#276221':S.fi.borderColor}}
+              value={item.partName} 
+              onChange={e=>updateItem(i,'partName',e.target.value)} 
+              placeholder="Spare ka naam type karo..."
+              list={`part-list-${i}`}
+            />
             <datalist id={`part-list-${i}`}>
-              {spares.map((s:any)=><option key={s.part_name} value={s.part_name}/>)}
+              {spares.map((s:any)=><option key={s.part_name} value={s.part_name}>{s.part_name} (Stock: {s.current_stock} {s.unit})</option>)}
             </datalist>
+            {item.partName&&spares.find((s:any)=>s.part_name.toLowerCase()===item.partName.toLowerCase())&&
+              <div style={{fontSize:10,color:'#276221',marginTop:2}}>✅ Already in master — stock update hoga!</div>}
+            {item.partName&&!spares.find((s:any)=>s.part_name.toLowerCase()===item.partName.toLowerCase())&&item.partName.length>2&&
+              <div style={{fontSize:10,color:'#854F0B',marginTop:2}}>🆕 Naya spare — master mein add ho jaayega!</div>}
             {item.historyInfo&&<div style={{fontSize:10,background:'#E6F1FB',border:'1px solid #1F3864',borderRadius:6,padding:'4px 8px',marginTop:4,color:'#0C447C'}}>
               📋 {item.historyInfo}
               {item.lastVendor&&<button onClick={()=>setVendor(item.lastVendor)} style={{marginLeft:8,background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'1px 6px',fontSize:10,cursor:'pointer'}}>Use Vendor</button>}
