@@ -2151,7 +2151,6 @@ function SparesTab({user}:{user:User}) {
             <input style={S.fi} value={item.partName} onChange={e=>updateItem(i,'partName',e.target.value)} placeholder="Spare ka naam..." list={`part-list-${i}`}/>
             <datalist id={`part-list-${i}`}>
               {spares.map((s:any)=><option key={s.part_name} value={s.part_name}/>)}
-              {ALL_SPARE_CATS.filter((c:string)=>!spares.find((s:any)=>s.part_name===c)).map((c:string)=><option key={c} value={c}/>)}
             </datalist>
             {item.historyInfo&&<div style={{fontSize:10,background:'#E6F1FB',border:'1px solid #1F3864',borderRadius:6,padding:'4px 8px',marginTop:4,color:'#0C447C'}}>
               📋 {item.historyInfo}
