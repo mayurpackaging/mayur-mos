@@ -1951,12 +1951,12 @@ function SparesTab({user}:{user:User}) {
   const [date,setDate]=useState(nd())
   const [action,setAction]=useState('Stock In')
   const [showOpeningStock,setShowOpeningStock]=useState(false)
-  const [spareItems,setSpareItems]=useState([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box'}])
+  const [spareItems,setSpareItems]=useState([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}])
 
   const load=useCallback(()=>{fetch('/api/spares').then(r=>r.json()).then(d=>{setSpares(d.spares||[]);setMovements(d.recentMovements||[]);setLoading(false)})},[])
   useEffect(()=>{load()},[load])
 
-  const addItem=()=>setSpareItems(p=>[...p,{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box'}])
+  const addItem=()=>setSpareItems(p=>[...p,{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}])
   const removeItem=(i:number)=>setSpareItems(p=>p.filter((_,idx)=>idx!==i))
   const updateItem=(i:number,field:string,val:string)=>{
     setSpareItems(p=>{
@@ -1965,14 +1965,18 @@ function SparesTab({user}:{user:User}) {
       if(field==='qty'||field==='pricePerPc'){
         n[i].total=parseFloat(n[i].qty||'0')*(parseFloat(n[i].pricePerPc||'0'))
       }
-      // Auto-fill from master
+      // Auto-fill from master with history
       if(field==='partName'){
-        const found=spares.find(s=>s.part_name.toLowerCase()===val.toLowerCase())
+        const found=spares.find((s:any)=>s.part_name.toLowerCase()===val.toLowerCase())
         if(found){
           n[i].category=found.category||''
           n[i].unit=found.unit||'Pcs'
           n[i].minQty=String(found.min_qty||0)
           n[i].pricePerPc=String(found.last_price||0)
+          n[i].lastVendor=found.last_vendor||''
+          n[i].lastPrice=found.last_price||0
+          n[i].currentStock=found.current_stock||0
+          n[i].historyInfo=`Last: ${found.last_vendor||'--'} @ ₹${found.last_price||0} | Stock: ${found.current_stock||0} ${found.unit||'Pcs'} | Min: ${found.min_qty||0}`
         }
       }
       return n
@@ -1988,7 +1992,7 @@ function SparesTab({user}:{user:User}) {
     if(vendor) localStorage.setItem('lastVendor', vendor)
     const res=await fetch('/api/spares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendor,slipNo,date,action,doneBy:user.name,items:validItems})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
-    if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box'}]);setVendor('');setSlipNo('')}
+    if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}]);setVendor('');setSlipNo('')}
   }
 
   const outOfStock=spares.filter(s=>s.status==='Out of Stock').length
@@ -2006,6 +2010,30 @@ function SparesTab({user}:{user:User}) {
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Out of Stock</div><div style={{fontSize:20,fontWeight:700,color:'#C00000'}}>{outOfStock}</div></div>
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Low Stock</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{low}</div></div>
     </div>
+
+    {/* Reorder Alert */}
+    {(outOfStock+low)>0&&<div style={{...S.card,border:'2px solid #C00000',background:'#FFEBEE',marginBottom:8}}>
+      <div style={{fontWeight:700,color:'#C00000',marginBottom:8}}>🚨 Reorder Alert — {outOfStock+low} items!</div>
+      {spares.filter((s:any)=>s.status==='Out of Stock'||s.status==='Low').map((s:any,i:number)=>{
+        const col=s.status==='Out of Stock'?'#C00000':'#854F0B'
+        const bg=s.status==='Out of Stock'?'#FFEBEE':'#FFF3E0'
+        return <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 8px',borderRadius:6,marginBottom:4,background:bg,border:`1px solid ${col}`}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:col}}>{s.part_name}</div>
+            <div style={{fontSize:10,color:'#666'}}>Stock: {s.current_stock} {s.unit} | Min: {s.min_qty} | Last: {s.last_vendor||'--'} @ ₹{s.last_price||0}</div>
+          </div>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <span style={{background:col,color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>{s.status}</span>
+            <button onClick={()=>{
+              setVendor(s.last_vendor||'')
+              setAction('Stock In')
+              setSpareItems([{partName:s.part_name,category:s.category||'',unit:s.unit||'Pcs',qty:'',minQty:String(s.min_qty||0),pricePerPc:String(s.last_price||0),total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:s.last_vendor||'',lastPrice:s.last_price||0,currentStock:s.current_stock||0,historyInfo:''}])
+              setTimeout(()=>document.getElementById('spares-entry-form')?.scrollIntoView({behavior:'smooth'}),100)
+            }} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'3px 8px',fontSize:10,cursor:'pointer',whiteSpace:'nowrap' as const}}>Order Karo</button>
+          </div>
+        </div>
+      })}
+    </div>}
 
     {/* Stock table */}
     <div style={S.card}>
@@ -2088,6 +2116,10 @@ function SparesTab({user}:{user:User}) {
           <div style={S.f}><label style={S.lbl}>Part Name</label>
             <input style={S.fi} value={item.partName} onChange={e=>updateItem(i,'partName',e.target.value)} placeholder="Spare ka naam..." list={`part-list-${i}`}/>
             <datalist id={`part-list-${i}`}>{spares.map((s:any)=><option key={s.part_name} value={s.part_name}/>)}</datalist>
+            {item.historyInfo&&<div style={{fontSize:10,background:'#E6F1FB',border:'1px solid #1F3864',borderRadius:6,padding:'4px 8px',marginTop:4,color:'#0C447C'}}>
+              📋 {item.historyInfo}
+              {item.lastVendor&&<button onClick={()=>setVendor(item.lastVendor)} style={{marginLeft:8,background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'1px 6px',fontSize:10,cursor:'pointer'}}>Use Vendor</button>}
+            </div>}
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:5}}>
             <div style={S.f}><label style={S.lbl}>Category</label><input style={S.fi} value={item.category} onChange={e=>updateItem(i,'category',e.target.value)} placeholder="e.g. Heating"/></div>
