@@ -68,6 +68,22 @@ const IMS_ITEMS = [
   {name:"750 Tamper Black Rectangle",category:"Rectangle",pkg:175,minC:20},
   {name:"1000 Tamper Black Rectangle",category:"Rectangle",pkg:150,minC:20},
   {name:"Handle",category:"Accessory",pkg:1000,minC:10},
+  {name:"50 ml Lid",category:"Lid",pkg:1200,minC:20},
+  {name:"100 ml Lid",category:"Lid",pkg:800,minC:20},
+  {name:"175 ml Lid",category:"Lid",pkg:600,minC:20},
+  {name:"250 ml Lid",category:"Lid",pkg:400,minC:20},
+  {name:"Common Lid",category:"Lid",pkg:500,minC:30},
+  {name:"Big Common Lid",category:"Lid",pkg:400,minC:20},
+  {name:"Sipper New Lid",category:"Lid",pkg:400,minC:20},
+  {name:"Sipper Old Lid",category:"Lid",pkg:400,minC:20},
+  {name:"Rectangle Lid",category:"Lid",pkg:300,minC:15},
+  {name:"Tamper Rect Lid",category:"Lid",pkg:300,minC:15},
+  {name:"Oval Lid",category:"Lid",pkg:300,minC:15},
+  {name:"2000 ml Lid",category:"Lid",pkg:75,minC:10},
+  {name:"RO 16 Lid",category:"Lid",pkg:300,minC:15},
+  {name:"RO 24/32 Lid",category:"Lid",pkg:250,minC:15},
+  {name:"RE 16/24 Lid",category:"Lid",pkg:250,minC:15},
+  {name:"RE 28/38 Lid",category:"Lid",pkg:200,minC:15},
 ]
 
 export async function GET(req: Request) {
