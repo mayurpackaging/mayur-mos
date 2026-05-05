@@ -116,6 +116,35 @@ const PRODUCT_MOULD_MAP: Record<string, string> = {
   "Re Series - Re 38 Black":"6761 - RE 38 Tub",
 }
 
+const SPARE_CATEGORIES = [
+  // Mould Related
+  {group:"🔩 Mould — Lock & Fasteners", items:["Allen Bolt","Locking Bolt","Socket Head Screw","Hex Nut","Spring Washer","Flat Washer","Dowel Pin","Guide Pillar","Guide Bush","Locating Ring"]},
+  {group:"💧 Mould — Cooling System", items:["Cooling Nipple","Teflon Tape","O-Ring (Cooling)","Water Plug","Cooling Channel Brush","Pipe Fitting","Hose Pipe","Hose Clamp"]},
+  {group:"🔲 Mould — Plate & Body", items:["Mould Plate","Core Plate","Cavity Plate","Spacer Block","Support Pillar","Backing Plate","Parting Surface"]},
+  {group:"⚙️ Mould — Core & Cavity", items:["Core Insert","Cavity Insert","Core Block","Cavity Block","Beryllium Copper Insert","Steel Insert","Mould Steel Block"]},
+  {group:"🔄 Mould — Ejector System", items:["Ejector Pin","Ejector Sleeve","Return Pin","Ejector Plate","Ejector Bar","Spring (Ejector)","Ejector Guide Bush"]},
+  {group:"🔥 Mould — Hot Runner", items:["Hot Runner Nozzle","Heater Band (Nozzle)","Thermocouple (Nozzle)","Nozzle Tip","Hot Runner Controller","Manifold Block"]},
+  {group:"↔️ Mould — Slider & Lifter", items:["Slider Block","Slider Insert","Heel Block","Wear Plate","Lifter","Lifter Guide","Angular Pin","Cam Slider"]},
+  {group:"🌬️ Mould — Gas Vent & Seal", items:["Gas Vent Insert","O-Ring (Mould)","Parting Seal","Mould Seal Strip","Venting Pin"]},
+  {group:"🧴 Mould — Maintenance", items:["Mould Spray (Release)","Mould Rust Preventive","Mould Cleaner","Mould Polish","Grinding Wheel","Mould Repair Weld"]},
+  // Machine Related  
+  {group:"🌡️ Machine — Heating & Barrel", items:["Heater Band","Thermocouple","Temperature Controller","Barrel Liner","Screw","Barrel","Nozzle","Nozzle Tip","Check Ring","Screw Tip"]},
+  {group:"🔧 Machine — Hydraulic", items:["Hydraulic Oil","Hydraulic Pump","Hydraulic Motor","Hydraulic Valve","Hydraulic Cylinder","Oil Seal","Hydraulic Filter","Hydraulic Hose","Pressure Gauge","Flow Control Valve"]},
+  {group:"⚡ Machine — Electrical", items:["Contactor","Relay","Timer","PLC Module","Encoder","Servo Motor","Servo Drive","Proximity Sensor","Limit Switch","Fuse","MCB","RCCB","Cable","Wire","Connector"]},
+  {group:"🔒 Machine — Clamping", items:["Tie Bar","Tie Bar Nut","Clamping Cylinder","Platen","Toggle Link","Toggle Pin","Toggle Bush","Clamping Bolt","Lock Nut"]},
+  {group:"💉 Machine — Injection Unit", items:["Injection Cylinder","Screw Drive Motor","Screw Coupling","Injection Carriage","Ball Screw","Linear Guide","Linear Block"]},
+  {group:"❄️ Machine — Cooling & Chiller", items:["Chiller Water Pump","Cooling Tower Fan","Water Filter","Flow Meter","Temperature Sensor","Cooling Pipe","Ball Valve"]},
+  {group:"💨 Machine — Pneumatic", items:["Air Filter","Air Regulator","Solenoid Valve (Air)","Air Cylinder","Pneumatic Fitting","Air Pipe","Compressor Filter"]},
+  {group:"🛢️ Machine — Lubrication", items:["Machine Oil","Grease","Lubrication Pump","Grease Nipple","Oil Can","Lubricant (Chain)"]},
+  {group:"🔐 Machine — Safety & Sensors", items:["Safety Door Switch","Emergency Stop Button","Safety Gate","Light Curtain","Pressure Switch","Level Sensor"]},
+  {group:"⛓️ Machine — Drive & Motion", items:["Belt (V-Belt)","Belt (Timing)","Chain","Sprocket","Gear","Coupling","Bearing","Bearing Housing","Shaft","Pulley"]},
+  // General
+  {group:"🧰 General — Tools", items:["Allen Key Set","Spanner Set","Torque Wrench","Dial Gauge","Vernier Caliper","Micrometer","Temperature Gun","Multimeter"]},
+  {group:"🧹 General — Consumables", items:["Sandpaper","Cleaning Cloth","Tissue Paper","Adhesive Tape","Cable Tie","Safety Gloves","Safety Glasses","Welding Rod"]},
+]
+
+const ALL_SPARE_CATS = SPARE_CATEGORIES.reduce((a:string[],g)=>[...a,...g.items],[])
+
 const RREJ = ["Short Shot","Flash","Burn Mark","Sink Mark","Warpage","Flow Mark","Contamination","Dimensional","Colour Issue","Other"]
 const DAY_SLOTS = ["8am-11am","11am-2pm","2pm-5pm","5pm-8pm"]
 const NIGHT_SLOTS = ["8pm-11pm","11pm-2am","2am-5am","5am-8am"]
@@ -2020,7 +2049,12 @@ function SparesTab({user}:{user:User}) {
         return <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 8px',borderRadius:6,marginBottom:4,background:bg,border:`1px solid ${col}`}}>
           <div>
             <div style={{fontSize:11,fontWeight:600,color:col}}>{s.part_name}</div>
-            <div style={{fontSize:10,color:'#666'}}>Stock: {s.current_stock} {s.unit} | Min: {s.min_qty} | Last: {s.last_vendor||'--'} @ ₹{s.last_price||0}</div>
+            <div style={{fontSize:10,color:'#666',marginTop:2}}>
+              📦 Stock: <strong>{s.current_stock} {s.unit}</strong> | Min: {s.min_qty}
+            </div>
+            <div style={{fontSize:10,color:'#854F0B',marginTop:2}}>
+              🏪 Purana Vendor: <strong>{s.last_vendor||'--'}</strong> | 💰 Purana Price: <strong>₹{s.last_price||0}/{s.unit||'Pcs'}</strong>
+            </div>
           </div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
             <span style={{background:col,color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>{s.status}</span>
@@ -2115,7 +2149,10 @@ function SparesTab({user}:{user:User}) {
           </div>
           <div style={S.f}><label style={S.lbl}>Part Name</label>
             <input style={S.fi} value={item.partName} onChange={e=>updateItem(i,'partName',e.target.value)} placeholder="Spare ka naam..." list={`part-list-${i}`}/>
-            <datalist id={`part-list-${i}`}>{spares.map((s:any)=><option key={s.part_name} value={s.part_name}/>)}</datalist>
+            <datalist id={`part-list-${i}`}>
+              {spares.map((s:any)=><option key={s.part_name} value={s.part_name}/>)}
+              {ALL_SPARE_CATS.filter((c:string)=>!spares.find((s:any)=>s.part_name===c)).map((c:string)=><option key={c} value={c}/>)}
+            </datalist>
             {item.historyInfo&&<div style={{fontSize:10,background:'#E6F1FB',border:'1px solid #1F3864',borderRadius:6,padding:'4px 8px',marginTop:4,color:'#0C447C'}}>
               📋 {item.historyInfo}
               {item.lastVendor&&<button onClick={()=>setVendor(item.lastVendor)} style={{marginLeft:8,background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'1px 6px',fontSize:10,cursor:'pointer'}}>Use Vendor</button>}
