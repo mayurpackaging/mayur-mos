@@ -45,7 +45,7 @@ const MOULDS = [
   // Lid Moulds
   {code:"6641",name:"50 ml Lid"},{code:"6775",name:"100 ml Lid"},
   {code:"6370",name:"250 ml Lid"},{code:"6373",name:"Common Lid 1st"},
-  {code:"8099",name:"Common Lid 2nd"},{code:"6840",name:"Common Lid 8 Cav"},
+  {code:"6605",name:"Common Lid 2nd"},{code:"6840",name:"Common Lid 8 Cav"},
   {code:"6690",name:"Hydraulic Lid"},{code:"6483",name:"Rectangle Lid"},
   {code:"6873",name:"Rectangle Common Lid"},{code:"6717",name:"Oval Lid"},
   {code:"6756",name:"RO 16 Lid"},{code:"6757",name:"RO 24/32 Lid"},
