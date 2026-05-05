@@ -51,6 +51,7 @@ const MOULDS = [
   {code:"6756",name:"RO 16 Lid"},{code:"6757",name:"RO 24/32 Lid"},
   {code:"6762",name:"RE 16/24 Lid"},{code:"6763",name:"RE 28/38 Lid"},
   {code:"6710",name:"Sipper Lid Old"},{code:"6906",name:"Sipper Lid New"},
+  {code:"6620",name:"175 ml Lid"},{code:"6503",name:"Big Common Lid"},
 ]
 
 const PRODUCT_MOULD_MAP: Record<string, string> = {
