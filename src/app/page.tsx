@@ -402,7 +402,13 @@ function ProductionTab({user}:{user:User}) {
   const save=async()=>{
     if(!form.plant||!form.machine){setToast({msg:'Plant aur Machine select karo!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/production',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,slots,enteredBy:user.name})}).then(r=>r.json())
+    const res=await fetch('/api/production',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      ...form,
+      cavities: form.cavities||'0',
+      cycleTime: form.cycleTime||'0',
+      slots,
+      enteredBy:user.name
+    })}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
   }
 
