@@ -52,6 +52,9 @@ const MOULDS = [
   {code:"6762",name:"RE 16/24 Lid"},{code:"6763",name:"RE 28/38 Lid"},
   {code:"6710",name:"Sipper Lid Old"},{code:"6906",name:"Sipper Lid New"},
   {code:"6620",name:"175 ml Lid"},{code:"6503",name:"Big Common Lid"},
+  {code:"6809",name:"500 ml Tamper Lock Rectangle"},{code:"6870",name:"650 ml Tamper Lock Rectangle"},
+  {code:"6871",name:"750 ml Tamper Lock Rectangle"},{code:"6872",name:"1000 ml Tamper Lock Rectangle"},
+  {code:"6873",name:"Lid Tamper Lock Rectangle"},
 ]
 
 const PRODUCT_MOULD_MAP: Record<string, string> = {
