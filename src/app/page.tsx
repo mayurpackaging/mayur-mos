@@ -2158,7 +2158,38 @@ function SparesTab({user}:{user:User}) {
             </div>}
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:5}}>
-            <div style={S.f}><label style={S.lbl}>Category</label><input style={S.fi} value={item.category} onChange={e=>updateItem(i,'category',e.target.value)} placeholder="e.g. Heating"/></div>
+            <div style={S.f}><label style={S.lbl}>Category</label>
+                <select style={S.fi} value={item.category} onChange={e=>updateItem(i,'category',e.target.value)}>
+                  <option value="">-- Select --</option>
+                  <optgroup label="🔩 Mould Related">
+                    <option>Mould — Lock & Fasteners</option>
+                    <option>Mould — Cooling System</option>
+                    <option>Mould — Plate & Body</option>
+                    <option>Mould — Core & Cavity</option>
+                    <option>Mould — Ejector System</option>
+                    <option>Mould — Hot Runner</option>
+                    <option>Mould — Slider & Lifter</option>
+                    <option>Mould — Gas Vent & Seal</option>
+                    <option>Mould — Maintenance</option>
+                  </optgroup>
+                  <optgroup label="⚙️ Machine Related">
+                    <option>Machine — Heating & Barrel</option>
+                    <option>Machine — Hydraulic</option>
+                    <option>Machine — Electrical</option>
+                    <option>Machine — Clamping</option>
+                    <option>Machine — Injection Unit</option>
+                    <option>Machine — Cooling & Chiller</option>
+                    <option>Machine — Pneumatic</option>
+                    <option>Machine — Lubrication</option>
+                    <option>Machine — Safety & Sensors</option>
+                    <option>Machine — Drive & Motion</option>
+                  </optgroup>
+                  <optgroup label="🧰 General">
+                    <option>General — Tools</option>
+                    <option>General — Consumables</option>
+                  </optgroup>
+                </select>
+              </div>
             <div style={S.f}><label style={S.lbl}>Unit</label>
               <select style={S.fi} value={item.unit} onChange={e=>updateItem(i,'unit',e.target.value)}>
                 <option>Pcs</option><option>Set</option><option>Kg</option><option>Ltr</option><option>Mtr</option><option>Box</option>
