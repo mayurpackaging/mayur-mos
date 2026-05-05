@@ -2149,7 +2149,7 @@ function SparesTab({user}:{user:User}) {
           </div>
           <div style={S.f}><label style={S.lbl}>Part Name</label>
             <input 
-              style={{...S.fi, borderColor: spares.find((s:any)=>s.part_name.toLowerCase()===item.partName.toLowerCase())?'#276221':S.fi.borderColor}}
+              style={{...S.fi, border: spares.find((s:any)=>s.part_name.toLowerCase()===item.partName.toLowerCase())?'1px solid #276221':'1px solid #E0E0E0'}}
               value={item.partName} 
               onChange={e=>updateItem(i,'partName',e.target.value)} 
               placeholder="Spare ka naam type karo..."
