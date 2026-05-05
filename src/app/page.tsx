@@ -1946,10 +1946,11 @@ function SparesTab({user}:{user:User}) {
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
-  const [vendor,setVendor]=useState('')
+  const [vendor,setVendor]=useState(()=>localStorage.getItem('lastVendor')||'')
   const [slipNo,setSlipNo]=useState('')
   const [date,setDate]=useState(nd())
   const [action,setAction]=useState('Stock In')
+  const [showOpeningStock,setShowOpeningStock]=useState(false)
   const [spareItems,setSpareItems]=useState([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box'}])
 
   const load=useCallback(()=>{fetch('/api/spares').then(r=>r.json()).then(d=>{setSpares(d.spares||[]);setMovements(d.recentMovements||[]);setLoading(false)})},[])
@@ -1983,6 +1984,8 @@ function SparesTab({user}:{user:User}) {
     const validItems=spareItems.filter(i=>i.partName&&parseFloat(i.qty||'0')>0)
     if(validItems.length===0){setToast({msg:'Koi item nahi bhara!',ok:false});return}
     setSaving(true)
+    // Save vendor name for next time
+    if(vendor) localStorage.setItem('lastVendor', vendor)
     const res=await fetch('/api/spares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendor,slipNo,date,action,doneBy:user.name,items:validItems})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
     if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box'}]);setVendor('');setSlipNo('')}
@@ -2030,12 +2033,38 @@ function SparesTab({user}:{user:User}) {
     </div>
 
     {/* Purchase / Movement form */}
-    <div style={{...S.card,border:'1px solid #1F3864'}}>
+    {/* Opening Stock Entry button */}
+    <div style={{...S.card,background:'#FFF9E6',border:'1px solid #F4B942'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontWeight:700,color:'#854F0B'}}>📦 Factory mein jo spares pade hain?</div>
+          <div style={{fontSize:11,color:'#666',marginTop:2}}>Opening stock entry karo — current inventory add ho jaayegi</div>
+        </div>
+        <button onClick={()=>setShowOpeningStock(!showOpeningStock)} style={{background:'#854F0B',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+          {showOpeningStock?'✕ Close':'+ Opening Stock'}
+        </button>
+      </div>
+      {showOpeningStock&&<div style={{marginTop:12,padding:12,background:'#fff',borderRadius:8,border:'1px solid #E0E0E0'}}>
+        <div style={{fontSize:12,color:'#854F0B',fontWeight:600,marginBottom:8}}>⚠️ Opening Stock = Abhi factory mein jo hai uski entry</div>
+        <div style={{fontSize:11,color:'#666',marginBottom:10}}>Vendor = "Opening Stock" | Action = "Stock In" | Price = 0 (ya actual cost)</div>
+        <button onClick={()=>{
+          setVendor('Opening Stock')
+          setAction('Stock In')
+          setSlipNo('OPENING-'+nd())
+          setShowOpeningStock(false)
+          // Scroll to form
+          setTimeout(()=>document.getElementById('spares-entry-form')?.scrollIntoView({behavior:'smooth'}),100)
+        }} style={{...S.sb,marginTop:0,background:'#854F0B'}}>Opening Stock Entry Shuru Karo</button>
+      </div>}
+    </div>
+
+    <div id="spares-entry-form" style={{...S.card,border:'1px solid #1F3864'}}>
       <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>Stock Entry (Purchase / Use)</div>
       <div style={S.fr}>
         <div style={S.f}><label style={S.lbl}>Vendor Name</label>
           <input style={S.fi} value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Vendor naam..." list="vendor-list"/>
           <datalist id="vendor-list">{vendors.map((v:any)=><option key={v} value={v}/>)}</datalist>
+          {vendor&&<div style={{fontSize:10,color:'#276221',marginTop:2}}>✅ Saved — next time auto-fill hoga!</div>}
         </div>
         <div style={S.f}><label style={S.lbl}>Slip No. (Optional)</label><input style={S.fi} value={slipNo} onChange={e=>setSlipNo(e.target.value)} placeholder="INV-001"/></div>
       </div>
