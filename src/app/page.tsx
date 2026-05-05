@@ -20,19 +20,37 @@ const MACH: Record<string, string[]> = {
 const OPS = ["Dayanand","Alok Kumar","Satyanand","Uday","Sudarshan","Rahul","Pintoo","Parveen","Rahul Singh","Deepak","Karan","Ankush"]
 
 const MOULDS = [
-  {code:"6640",name:"50 ml Tub"},{code:"6641",name:"50 ml Lid"},{code:"6774",name:"100 ml Tub"},
-  {code:"6775",name:"100 ml Lid"},{code:"6619",name:"175 ml Tub"},{code:"6369",name:"250 ml Tub"},
-  {code:"6371",name:"300 ml Tub"},{code:"6537",name:"400 ml Tub"},{code:"6372",name:"500 ml Tub 4 Cav"},
-  {code:"6889",name:"500 ml Tub 6 Cav"},{code:"6374",name:"750 ml Tub"},{code:"6987",name:"New 750 ml Tub"},
-  {code:"6375",name:"1000 ml Tub"},{code:"6988",name:"1000 ml Tub New"},{code:"6500",name:"1200 ml Tub"},
-  {code:"6501",name:"1500 ml Tub"},{code:"6899",name:"2000 ml Tub"},{code:"6688",name:"2500 ml Tub"},
-  {code:"6479",name:"500 ml Rectangle"},{code:"6480",name:"650 ml Rectangle"},{code:"6481",name:"750 ml Rectangle"},
-  {code:"6482",name:"1000 ml Rectangle"},{code:"6872",name:"1000 ml Rect New"},{code:"6714",name:"500 ml Oval"},
-  {code:"6715",name:"750 ml Oval"},{code:"6716",name:"1000 ml Oval"},{code:"6717",name:"Oval Lid"},
+  // Tub Moulds
+  {code:"6640",name:"50 ml Tub"},{code:"6774",name:"100 ml Tub"},{code:"6619",name:"175 ml Tub"},
+  {code:"6369",name:"250 ml Tub"},{code:"6371",name:"300 ml Tub"},{code:"6537",name:"400 ml Tub"},
+  {code:"6372",name:"500 ml Tub 4 Cav"},{code:"6889",name:"500 ml Tub 6 Cav"},
+  {code:"6374",name:"750 ml Tub"},{code:"6987",name:"New 750 ml Tub"},
+  {code:"6375",name:"1000 ml Tub"},{code:"6988",name:"1000 ml Tub New"},
+  {code:"6500",name:"1200 ml Tub"},{code:"6501",name:"1500 ml Tub"},
+  {code:"6899",name:"2000 ml Tub"},{code:"6688",name:"2500 ml Tub"},
+  // Rectangle
+  {code:"6479",name:"500 ml Rectangle"},{code:"6480",name:"650 ml Rectangle"},
+  {code:"6481",name:"750 ml Rectangle"},{code:"6482",name:"1000 ml Rectangle"},
+  {code:"6872",name:"1000 ml Rectangle New"},
+  // Oval
+  {code:"6714",name:"500 ml Oval"},{code:"6715",name:"750 ml Oval"},{code:"6716",name:"1000 ml Oval"},
+  // Glass
+  {code:"6709",name:"350 ml Glass Old"},{code:"6903",name:"300 ml Glass"},
+  {code:"6904",name:"350 ml Glass"},{code:"6905",name:"500 ml Glass"},{code:"6502",name:"650 ml Bowl"},
+  // RO Series
   {code:"6753",name:"RO 16 Tub"},{code:"6754",name:"RO 24 Tub"},{code:"6755",name:"RO 32 Tub"},
-  {code:"6758",name:"RE 16 Tub"},{code:"6759",name:"RE 24 Tub"},{code:"6760",name:"RE 28 Tub"},
-  {code:"6761",name:"RE 38 Tub"},{code:"6903",name:"300 ml Glass"},{code:"6904",name:"350 ml Glass"},
-  {code:"6905",name:"500 ml Glass"},{code:"6906",name:"Sipper Lid New"},
+  // RE Series
+  {code:"6758",name:"RE 16 Tub"},{code:"6759",name:"RE 24 Tub"},
+  {code:"6760",name:"RE 28 Tub"},{code:"6761",name:"RE 38 Tub"},
+  // Lid Moulds
+  {code:"6641",name:"50 ml Lid"},{code:"6775",name:"100 ml Lid"},
+  {code:"6370",name:"250 ml Lid"},{code:"6373",name:"Common Lid 1st"},
+  {code:"8099",name:"Common Lid 2nd"},{code:"6840",name:"Common Lid 8 Cav"},
+  {code:"6690",name:"Hydraulic Lid"},{code:"6483",name:"Rectangle Lid"},
+  {code:"6873",name:"Rectangle Common Lid"},{code:"6717",name:"Oval Lid"},
+  {code:"6756",name:"RO 16 Lid"},{code:"6757",name:"RO 24/32 Lid"},
+  {code:"6762",name:"RE 16/24 Lid"},{code:"6763",name:"RE 28/38 Lid"},
+  {code:"6710",name:"Sipper Lid Old"},{code:"6906",name:"Sipper Lid New"},
 ]
 
 const PRODUCT_MOULD_MAP: Record<string, string> = {
@@ -455,10 +473,15 @@ function ProductionTab({user}:{user:User}) {
         }}>
           <option value="">Select</option>{items.map(i=><option key={i.name}>{i.name}</option>)}
         </select></div>
-        <div style={S.f}><label style={S.lbl}>Mould No. (Auto-fill)</label>
-          <select style={{...S.fi,background:form.mould?'#E2EFDA':S.fi.background}} value={form.mould} onChange={e=>setForm(p=>({...p,mould:e.target.value}))}>
+        <div style={S.f}><label style={S.lbl}>Mould No. (Auto-fill / Select)</label>
+          <select style={{...S.fi,background:form.mould?'#E2EFDA':'#FAFAFA'}} value={form.mould} onChange={e=>setForm(p=>({...p,mould:e.target.value}))}>
             <option value="">-- Select Mould --</option>
-            {MOULDS.map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
+            <optgroup label="── Tub Moulds ──">
+              {MOULDS.filter(m=>m.name.includes('Tub')||m.name.includes('Glass')||m.name.includes('Bowl')||m.name.includes('Oval')||m.name.includes('Rectangle')||m.name.includes('RO')||m.name.includes('RE')).map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
+            </optgroup>
+            <optgroup label="── Lid Moulds ──">
+              {MOULDS.filter(m=>m.name.includes('Lid')||m.name.includes('Sipper')).map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
+            </optgroup>
           </select>
         </div>
       </div>
