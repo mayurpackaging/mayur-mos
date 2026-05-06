@@ -1860,15 +1860,36 @@ function DispatchTab({user}:{user:User}) {
       <div style={{fontWeight:700,marginBottom:8}}>Recent Dispatches</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Challan','Date','Party','Total Ctn','Vehicle','By'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <thead><tr>{['Challan','Date','Party','Items','Total Ctn','Vehicle','Driver','By','Action'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
           <tbody>{recent.map((r:any,i:number)=>(
             <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
               <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{r.challan_no}</td>
               <td style={{padding:'6px 8px',fontSize:10}}>{r.date}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.customer}</td>
+              <td style={{padding:'6px 8px',fontWeight:600}}>{r.customer}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>
+                {r.dispatch_lines?.slice(0,2).map((l:any,li:number)=>(
+                  <div key={li}>{l.item_name} — {l.qty} Ctn</div>
+                ))}
+                {r.dispatch_lines?.length>2&&<div style={{color:'#666'}}>+{r.dispatch_lines.length-2} more...</div>}
+              </td>
               <td style={{padding:'6px 8px',fontWeight:700,color:'#276221'}}>{r.total_cartons} Ctn</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.vehicle_no}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.vehicle_no||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.driver_name||'--'}</td>
               <td style={{padding:'6px 8px',fontSize:10}}>{r.dispatch_by}</td>
+              <td style={{padding:'6px 8px'}}>
+                <button onClick={()=>setChallan({
+                  challanNo:r.challan_no,
+                  date:r.date,
+                  customer:r.customer,
+                  vehicleNo:r.vehicle_no,
+                  driverName:r.driver_name,
+                  notes:r.notes,
+                  lines:r.dispatch_lines||[],
+                  grandTotal:r.total_cartons
+                })} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'3px 8px',fontSize:10,cursor:'pointer'}}>
+                  🖨️ Challan
+                </button>
+              </td>
             </tr>
           ))}</tbody>
         </table>
