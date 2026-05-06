@@ -3328,7 +3328,7 @@ function MISPivotSection() {
                 const colTotal=data.reduce((a,row)=>a+(row.values[ci]||0),0)
                 return <td key={ci} style={{padding:'6px 8px',textAlign:'center',color:metricColor}}>{colTotal.toLocaleString()}</td>
               })}
-              <td style={{padding:'6px 8px',textAlign:'center',color:metricColor,background:'#1F3864',color:'#FFD966'}}>
+              <td style={{padding:'6px 8px',textAlign:'center',background:'#1F3864',color:'#FFD966'}}>
                 {data.reduce((a,row)=>a+row.total,0).toLocaleString()}
               </td>
             </tr>
