@@ -21,8 +21,12 @@ export async function GET(req: Request) {
     todayOrders = data || []
   }
 
-  // Recent dispatches
-  const { data: recent } = await supabase.from('dispatch_orders').select('*, dispatch_lines(*)').order('created_at', { ascending: false }).limit(10)
+  // Recent dispatches with lines
+  const { data: recent } = await supabase
+    .from('dispatch_orders')
+    .select('*, dispatch_lines(line_no, item_name, qty, plant)')
+    .order('created_at', { ascending: false })
+    .limit(15)
 
   return NextResponse.json({
     success: true,
