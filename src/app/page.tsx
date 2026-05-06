@@ -1286,7 +1286,7 @@ function MouldPMTab({user}:{user:User}) {
       <div style={S.fr}>
         <div style={S.f}><label style={S.lbl}>Current Shots</label><input type="number" style={S.fi} value={doneForm.currentShots} onChange={e=>setDoneForm(p=>({...p,currentShots:e.target.value}))} placeholder="Machine counter"/></div>
         <div style={S.f}><label style={S.lbl}>Done By</label><select style={S.fi} value={doneForm.doneBy} onChange={e=>setDoneForm(p=>({...p,doneBy:e.target.value}))}>
-          {OPS.map(o=><option key={o}>{o}</option>)}
+          {PM_OPS.map(o=><option key={o}>{o}</option>)}
         </select></div>
       </div>
       {/* PM Checklist */}
