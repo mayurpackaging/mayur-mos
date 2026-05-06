@@ -289,6 +289,8 @@ function MISTab() {
     {id:'production',label:'Production'},
     {id:'quality',label:'Quality'},
     {id:'mould',label:'Mould'},
+    {id:'comparison',label:'📊 Comparison'},
+    {id:'pivot',label:'📋 Pivot'},
   ]
 
   return <div>
@@ -422,6 +424,12 @@ function MISTab() {
 
     {/* MOULD SECTION */}
     {activeSection==='mould'&&<MISMouldSection data={data}/>}
+
+    {/* COMPARISON SECTION */}
+    {activeSection==='comparison'&&<MISComparisonSection/>}
+
+    {/* PIVOT SECTION */}
+    {activeSection==='pivot'&&<MISPivotSection/>}
   </div>
 }
 
@@ -2967,5 +2975,373 @@ function IncrementCalc() {
         })}</tbody>
       </table>
     </div>
+  </div>
+}
+
+// ─── MIS Comparison Section ───────────────────────────────────
+function MISComparisonSection() {
+  const [compareType, setCompareType] = useState('today-yesterday')
+  const [plant, setPlant] = useState('')
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+
+  const nd = () => new Date().toISOString().slice(0,10)
+  const prevDay = () => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10) }
+  const weekStart = () => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10) }
+  const prevWeekStart = () => { const d = new Date(); d.setDate(d.getDate()-14); return d.toISOString().slice(0,10) }
+  const prevWeekEnd = () => { const d = new Date(); d.setDate(d.getDate()-8); return d.toISOString().slice(0,10) }
+  const monthStart = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` }
+  const prevMonthStart = () => { const d = new Date(); d.setMonth(d.getMonth()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` }
+  const prevMonthEnd = () => { const d = new Date(); d.setDate(0); return d.toISOString().slice(0,10) }
+
+  const load = async () => {
+    setLoading(true)
+    let period1From='', period1To='', period2From='', period2To=''
+    let p1Label='', p2Label=''
+
+    if (compareType === 'today-yesterday') {
+      period1From=nd(); period1To=nd(); p1Label='Aaj'
+      period2From=prevDay(); period2To=prevDay(); p2Label='Kal'
+    } else if (compareType === 'week') {
+      period1From=weekStart(); period1To=nd(); p1Label='Is Hafte'
+      period2From=prevWeekStart(); period2To=prevWeekEnd(); p2Label='Pichle Hafte'
+    } else if (compareType === 'month') {
+      period1From=monthStart(); period1To=nd(); p1Label='Is Mahine'
+      period2From=prevMonthStart(); period2To=prevMonthEnd(); p2Label='Pichle Mahine'
+    } else if (compareType === 'shift') {
+      period1From=nd(); period1To=nd(); p1Label='Day Shift'; p2Label='Night Shift'
+    }
+
+    const [r1, r2] = await Promise.all([
+      fetch(`/api/reports?module=production&from=${period1From}&to=${period1To}${plant?`&plant=${plant}`:''}`).then(r=>r.json()),
+      compareType !== 'shift' ? fetch(`/api/reports?module=production&from=${period2From}&to=${period2To}${plant?`&plant=${plant}`:''}`).then(r=>r.json()) : Promise.resolve(null)
+    ])
+
+    if (compareType === 'shift') {
+      // Split by shift from r1
+      const dayData = (r1.data||[]).filter((r:any)=>r.shift?.includes('Day'))
+      const nightData = (r1.data||[]).filter((r:any)=>r.shift?.includes('Night'))
+      const calcSummary = (rows:any[]) => ({
+        good: rows.reduce((a:number,r:any)=>a+(r.good_parts||0),0),
+        rej: rows.reduce((a:number,r:any)=>a+(r.rejection||0),0),
+        entries: rows.length,
+        down: rows.reduce((a:number,r:any)=>a+(r.downtime||0),0)
+      })
+      setData({ p1Label, p2Label, s1: calcSummary(dayData), s2: calcSummary(nightData), byPlant: null })
+    } else {
+      const calcSummary = (rows:any[]) => ({
+        good: rows.reduce((a:number,r:any)=>a+(r.good_parts||0),0),
+        rej: rows.reduce((a:number,r:any)=>a+(r.rejection||0),0),
+        entries: rows.length,
+        down: rows.reduce((a:number,r:any)=>a+(r.downtime||0),0)
+      })
+      const s1 = calcSummary(r1.data||[])
+      const s2 = calcSummary(r2?.data||[])
+
+      // By plant comparison
+      const plants = ['Plant 477','Plant 488','Plant 433']
+      const byPlant = plants.map(p => ({
+        plant: p,
+        p1: calcSummary((r1.data||[]).filter((r:any)=>r.plant===p)),
+        p2: calcSummary((r2?.data||[]).filter((r:any)=>r.plant===p))
+      }))
+
+      setData({ p1Label, p2Label, s1, s2, byPlant })
+    }
+    setLoading(false)
+  }
+
+  const diffPct = (a:number,b:number) => b===0?100:Math.round((a-b)/b*100)
+  const diffColor = (d:number,inverse=false) => {
+    if(inverse) d=-d
+    return d>0?'#276221':d<0?'#C00000':'#666'
+  }
+  const diffIcon = (d:number,inverse=false) => {
+    if(inverse) d=-d
+    return d>0?'↑':d<0?'↓':'→'
+  }
+
+  return <div>
+    {/* Controls */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>📊 Production Comparison</div>
+      <div style={S.fr}>
+        <div style={S.f}><label style={S.lbl}>Compare</label>
+          <select style={S.fi} value={compareType} onChange={e=>setCompareType(e.target.value)}>
+            <option value="today-yesterday">Aaj vs Kal</option>
+            <option value="week">Is Hafte vs Pichle Hafte</option>
+            <option value="month">Is Mahine vs Pichle Mahine</option>
+            <option value="shift">Day Shift vs Night Shift</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Plant (Optional)</label>
+          <select style={S.fi} value={plant} onChange={e=>setPlant(e.target.value)}>
+            <option value="">All Plants</option>
+            <option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+      </div>
+      <button style={S.sb} onClick={load} disabled={loading}>{loading?'Loading...':'📊 Compare Karo'}</button>
+    </div>
+
+    {data&&<div>
+      {/* Summary comparison */}
+      <div style={S.card}>
+        <div style={{fontWeight:700,marginBottom:10}}>{data.p1Label} vs {data.p2Label}</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+            <thead><tr>
+              <th style={{background:'#1F3864',color:'#fff',padding:'8px 12px',textAlign:'left'}}>Metric</th>
+              <th style={{background:'#276221',color:'#fff',padding:'8px 12px',textAlign:'center'}}>{data.p1Label}</th>
+              <th style={{background:'#854F0B',color:'#fff',padding:'8px 12px',textAlign:'center'}}>{data.p2Label}</th>
+              <th style={{background:'#1F3864',color:'#fff',padding:'8px 12px',textAlign:'center'}}>Change</th>
+            </tr></thead>
+            <tbody>
+              {[
+                {label:'Good Parts',k:'good',inverse:false,fmt:(v:number)=>v.toLocaleString()},
+                {label:'Rejection',k:'rej',inverse:true,fmt:(v:number)=>v.toLocaleString()},
+                {label:'Downtime (min)',k:'down',inverse:true,fmt:(v:number)=>Math.round(v)+' min'},
+                {label:'Entries',k:'entries',inverse:false,fmt:(v:number)=>String(v)},
+              ].map((row,i)=>{
+                const v1=data.s1?.[row.k]||0, v2=data.s2?.[row.k]||0
+                const diff=diffPct(v1,v2)
+                const col=diffColor(diff,row.inverse)
+                const icon=diffIcon(diff,row.inverse)
+                const totalP = (v1+v2)>0?Math.round(v1/(v1+v2)*100):0
+                return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                  <td style={{padding:'8px 12px',fontWeight:600}}>{row.label}</td>
+                  <td style={{padding:'8px 12px',textAlign:'center',fontWeight:700,color:'#276221',fontSize:14}}>{row.fmt(v1)}</td>
+                  <td style={{padding:'8px 12px',textAlign:'center',fontWeight:700,color:'#854F0B',fontSize:14}}>{row.fmt(v2)}</td>
+                  <td style={{padding:'8px 12px',textAlign:'center'}}>
+                    <span style={{color:col,fontWeight:700,fontSize:13}}>{icon} {Math.abs(diff)}%</span>
+                  </td>
+                </tr>
+              })}
+              {/* Efficiency row */}
+              {(() => {
+                const eff1=(data.s1?.good||0)+(data.s1?.rej||0)>0?Math.round((data.s1?.good||0)/((data.s1?.good||0)+(data.s1?.rej||0))*100):0
+                const eff2=(data.s2?.good||0)+(data.s2?.rej||0)>0?Math.round((data.s2?.good||0)/((data.s2?.good||0)+(data.s2?.rej||0))*100):0
+                const diff=eff1-eff2
+                const col=diff>0?'#276221':diff<0?'#C00000':'#666'
+                return <tr style={{background:'#E6F1FB'}}>
+                  <td style={{padding:'8px 12px',fontWeight:700,color:'#1F3864'}}>Efficiency %</td>
+                  <td style={{padding:'8px 12px',textAlign:'center',fontWeight:700,color:'#276221',fontSize:14}}>{eff1}%</td>
+                  <td style={{padding:'8px 12px',textAlign:'center',fontWeight:700,color:'#854F0B',fontSize:14}}>{eff2}%</td>
+                  <td style={{padding:'8px 12px',textAlign:'center'}}><span style={{color:col,fontWeight:700}}>{diff>0?'↑':'↓'} {Math.abs(diff)}%</span></td>
+                </tr>
+              })()}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Visual bar comparison */}
+        <div style={{marginTop:12}}>
+          {[
+            {label:'Good Parts',v1:data.s1?.good||0,v2:data.s2?.good||0,col1:'#276221',col2:'#854F0B'},
+            {label:'Rejection',v1:data.s1?.rej||0,v2:data.s2?.rej||0,col1:'#C00000',col2:'#FF9800'},
+          ].map((bar,i)=>{
+            const max=Math.max(bar.v1,bar.v2)||1
+            const w1=Math.round(bar.v1/max*100)
+            const w2=Math.round(bar.v2/max*100)
+            return <div key={i} style={{marginBottom:10}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                <span style={{fontSize:11,fontWeight:600}}>{bar.label}</span>
+              </div>
+              <div style={{marginBottom:3}}>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:10,color:'#276221',width:80,textAlign:'right'}}>{data.p1Label}</span>
+                  <div style={{flex:1,height:12,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}>
+                    <div style={{width:`${w1}%`,height:'100%',background:bar.col1,borderRadius:999}}/>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:700,color:bar.col1,width:80}}>{bar.v1.toLocaleString()}</span>
+                </div>
+              </div>
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:10,color:'#854F0B',width:80,textAlign:'right'}}>{data.p2Label}</span>
+                  <div style={{flex:1,height:12,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}>
+                    <div style={{width:`${w2}%`,height:'100%',background:bar.col2,borderRadius:999}}/>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:700,color:bar.col2,width:80}}>{bar.v2.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          })}
+        </div>
+      </div>
+
+      {/* Plant-wise comparison */}
+      {data.byPlant&&<div style={S.card}>
+        <div style={{fontWeight:700,marginBottom:10}}>Plant-wise Comparison</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px'}}>Plant</th>
+              <th style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{data.p1Label} Good</th>
+              <th style={{background:'#854F0B',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{data.p2Label} Good</th>
+              <th style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{data.p1Label} Rej</th>
+              <th style={{background:'#854F0B',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{data.p2Label} Rej</th>
+              <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'center'}}>Change</th>
+            </tr></thead>
+            <tbody>{data.byPlant.map((p:any,i:number)=>{
+              const diff=diffPct(p.p1.good,p.p2.good)
+              const col=diffColor(diff,false)
+              const icon=diffIcon(diff,false)
+              return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                <td style={{padding:'6px 8px',fontWeight:700,color:'#1F3864'}}>{p.plant}</td>
+                <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#276221'}}>{p.p1.good.toLocaleString()}</td>
+                <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#854F0B'}}>{p.p2.good.toLocaleString()}</td>
+                <td style={{padding:'6px 8px',textAlign:'center',color:'#C00000'}}>{p.p1.rej.toLocaleString()}</td>
+                <td style={{padding:'6px 8px',textAlign:'center',color:'#FF9800'}}>{p.p2.rej.toLocaleString()}</td>
+                <td style={{padding:'6px 8px',textAlign:'center'}}><span style={{color:col,fontWeight:700}}>{icon} {Math.abs(diff)}%</span></td>
+              </tr>
+            })}</tbody>
+          </table>
+        </div>
+      </div>}
+    </div>}
+  </div>
+}
+
+// ─── MIS Pivot Section ────────────────────────────────────────
+function MISPivotSection() {
+  const [from,setFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10)})
+  const [to,setTo]=useState(()=>new Date().toISOString().slice(0,10))
+  const [rowBy,setRowBy]=useState('machine')
+  const [colBy,setColBy]=useState('date')
+  const [metric,setMetric]=useState('good')
+  const [data,setData]=useState<any[]>([])
+  const [rows,setRows]=useState<string[]>([])
+  const [cols,setCols]=useState<string[]>([])
+  const [loading,setLoading]=useState(false)
+
+  const load=async()=>{
+    setLoading(true)
+    const res=await fetch(`/api/reports?module=production&from=${from}&to=${to}`).then(r=>r.json())
+    const records=res.data||[]
+
+    // Build pivot
+    const rowVals=new Set<string>()
+    const colVals=new Set<string>()
+    const pivot:Record<string,Record<string,number>>={}
+
+    records.forEach((r:any)=>{
+      const rowKey=rowBy==='machine'?r.machine:rowBy==='plant'?r.plant:rowBy==='product'?r.product:rowBy==='shift'?(r.shift?.includes('Day')?'Day':'Night'):r.operator||''
+      const colKey=colBy==='date'?r.date:colBy==='plant'?r.plant:colBy==='shift'?(r.shift?.includes('Day')?'Day':'Night'):colBy==='machine'?r.machine:r.product||''
+      const val=metric==='good'?r.good_parts||0:metric==='rej'?r.rejection||0:metric==='down'?r.downtime||0:r.good_parts||0
+
+      if(!rowKey||!colKey) return
+      rowVals.add(rowKey)
+      colVals.add(colKey)
+      if(!pivot[rowKey]) pivot[rowKey]={}
+      pivot[rowKey][colKey]=(pivot[rowKey][colKey]||0)+val
+    })
+
+    const sortedRows=Array.from(rowVals).sort()
+    const sortedCols=Array.from(colVals).sort()
+    setRows(sortedRows)
+    setCols(sortedCols)
+    setData(sortedRows.map(row=>({
+      row,
+      values:sortedCols.map(col=>pivot[row]?.[col]||0),
+      total:sortedCols.reduce((a,col)=>a+(pivot[row]?.[col]||0),0)
+    })))
+    setLoading(false)
+  }
+
+  const maxVal=Math.max(...data.flatMap(r=>r.values))||1
+
+  const metricLabel=metric==='good'?'Good Parts':metric==='rej'?'Rejection':'Downtime'
+  const metricColor=metric==='good'?'#276221':metric==='rej'?'#C00000':'#854F0B'
+
+  return <div>
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>📋 Pivot Table — Production Analysis</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={S.f}><label style={S.lbl}>From</label><input type="date" style={S.fi} value={from} onChange={e=>setFrom(e.target.value)}/></div>
+        <div style={S.f}><label style={S.lbl}>To</label><input type="date" style={S.fi} value={to} onChange={e=>setTo(e.target.value)}/></div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
+        <div style={S.f}><label style={S.lbl}>Rows (By)</label>
+          <select style={S.fi} value={rowBy} onChange={e=>setRowBy(e.target.value)}>
+            <option value="machine">Machine</option>
+            <option value="plant">Plant</option>
+            <option value="product">Product</option>
+            <option value="shift">Shift</option>
+            <option value="operator">Operator</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Columns (By)</label>
+          <select style={S.fi} value={colBy} onChange={e=>setColBy(e.target.value)}>
+            <option value="date">Date</option>
+            <option value="plant">Plant</option>
+            <option value="shift">Shift</option>
+            <option value="machine">Machine</option>
+            <option value="product">Product</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Metric</label>
+          <select style={S.fi} value={metric} onChange={e=>setMetric(e.target.value)}>
+            <option value="good">Good Parts</option>
+            <option value="rej">Rejection</option>
+            <option value="down">Downtime (min)</option>
+          </select>
+        </div>
+      </div>
+      <button style={S.sb} onClick={load} disabled={loading}>{loading?'Loading...':'📋 Generate Pivot'}</button>
+    </div>
+
+    {data.length>0&&<div style={S.card}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontWeight:700}}>{metricLabel} — {rowBy.charAt(0).toUpperCase()+rowBy.slice(1)} × {colBy.charAt(0).toUpperCase()+colBy.slice(1)}</div>
+        <div style={{fontSize:11,color:'#666'}}>{from} to {to}</div>
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,minWidth:600}}>
+          <thead>
+            <tr>
+              <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',position:'sticky' as const,left:0,minWidth:120}}>{rowBy.toUpperCase()}</th>
+              {cols.map(c=><th key={c} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'center',whiteSpace:'nowrap' as const}}>{c}</th>)}
+              <th style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'center'}}>TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row,ri)=>(
+              <tr key={ri} style={{background:ri%2===0?'#FAFAFA':'#fff'}}>
+                <td style={{padding:'6px 8px',fontWeight:600,position:'sticky' as const,left:0,background:ri%2===0?'#FAFAFA':'#fff',borderRight:'2px solid #E0E0E0'}}>{row.row}</td>
+                {row.values.map((v:number,ci:number)=>{
+                  const intensity=Math.round((v/maxVal)*100)
+                  const bg=v===0?'#fff':`rgba(${metric==='good'?'39,98,33':metric==='rej'?'192,0,0':'133,79,11'},${intensity/100*0.4+0.05})`
+                  return <td key={ci} style={{padding:'6px 8px',textAlign:'center',background:bg,fontWeight:v>0?600:400,color:v>0?metricColor:'#ccc'}}>
+                    {v>0?v.toLocaleString():'—'}
+                  </td>
+                })}
+                <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:metricColor,background:'#F0F0F0'}}>
+                  {row.total.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+            {/* Column totals */}
+            <tr style={{background:'#E6F1FB',fontWeight:700}}>
+              <td style={{padding:'6px 8px',color:'#1F3864',position:'sticky' as const,left:0,background:'#E6F1FB',borderRight:'2px solid #E0E0E0'}}>TOTAL</td>
+              {cols.map((_,ci)=>{
+                const colTotal=data.reduce((a,row)=>a+(row.values[ci]||0),0)
+                return <td key={ci} style={{padding:'6px 8px',textAlign:'center',color:metricColor}}>{colTotal.toLocaleString()}</td>
+              })}
+              <td style={{padding:'6px 8px',textAlign:'center',color:metricColor,background:'#1F3864',color:'#FFD966'}}>
+                {data.reduce((a,row)=>a+row.total,0).toLocaleString()}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style={{marginTop:8,fontSize:10,color:'#666'}}>
+        💡 Color intensity = value ka relative size. Darker = Higher value.
+      </div>
+    </div>}
+
+    {data.length===0&&!loading&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32}}>
+      Upar se date range aur options select karo → Generate Pivot click karo!
+    </div>}
   </div>
 }
