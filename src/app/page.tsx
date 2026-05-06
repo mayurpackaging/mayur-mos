@@ -1867,10 +1867,10 @@ function DispatchTab({user}:{user:User}) {
               <td style={{padding:'6px 8px',fontSize:10}}>{r.date}</td>
               <td style={{padding:'6px 8px',fontWeight:600}}>{r.customer}</td>
               <td style={{padding:'6px 8px',fontSize:10}}>
-                {r.dispatch_lines?.slice(0,2).map((l:any,li:number)=>(
-                  <div key={li}>{l.item_name} — {l.qty} Ctn</div>
+                {(r.dispatch_lines||[]).slice(0,2).map((l:any,li:number)=>(
+                  <div key={li}>{l.item_name||l.itemName||'--'} — {l.qty} Ctn</div>
                 ))}
-                {r.dispatch_lines?.length>2&&<div style={{color:'#666'}}>+{r.dispatch_lines.length-2} more...</div>}
+                {(r.dispatch_lines||[]).length>2&&<div style={{color:'#666'}}>+{(r.dispatch_lines||[]).length-2} more...</div>}
               </td>
               <td style={{padding:'6px 8px',fontWeight:700,color:'#276221'}}>{r.total_cartons} Ctn</td>
               <td style={{padding:'6px 8px',fontSize:10}}>{r.vehicle_no||'--'}</td>
@@ -1881,10 +1881,10 @@ function DispatchTab({user}:{user:User}) {
                   challanNo:r.challan_no,
                   date:r.date,
                   customer:r.customer,
-                  vehicleNo:r.vehicle_no,
-                  driverName:r.driver_name,
-                  notes:r.notes,
-                  lines:r.dispatch_lines||[],
+                  vehicleNo:r.vehicle_no||'',
+                  driverName:r.driver_name||'',
+                  notes:r.notes||'',
+                  lines:(r.dispatch_lines||[]).map((l:any)=>({...l,itemName:l.item_name,lineNo:l.line_no})),
                   grandTotal:r.total_cartons
                 })} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'3px 8px',fontSize:10,cursor:'pointer'}}>
                   🖨️ Challan
@@ -1919,8 +1919,8 @@ function DispatchTab({user}:{user:User}) {
           </tr></thead>
           <tbody>{challan.lines.map((l:any,i:number)=>(
             <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-              <td style={{padding:'6px 8px'}}>Line {l.lineNo}</td>
-              <td style={{padding:'6px 8px'}}>{l.itemName}</td>
+              <td style={{padding:'6px 8px'}}>Line {l.line_no||l.lineNo||i+1}</td>
+              <td style={{padding:'6px 8px'}}>{l.item_name||l.itemName||'--'}</td>
               <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700}}>{l.qty}</td>
             </tr>
           ))}</tbody>
