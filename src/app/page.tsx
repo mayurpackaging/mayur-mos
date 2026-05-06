@@ -145,6 +145,8 @@ const SPARE_CATEGORIES = [
 
 const ALL_SPARE_CATS = SPARE_CATEGORIES.reduce((a:string[],g)=>[...a,...g.items],[])
 
+const PM_OPS = ["Prince","Rohit","Ranjan Kumar"]
+
 const RREJ = ["Short Shot","Flash","Burn Mark","Sink Mark","Warpage","Flow Mark","Contamination","Dimensional","Colour Issue","Other"]
 const DAY_SLOTS = ["8am-11am","11am-2pm","2pm-5pm","5pm-8pm"]
 const NIGHT_SLOTS = ["8pm-11pm","11pm-2am","2am-5am","5am-8am"]
