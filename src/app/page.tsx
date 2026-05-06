@@ -2852,90 +2852,185 @@ function PerformanceTab({user}:{user:User}) {
 
 function WeeklyScoreForm({user}:{user:User}) {
   const [emp,setEmp]=useState('')
-  const [week,setWeek]=useState('Week 1')
-  const [year,setYear]=useState(String(new Date().getFullYear()))
-  const [scores,setScores]=useState<Record<string,string>>({})
+  const [fromDate,setFromDate]=useState(()=>{
+    const d=new Date(); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10)
+  })
+  const [toDate,setToDate]=useState(()=>new Date().toISOString().slice(0,10))
+  const [autoData,setAutoData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [manualScores,setManualScores]=useState({attendance:'',safety:'',behaviour:''})
   const [remarks,setRemarks]=useState('')
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
 
   const selEmp=PERF_EMP.find(e=>e.id===emp)
-  const isOp=selEmp?.role==='Operator'
-  const isFm=selEmp?.role?.includes('Foreman')
 
-  const params=isOp?[
-    {id:'prod',label:'Production Output vs Target',weight:30,hint:'>=100%=10, >=90%=7, >=80%=5'},
-    {id:'rej',label:'Rejection Rate',weight:25,hint:'<=1%=10, <=2%=7, <=3%=5'},
-    {id:'att',label:'Attendance',weight:20,hint:'>=97%=10, >=95%=7, >=90%=5'},
-    {id:'down',label:'Downtime Score',weight:15,hint:'0min=10, <=30=7, <=60=5'},
-    {id:'disc',label:'Discipline',weight:10,hint:'Excellent=10, Good=7, Avg=5'},
-  ]:isFm?[
-    {id:'team',label:'Team Production',weight:25,hint:'>=100%=10'},
-    {id:'qual',label:'Quality Score',weight:20,hint:'0NG=10'},
-    {id:'att',label:'Attendance',weight:15,hint:'>=97%=10'},
-    {id:'pm',label:'Mould PM Compliance',weight:15,hint:'100%=10'},
-    {id:'bd',label:'Breakdown Resolution',weight:15,hint:'<=30min=10'},
-    {id:'rep',label:'Reporting On Time',weight:10,hint:'Always=10'},
-  ]:[
-    {id:'eff',label:'Plant Efficiency',weight:30,hint:'>=95%=10'},
-    {id:'plan',label:'Planning Accuracy',weight:20,hint:'>=95%=10'},
-    {id:'tmgt',label:'Team Management',weight:20,hint:'Excellent=10'},
-    {id:'att',label:'Attendance',weight:15,hint:'>=97%=10'},
-    {id:'safe',label:'Safety & Compliance',weight:15,hint:'0 incidents=10'},
-  ]
-
-  const calcScore=()=>{
-    if(!params.length) return 0
-    const total=params.reduce((a,p)=>a+(parseFloat(scores[p.id]||'0')*p.weight/100),0)*10
-    return Math.round(total)
+  const loadAutoData=async(empName:string)=>{
+    if(!empName||!fromDate||!toDate) return
+    setLoading(true)
+    const res=await fetch(`/api/performance?operator=${encodeURIComponent(empName)}&from=${fromDate}&to=${toDate}`).then(r=>r.json())
+    setLoading(false)
+    if(res.success) setAutoData(res)
   }
 
-  const score=calcScore()
-  const grade=score>=90?'A':score>=75?'B':score>=60?'C':score>=50?'D':'F'
-  const gradeCol=score>=90?'#276221':score>=75?'#854F0B':score>=60?'#0C447C':score>=50?'#C2185B':'#C00000'
+  const onEmpChange=(id:string)=>{
+    setEmp(id)
+    setAutoData(null)
+    const found=PERF_EMP.find(e=>e.id===id)
+    if(found) loadAutoData(found.name)
+  }
 
-  const weeks=Array.from({length:52},(_,i)=>`Week ${i+1}`)
+  const onDateChange=()=>{
+    if(emp&&selEmp) loadAutoData(selEmp.name)
+  }
+
+  // Calculate total score
+  const calcTotal=()=>{
+    if(!autoData) return 0
+    const prod=autoData.production
+    const mc=autoData.mouldChange
+    const pm=autoData.mouldPM
+    const att=parseFloat(manualScores.attendance||'0')
+    const saf=parseFloat(manualScores.safety||'0')
+    const beh=parseFloat(manualScores.behaviour||'0')
+
+    // Weights for Operator
+    let total=0, weight=0
+    // Auto scores
+    if(prod.entries>0){
+      total += prod.rejScore * 25  // Rejection 25%
+      total += prod.downtimeScore * 15  // Downtime 15%
+      weight += 40
+    }
+    if(mc.total>0){
+      total += (mc.score||0) * 15  // Mould change 15%
+      weight += 15
+    }
+    // Manual scores
+    if(att>0){ total += att*20; weight+=20 }  // Attendance 20%
+    if(saf>0){ total += saf*10; weight+=10 }  // Safety 10%
+    if(beh>0){ total += beh*15; weight+=15 }  // Behaviour 15%
+
+    return weight>0 ? Math.round(total/weight) : 0
+  }
+
+  const totalScore=calcTotal()
+  const grade=totalScore>=90?'A':totalScore>=75?'B':totalScore>=60?'C':totalScore>=50?'D':'F'
+  const gradeCol=totalScore>=90?'#276221':totalScore>=75?'#854F0B':totalScore>=60?'#0C447C':totalScore>=50?'#C2185B':'#C00000'
+
+  const ScoreBox=({label,score,detail,auto}:{label:string,score:number|null,detail:string,auto:boolean})=>{
+    const col=score===null?'#666':score>=8?'#276221':score>=6?'#854F0B':score>=4?'#C2185B':'#C00000'
+    return <div style={{background:score===null?'#F5F5F5':score>=8?'#E8F5E9':score>=6?'#FFF3E0':score>=4?'#FCE4EC':'#FFEBEE',border:`1px solid ${col}`,borderRadius:8,padding:'8px 10px',marginBottom:8}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:col}}>{label} {auto&&<span style={{background:'#1F3864',color:'#fff',fontSize:9,padding:'1px 5px',borderRadius:999,marginLeft:4}}>AUTO</span>}</div>
+          <div style={{fontSize:10,color:'#666',marginTop:2}}>{detail}</div>
+        </div>
+        <div style={{fontSize:22,fontWeight:700,color:col}}>{score===null?'N/A':score+'/10'}</div>
+      </div>
+    </div>
+  }
 
   return <div style={S.card}>
-    <div style={{fontWeight:700,marginBottom:10}}>Weekly Scorecard</div>
-    <div style={S.fr}>
-      <div style={S.f}><label style={S.lbl}>Week</label>
-        <select style={S.fi} value={week} onChange={e=>setWeek(e.target.value)}>
-          {weeks.map(w=><option key={w}>{w}</option>)}
-        </select>
-      </div>
-      <div style={S.f}><label style={S.lbl}>Year</label><input type="number" style={S.fi} value={year} onChange={e=>setYear(e.target.value)}/></div>
-    </div>
+    <div style={{fontWeight:700,marginBottom:10}}>Weekly Scorecard — Auto Calculate</div>
+    
+    {/* Employee + Date */}
     <div style={S.f}><label style={S.lbl}>Employee</label>
-      <select style={S.fi} value={emp} onChange={e=>setEmp(e.target.value)}>
+      <select style={S.fi} value={emp} onChange={e=>onEmpChange(e.target.value)}>
         <option value="">-- Select Employee --</option>
         {PERF_EMP.map(e=><option key={e.id} value={e.id}>{e.name} ({e.role})</option>)}
       </select>
     </div>
+    <div style={S.fr}>
+      <div style={S.f}><label style={S.lbl}>From Date</label><input type="date" style={S.fi} value={fromDate} onChange={e=>{setFromDate(e.target.value);setTimeout(onDateChange,100)}}/></div>
+      <div style={S.f}><label style={S.lbl}>To Date</label><input type="date" style={S.fi} value={toDate} onChange={e=>{setToDate(e.target.value);setTimeout(onDateChange,100)}}/></div>
+    </div>
 
-    {emp&&params.length>0&&<>
-      <div style={{background:'#F9F9F9',borderRadius:8,padding:'10px 12px',marginBottom:10}}>
-        {params.map(p=>(
-          <div key={p.id} style={{display:'grid',gridTemplateColumns:'2fr 0.5fr 0.8fr',gap:6,alignItems:'center',padding:'6px 0',borderBottom:'1px solid #F0F0F0'}}>
-            <div>
-              <div style={{fontSize:11,fontWeight:600}}>{p.label}</div>
-              <div style={{fontSize:9,color:'#888'}}>{p.hint}</div>
-            </div>
-            <div style={{fontSize:10,fontWeight:600,color:'#1F3864',textAlign:'center'}}>{p.weight}%</div>
-            <input type="number" min="0" max="10" step="0.5" placeholder="0-10" value={scores[p.id]||''} onChange={e=>setScores(prev=>({...prev,[p.id]:e.target.value}))} style={{padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:13,fontWeight:600,textAlign:'center',width:'100%'}}/>
-          </div>
-        ))}
-        {score>0&&<div style={{background:'#1F3864',borderRadius:6,marginTop:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <span style={{color:'#fff',fontSize:12,fontWeight:600}}>Total Score:</span>
-          <span style={{color:'#FFD966',fontSize:16,fontWeight:700}}>{score}%</span>
-          <span style={{background:gradeCol,color:'#fff',padding:'3px 12px',borderRadius:999,fontSize:12,fontWeight:700}}>Grade {grade}</span>
-        </div>}
+    {loading&&<div style={{textAlign:'center',padding:16,color:'#666'}}>Loading data...</div>}
+
+    {autoData&&emp&&<div>
+      {/* Auto-calculated scores */}
+      <div style={{background:'#E6F1FB',border:'1px solid #1F3864',borderRadius:8,padding:'8px 12px',marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:6}}>
+          🤖 Auto-Calculated — {autoData.period.from} to {autoData.period.to}
+        </div>
+        <div style={{fontSize:10,color:'#666'}}>
+          Total Entries: {autoData.production.entries} | 
+          Good: {autoData.production.totalGood.toLocaleString()} | 
+          Rej: {autoData.production.rejPct}% | 
+          Avg Downtime: {autoData.production.avgDown} min
+        </div>
       </div>
+
+      <ScoreBox
+        label="Rejection Rate"
+        score={autoData.production.entries>0?autoData.production.rejScore:null}
+        detail={`${autoData.production.rejPct}% rejection (${autoData.production.totalRej.toLocaleString()} pcs)`}
+        auto={true}
+      />
+      <ScoreBox
+        label="Downtime Score"
+        score={autoData.production.entries>0?autoData.production.downtimeScore:null}
+        detail={`Avg ${autoData.production.avgDown} min/shift downtime`}
+        auto={true}
+      />
+      <ScoreBox
+        label="Mould Change On-Time"
+        score={autoData.mouldChange.score}
+        detail={autoData.mouldChange.total>0?`${autoData.mouldChange.onTime}/${autoData.mouldChange.total} on time (${autoData.mouldChange.onTimePct}%)`:'Koi mould change nahi is period mein'}
+        auto={true}
+      />
+      {autoData.mouldPM.total>0&&<ScoreBox
+        label="Mould PM Done"
+        score={autoData.mouldPM.score}
+        detail={`${autoData.mouldPM.ok}/${autoData.mouldPM.total} OK result`}
+        auto={true}
+      />}
+
+      {/* Manual scores */}
+      <div style={{background:'#FFF9E6',border:'1px solid #F4B942',borderRadius:8,padding:'10px 12px',marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#854F0B',marginBottom:8}}>✏️ Manual Scores (Aap denge — 0 to 10)</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+          <div style={S.f}>
+            <label style={S.lbl}>Attendance (0-10)</label>
+            <input type="number" min="0" max="10" step="0.5" style={S.fi} value={manualScores.attendance} onChange={e=>setManualScores(p=>({...p,attendance:e.target.value}))} placeholder="0-10"/>
+            <div style={{fontSize:9,color:'#666',marginTop:2}}>10=100%, 8=96%, 6=90%</div>
+          </div>
+          <div style={S.f}>
+            <label style={S.lbl}>Safety (0-10)</label>
+            <input type="number" min="0" max="10" step="0.5" style={S.fi} value={manualScores.safety} onChange={e=>setManualScores(p=>({...p,safety:e.target.value}))} placeholder="0-10"/>
+            <div style={{fontSize:9,color:'#666',marginTop:2}}>10=No incidents</div>
+          </div>
+          <div style={S.f}>
+            <label style={S.lbl}>Behaviour (0-10)</label>
+            <input type="number" min="0" max="10" step="0.5" style={S.fi} value={manualScores.behaviour} onChange={e=>setManualScores(p=>({...p,behaviour:e.target.value}))} placeholder="0-10"/>
+            <div style={{fontSize:9,color:'#666',marginTop:2}}>10=Excellent</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Total Score */}
+      {totalScore>0&&<div style={{background:'#1F3864',borderRadius:10,padding:'12px 16px',marginBottom:10,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,textAlign:'center'}}>
+        <div><div style={{fontSize:10,color:'#90A8C8'}}>Total Score</div><div style={{fontSize:28,fontWeight:700,color:'#FFD966'}}>{totalScore}%</div></div>
+        <div><div style={{fontSize:10,color:'#90A8C8'}}>Grade</div><div style={{fontSize:28,fontWeight:700,color:gradeCol,background:'#fff',borderRadius:6,margin:'0 auto',width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center'}}>{grade}</div></div>
+        <div><div style={{fontSize:10,color:'#90A8C8'}}>Period</div><div style={{fontSize:11,color:'#fff',marginTop:4}}>{fromDate}<br/>to<br/>{toDate}</div></div>
+      </div>}
+
       <div style={S.f}><label style={S.lbl}>Remarks</label><input style={S.fi} value={remarks} onChange={e=>setRemarks(e.target.value)} placeholder="Any observations..."/></div>
-      <button style={S.sb} onClick={()=>setToast({msg:`Score saved! ${selEmp?.name}: ${score}% Grade ${grade}`,ok:true})}>Save Weekly Score</button>
-      {toast&&<Toast {...toast}/>}
-    </>}
+      <button style={S.sb} onClick={()=>setToast({msg:`Score saved! ${selEmp?.name}: ${totalScore}% Grade ${grade}`,ok:true})}>
+        💾 Save Weekly Score
+      </button>
+      {toast&&<div style={{...S.card,background:toast.ok?'#276221':'#C00000',color:'#fff',textAlign:'center',marginTop:8}}>{toast.msg}</div>}
+    </div>}
+
+    {!autoData&&!loading&&emp&&<div style={{textAlign:'center',padding:16,color:'#666',fontSize:12}}>
+      Date range select karo → data automatically load hoga!
+    </div>}
+    {!emp&&<div style={{textAlign:'center',padding:16,color:'#666',fontSize:12}}>
+      Pehle employee select karo! 👆
+    </div>}
   </div>
 }
+
 
 function IncrementCalc() {
   const [data,setData]=useState<Record<string,any>>({})
