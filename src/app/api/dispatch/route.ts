@@ -21,12 +21,25 @@ export async function GET(req: Request) {
     todayOrders = data || []
   }
 
-  // Recent dispatches with lines
-  const { data: recent } = await supabase
+  // Recent dispatches
+  const { data: recentOrders } = await supabase
     .from('dispatch_orders')
-    .select('*, dispatch_lines(line_no, item_name, qty, plant)')
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(15)
+
+  // Get lines for these orders
+  const orderIds = (recentOrders||[]).map((o:any) => o.order_id)
+  const { data: allLines } = await supabase
+    .from('dispatch_lines')
+    .select('order_id, line_no, item_name, qty, plant')
+    .in('order_id', orderIds.length > 0 ? orderIds : [''])
+
+  // Merge lines into orders
+  const recent = (recentOrders||[]).map((o:any) => ({
+    ...o,
+    dispatch_lines: (allLines||[]).filter((l:any) => l.order_id === o.order_id)
+  }))
 
   return NextResponse.json({
     success: true,
