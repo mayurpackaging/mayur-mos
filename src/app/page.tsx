@@ -991,7 +991,10 @@ function ProductionTab({user}:{user:User}) {
             <div style={{display:'flex',gap:4,flexWrap:'wrap' as const}}>
               {prod.slots.map((_:any,si:number)=>{
                 const slotName=(machForm.shift==='night'?NIGHT_SLOTS:DAY_SLOTS)[si]
-                const isDone=existingEntries.some(e=>e.slot===slotName)
+                const isDone=machForm.machine&&prod.product&&todayEntries.some((e:any)=>
+                  e.machine===machForm.machine&&e.product===prod.product&&
+                  (e.production_slots||[]).some((s:any)=>s.slot_name===slotName)
+                )
                 return <button key={si} onClick={()=>document.getElementById(`slot-${prod.id}-${si}`)?.scrollIntoView({behavior:'smooth',block:'center'})}
                   style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:`1px solid ${isDone?'#276221':'#1F3864'}`,borderRadius:999,background:isDone?'#276221':'#1F3864',color:'#fff',cursor:'pointer'}}>
                   {slotName?.split('(')[0]||`S${si+1}`}{isDone?' ✅':''}
@@ -1011,7 +1014,12 @@ function ProductionTab({user}:{user:User}) {
             const slotProj=proj
             const eff=calcEff(slot.good,slotProj)
             const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
-            const isDone=existingEntries.some(e=>e.slot===slot.slot)
+            // Only freeze if same machine + same product + same slot
+            const isDone=machForm.machine&&prod.product&&todayEntries.some((e:any)=>
+              e.machine===machForm.machine&&
+              e.product===prod.product&&
+              (e.production_slots||[]).some((s:any)=>s.slot_name===slot.slot)
+            )
             
             // Find existing data for this slot
             const existingSlotData=todayEntries
