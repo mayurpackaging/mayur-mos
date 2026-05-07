@@ -747,6 +747,7 @@ function ProductionTab({user}:{user:User}) {
     operator:'',operator2:'',material:'',
     slots:DAY_SLOTS.map(s=>({slot:s,good:'',rejection:'',down:'',remarks:''}))
   }])
+  const [existingEntries,setExistingEntries]=useState<{machine:string,slot:string}[]>([])
 
   useEffect(()=>{
     fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})
@@ -874,7 +875,17 @@ function ProductionTab({user}:{user:User}) {
           </select>
         </div>
         <div style={S.f}><label style={S.lbl}>Machine</label>
-          <select style={S.fi} value={machForm.machine} onChange={e=>setMachForm(p=>({...p,machine:e.target.value}))}>
+          <select style={S.fi} value={machForm.machine} onChange={async e=>{
+            setMachForm(p=>({...p,machine:e.target.value}))
+            // Load existing entries for this machine today
+            if(e.target.value&&machForm.date){
+              const res=await fetch(`/api/production?date=${machForm.date}&machine=${encodeURIComponent(e.target.value)}`).then(r=>r.json())
+              const slots:(res.data||[]).flatMap((r:any)=>
+                (r.slots||[]).map((s:any)=>({machine:e.target.value,slot:s.slot_name||s.slot}))
+              )
+              setExistingEntries(slots)
+            }
+          }}>
             <option>Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
           </select>
         </div>
@@ -962,7 +973,11 @@ function ProductionTab({user}:{user:User}) {
                   el?.classList.add('highlight-slot')
                   setTimeout(()=>el?.classList.remove('highlight-slot'),2000)
                 }} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:'1px solid #1F3864',borderRadius:999,background:'#1F3864',color:'#fff',cursor:'pointer'}}>
-                  {(machForm.shift==='night'?NIGHT_SLOTS:DAY_SLOTS)[si]?.split('(')[0]||`Slot ${si+1}`}
+                  {(()=>{
+                const slotName=(machForm.shift==='night'?NIGHT_SLOTS:DAY_SLOTS)[si]
+                const isDone=existingEntries.some(e=>e.slot===slotName)
+                return <>{slotName?.split('(')[0]||`Slot ${si+1}`}{isDone&&' ✅'}</>
+              })()}
                 </button>
               ))}
             </div>
@@ -978,7 +993,9 @@ function ProductionTab({user}:{user:User}) {
             const slotProj=proj
             const eff=calcEff(slot.good,slotProj)
             const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
-            return <div key={si} id={`slot-${prod.id}-${si}`} style={{background:'#fff',border:'1px solid #E0E8FF',borderRadius:6,padding:'8px 10px',marginBottom:6}}>
+            const slotAlreadyDone=existingEntries.some(e=>e.slot===slot.slot)
+            return <div key={si} id={`slot-${prod.id}-${si}`} style={{background:slotAlreadyDone?'#FFF3E0':'#fff',border:`1px solid ${slotAlreadyDone?'#FF9800':'#E0E8FF'}`,borderRadius:6,padding:'8px 10px',marginBottom:6}}>
+              {slotAlreadyDone&&<div style={{background:'#FF9800',color:'#fff',borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:600,marginBottom:6}}>⚠️ Is slot ki entry already ho chuki hai aaj! Dobara daalna chahte ho?</div>}
               <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
                 <span style={{fontWeight:700,fontSize:11,color:'#1F3864'}}>{slot.slot}</span>
                 <span style={{background:'#1F3864',color:'#FFD966',padding:'2px 8px',borderRadius:999,fontSize:9}}>Proj: {slotProj>0?slotProj.toLocaleString():'--'}</span>
