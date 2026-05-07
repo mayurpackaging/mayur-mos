@@ -880,7 +880,7 @@ function ProductionTab({user}:{user:User}) {
             // Load existing entries for this machine today
             if(e.target.value&&machForm.date){
               const res=await fetch(`/api/production?date=${machForm.date}&machine=${encodeURIComponent(e.target.value)}`).then(r=>r.json())
-              const slots:(res.data||[]).flatMap((r:any)=>
+              const slots=((res.data||[]) as any[]).flatMap((r:any)=>
                 (r.slots||[]).map((s:any)=>({machine:e.target.value,slot:s.slot_name||s.slot}))
               )
               setExistingEntries(slots)
