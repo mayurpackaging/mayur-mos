@@ -735,6 +735,13 @@ function ProductionTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [existingEntries,setExistingEntries]=useState<{slot:string}[]>([])
+  const [todayEntries,setTodayEntries]=useState<any[]>([])
+
+  useEffect(()=>{
+    fetch(`/api/production?date=${nd()}`).then(r=>r.json()).then(d=>{
+      setTodayEntries(d.data||[])
+    })
+  },[])
   const [machForm,setMachForm]=useState({
     date:nd(),shift:'day',plant:'',machine:'',
     machineStatus:'running',stopReason:''
@@ -847,14 +854,6 @@ function ProductionTab({user}:{user:User}) {
   }
 
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
-
-  // Load today's all entries on mount
-  const [todayEntries,setTodayEntries]=useState<any[]>([])
-  useEffect(()=>{
-    fetch(`/api/production?date=${nd()}`).then(r=>r.json()).then(d=>{
-      setTodayEntries(d.data||[])
-    })
-  },[])
 
   return <div>
     {/* Today's entries summary */}
