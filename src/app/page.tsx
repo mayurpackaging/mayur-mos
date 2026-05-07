@@ -848,7 +848,44 @@ function ProductionTab({user}:{user:User}) {
 
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
+  // Load today's all entries on mount
+  const [todayEntries,setTodayEntries]=useState<any[]>([])
+  useEffect(()=>{
+    fetch(`/api/production?date=${nd()}`).then(r=>r.json()).then(d=>{
+      setTodayEntries(d.data||[])
+    })
+  },[])
+
   return <div>
+    {/* Today's entries summary */}
+    {todayEntries.length>0&&<div style={{...S.card,border:'1px solid #276221',background:'#F0FFF4',marginBottom:8}}>
+      <div style={{fontWeight:700,color:'#276221',marginBottom:8}}>📋 Aaj Ki Entries ({nd()})</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            {['Machine','Shift','Product','Slots Done','Good','Rej'].map(h=>
+              <th key={h} style={{background:'#276221',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{todayEntries.map((e:any,i:number)=>(
+            <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
+              <td style={{padding:'5px 8px',fontWeight:600,color:'#1F3864'}}>{e.machine}</td>
+              <td style={{padding:'5px 8px',fontSize:10}}>{e.shift?.includes('Day')?'☀️ Day':'🌙 Night'}</td>
+              <td style={{padding:'5px 8px',fontSize:10}}>{e.product}</td>
+              <td style={{padding:'5px 8px'}}>
+                {(e.production_slots||[]).map((s:any,si:number)=>(
+                  <span key={si} style={{background:'#276221',color:'#fff',borderRadius:4,padding:'1px 6px',fontSize:9,marginRight:3}}>
+                    {s.slot_name?.split('(')[0]||s.slot_name}
+                  </span>
+                ))}
+              </td>
+              <td style={{padding:'5px 8px',color:'#276221',fontWeight:700}}>{(e.good_parts||0).toLocaleString()}</td>
+              <td style={{padding:'5px 8px',color:'#C00000'}}>{e.rejection||0}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>}
+
     <div style={{...S.card,border:'2px solid #1F3864'}}>
       <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:14}}>🏭 Machine Details</div>
       <div style={S.fr}>
@@ -976,27 +1013,62 @@ function ProductionTab({user}:{user:User}) {
             const eff=calcEff(slot.good,slotProj)
             const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
             const isDone=existingEntries.some(e=>e.slot===slot.slot)
-            return <div key={si} id={`slot-${prod.id}-${si}`} style={{background:isDone?'#FFF3E0':'#fff',border:`1px solid ${isDone?'#FF9800':'#E0E8FF'}`,borderRadius:6,padding:'8px 10px',marginBottom:6}}>
-              {isDone&&<div style={{background:'#FF9800',color:'#fff',borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:600,marginBottom:6}}>⚠️ Already entered! Dobara daalna chahte ho?</div>}
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
-                <span style={{fontWeight:700,fontSize:11,color:'#1F3864'}}>{slot.slot}</span>
-                <span style={{background:'#1F3864',color:'#FFD966',padding:'2px 8px',borderRadius:999,fontSize:9}}>Proj: {slotProj>0?slotProj.toLocaleString():'--'}</span>
+            
+            // Find existing data for this slot
+            const existingSlotData=todayEntries
+              .filter((e:any)=>e.machine===machForm.machine&&e.product===prod.product)
+              .flatMap((e:any)=>e.production_slots||[])
+              .find((s:any)=>s.slot_name===slot.slot)
+
+            return <div key={si} id={`slot-${prod.id}-${si}`} style={{
+              background:isDone?'#E8F5E9':'#fff',
+              border:`2px solid ${isDone?'#276221':'#E0E8FF'}`,
+              borderRadius:6,padding:'8px 10px',marginBottom:6,
+              opacity:isDone?0.85:1
+            }}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+                <span style={{fontWeight:700,fontSize:11,color:isDone?'#276221':'#1F3864'}}>{slot.slot}</span>
+                {isDone
+                  ? <span style={{background:'#276221',color:'#fff',padding:'2px 10px',borderRadius:999,fontSize:10,fontWeight:600}}>✅ Done</span>
+                  : <span style={{background:'#1F3864',color:'#FFD966',padding:'2px 8px',borderRadius:999,fontSize:9}}>Proj: {slotProj>0?slotProj.toLocaleString():'--'}</span>
+                }
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:5}}>
-                <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Good Parts</div>
-                  <input type="number" min="0" value={slot.good} onChange={e=>updateSlot(prod.id,si,'good',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #276221',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600}}/>
-                </div>
-                <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Rejection</div>
-                  <input type="number" min="0" value={slot.rejection} onChange={e=>updateSlot(prod.id,si,'rejection',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #C00000',borderRadius:6,textAlign:'center',fontSize:12}}/>
-                </div>
-                <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Downtime(min)</div>
-                  <input type="number" min="0" value={slot.down} onChange={e=>updateSlot(prod.id,si,'down',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12}}/>
-                </div>
-                <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Efficiency</div>
-                  <div style={{padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,color:eff>0?effCol:'#666',background:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':eff>0?'#FFEBEE':'#F0F0F0'}}>{eff>0?eff+'%':'--'}</div>
-                </div>
-              </div>
-              <input type="text" value={slot.remarks} onChange={e=>updateSlot(prod.id,si,'remarks',e.target.value)} placeholder="Remarks / Loss reason..." style={{width:'100%',marginTop:5,padding:'4px 8px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11,background:'#FFFFF0'}}/>
+
+              {isDone&&existingSlotData
+                ? <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,background:'#F0FFF4',borderRadius:6,padding:'6px 8px'}}>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:9,color:'#666'}}>Good Parts</div>
+                      <div style={{fontSize:14,fontWeight:700,color:'#276221'}}>{(existingSlotData.good_parts||0).toLocaleString()}</div>
+                    </div>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:9,color:'#666'}}>Rejection</div>
+                      <div style={{fontSize:14,fontWeight:700,color:'#C00000'}}>{existingSlotData.rejection||0}</div>
+                    </div>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:9,color:'#666'}}>Downtime</div>
+                      <div style={{fontSize:14,fontWeight:700,color:'#854F0B'}}>{existingSlotData.downtime||0}m</div>
+                    </div>
+                  </div>
+                : isDone
+                  ? <div style={{background:'#E8F5E9',borderRadius:6,padding:'6px 8px',fontSize:11,color:'#276221',textAlign:'center'}}>✅ Entry saved — frozen!</div>
+                  : <div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:5}}>
+                        <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Good Parts</div>
+                          <input type="number" min="0" value={slot.good} onChange={e=>updateSlot(prod.id,si,'good',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #276221',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600}}/>
+                        </div>
+                        <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Rejection</div>
+                          <input type="number" min="0" value={slot.rejection} onChange={e=>updateSlot(prod.id,si,'rejection',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #C00000',borderRadius:6,textAlign:'center',fontSize:12}}/>
+                        </div>
+                        <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Downtime(min)</div>
+                          <input type="number" min="0" value={slot.down} onChange={e=>updateSlot(prod.id,si,'down',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12}}/>
+                        </div>
+                        <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Efficiency</div>
+                          <div style={{padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,color:eff>0?effCol:'#666',background:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':eff>0?'#FFEBEE':'#F0F0F0'}}>{eff>0?eff+'%':'--'}</div>
+                        </div>
+                      </div>
+                      <input type="text" value={slot.remarks} onChange={e=>updateSlot(prod.id,si,'remarks',e.target.value)} placeholder="Remarks / Loss reason..." style={{width:'100%',marginTop:5,padding:'4px 8px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11,background:'#FFFFF0'}}/>
+                    </div>
+              }
             </div>
           })}
         </div>}
