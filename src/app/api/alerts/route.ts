@@ -130,7 +130,7 @@ export async function POST(req: Request) {
     `
 
     const emails = [...(maintenanceEmails || []), ...(adminEmails || [])]
-    const uniqueEmails = [...new Set(emails)]
+    const uniqueEmails = emails.filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
     if (uniqueEmails.length === 0) return NextResponse.json({ success: false, msg: 'No emails!' })
 
     await sendEmail(uniqueEmails, `🚨 Breakdown Alert — ${plant} ${machine}`, emailTemplate('Machine Breakdown!', body, '#C00000'))
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
     `
 
     const emails = [...(maintenanceEmails || []), ...(adminEmails || [])]
-    const uniqueEmails = [...new Set(emails)]
+    const uniqueEmails = emails.filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
     await sendEmail(uniqueEmails, `⚙️ PM Overdue Alert — ${overdueMoulds.length} Moulds`, emailTemplate('Mould PM Overdue!', body, '#854F0B'))
     return NextResponse.json({ success: true, msg: `PM alert sent to ${uniqueEmails.length} people!` })
   }
