@@ -293,6 +293,7 @@ function MISTab() {
     {id:'mould',label:'Mould'},
     {id:'comparison',label:'📊 Comparison'},
     {id:'pivot',label:'📋 Pivot'},
+    {id:'alerts',label:'📧 Alerts'},
   ]
 
   return <div>
@@ -432,6 +433,9 @@ function MISTab() {
 
     {/* PIVOT SECTION */}
     {activeSection==='pivot'&&<MISPivotSection/>}
+
+    {/* ALERTS SECTION */}
+    {activeSection==='alerts'&&<MISAlertsSection/>}
   </div>
 }
 
@@ -3440,5 +3444,73 @@ function MISPivotSection() {
     {data.length===0&&!loading&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32}}>
       Upar se date range aur options select karo → Generate Pivot click karo!
     </div>}
+  </div>
+}
+
+// ─── MIS Alerts Section ───────────────────────────────────────
+function MISAlertsSection() {
+  const [sending,setSending]=useState<string|null>(null)
+  const [results,setResults]=useState<Record<string,{msg:string,ok:boolean}>>({})
+
+  const sendAlert=async(type:string,label:string)=>{
+    setSending(type)
+    const res=await fetch('/api/alerts',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type})
+    }).then(r=>r.json()).catch(()=>({success:false,msg:'Error!'}))
+    setSending(null)
+    setResults(p=>({...p,[type]:{msg:res.msg,ok:res.success}}))
+  }
+
+  const ALERTS=[
+    {type:'daily_report',icon:'📊',label:'Daily Report',desc:'Aaj ki poori production summary — Nitin, Ranjan ko',color:'#1F3864'},
+    {type:'breakdown_alert',icon:'🚨',label:'Breakdown Alert Test',desc:'Prince, Rohit, Ranjan ko alert',color:'#C00000'},
+    {type:'pm_overdue_alert',icon:'⚙️',label:'PM Overdue Alert',desc:'Overdue moulds ki list — Maintenance ko',color:'#854F0B'},
+    {type:'stock_alert',icon:'📦',label:'Stock Critical Alert',desc:'Critical stock items — Admin ko',color:'#276221'},
+  ]
+
+  return <div>
+    <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:4}}>📧 Email Alerts</div>
+      <div style={{fontSize:11,color:'#666',marginBottom:12}}>Manual alerts bhejne ke liye — Automatic alerts breakdown report karne pe jaati hain!</div>
+      
+      {ALERTS.map(alert=>(
+        <div key={alert.type} style={{background:'#F8F9FF',border:'1px solid #E0E8FF',borderRadius:8,padding:12,marginBottom:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:alert.color}}>{alert.icon} {alert.label}</div>
+              <div style={{fontSize:11,color:'#666',marginTop:2}}>{alert.desc}</div>
+              {results[alert.type]&&<div style={{fontSize:11,color:results[alert.type].ok?'#276221':'#C00000',marginTop:4,fontWeight:600}}>
+                {results[alert.type].ok?'✅':'❌'} {results[alert.type].msg}
+              </div>}
+            </div>
+            <button 
+              onClick={()=>sendAlert(alert.type,alert.label)}
+              disabled={sending===alert.type}
+              style={{background:alert.color,color:'#fff',border:'none',borderRadius:6,padding:'8px 16px',fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0,marginLeft:10}}
+            >
+              {sending===alert.type?'Sending...':'Send Email'}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div style={{...S.card,background:'#FFF9E6',border:'1px solid #F4B942'}}>
+      <div style={{fontWeight:700,color:'#854F0B',marginBottom:8}}>📋 Emails List</div>
+      <div style={{fontSize:11,color:'#666'}}>
+        <div style={{marginBottom:4}}>✅ <strong>Nitin</strong> — nitin.nagpall@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Ranjan</strong> — ranjan.spipl@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Prince</strong> — prince.spipl@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Rohit</strong> — rohit.spipl@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Karan</strong> — karan.khattar.980@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Ankush</strong> — ankush.nagpall@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Deepak</strong> — deepak.spipl@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Alok</strong> — alok.spipl@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Uday</strong> — uday.spipl@gmail.com</div>
+        <div style={{marginBottom:4}}>✅ <strong>Rahul</strong> — rahulnew.spipl@gmail.com</div>
+      </div>
+    </div>
   </div>
 }
