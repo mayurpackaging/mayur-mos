@@ -63,17 +63,22 @@ export async function POST(req: Request) {
 
     if (error) return NextResponse.json({ success: false, msg: error.message })
 
-    // Save slots
+    // Save only slots that have data filled
     if (prod && slots.length > 0) {
-      const slotRows = slots.map((s: any) => ({
-        production_id: prod.id,
-        slot_name: s.slot || '',
-        good_parts: parseFloat(s.good) || 0,
-        rejection: parseFloat(s.rejection) || 0,
-        downtime: parseFloat(s.down) || 0,
-        remarks: s.remarks || ''
-      }))
-      await supabase.from('production_slots').insert(slotRows)
+      const filledSlots = slots.filter((s: any) => 
+        parseFloat(s.good) > 0 || parseFloat(s.rejection) > 0 || parseFloat(s.down) > 0 || s.remarks
+      )
+      if (filledSlots.length > 0) {
+        const slotRows = filledSlots.map((s: any) => ({
+          production_id: prod.id,
+          slot_name: s.slot || '',
+          good_parts: parseFloat(s.good) || 0,
+          rejection: parseFloat(s.rejection) || 0,
+          downtime: parseFloat(s.down) || 0,
+          remarks: s.remarks || ''
+        }))
+        await supabase.from('production_slots').insert(slotRows)
+      }
     }
 
     // Update mould shot counter
