@@ -734,24 +734,29 @@ function ProductionTab({user}:{user:User}) {
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
-  
-  // Machine details - common for all products
+  const [existingEntries,setExistingEntries]=useState<{slot:string}[]>([])
   const [machForm,setMachForm]=useState({
     date:nd(),shift:'day',plant:'',machine:'',
     machineStatus:'running',stopReason:''
   })
-  
-  // Multiple products in same shift
   const [products,setProducts]=useState([{
     id:1,product:'',mould:'',cavities:'',cycleTime:'',
     operator:'',operator2:'',material:'',
     slots:DAY_SLOTS.map(s=>({slot:s,good:'',rejection:'',down:'',remarks:''}))
   }])
-  const [existingEntries,setExistingEntries]=useState<{machine:string,slot:string}[]>([])
 
   useEffect(()=>{
     fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})
   },[])
+
+  const loadExistingEntries=async(date:string,machine:string)=>{
+    if(!date||!machine) return
+    const res=await fetch(`/api/production?date=${date}&machine=${encodeURIComponent(machine)}`).then(r=>r.json())
+    const slots=((res.data||[]) as any[]).flatMap((r:any)=>
+      (r.production_slots||[]).map((s:any)=>({slot:s.slot_name||s.slot}))
+    )
+    setExistingEntries(slots)
+  }
 
   const updateSlots=(shift:string)=>{
     const slotNames=shift==='night'?NIGHT_SLOTS:DAY_SLOTS
@@ -809,52 +814,41 @@ function ProductionTab({user}:{user:User}) {
 
   const save=async()=>{
     if(!machForm.plant||!machForm.machine){setToast({msg:'Plant aur Machine select karo!',ok:false});return}
-    
+    setSaving(true)
     let savedCount=0
-    let errors=[]
-    
+    const errors:string[]=[]
+
     for(const prod of products){
       if(!prod.product) continue
-      
-      const totalGood=prod.slots.reduce((a,s)=>a+(parseFloat(s.good)||0),0)
-      const totalRej=prod.slots.reduce((a,s)=>a+(parseFloat(s.rejection)||0),0)
-      
       const res=await fetch('/api/production',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           date:machForm.date,
           shift:machForm.shift==='night'?'Night (8pm-8am)':'Day (8am-8pm)',
-          plant:machForm.plant,
-          machine:machForm.machine,
-          operator:prod.operator,
-          operator2:prod.operator2,
-          product:prod.product,
-          mould:prod.mould,
-          cavities:prod.cavities||'0',
-          cycleTime:prod.cycleTime||'0',
-          material:prod.material,
-          machineStatus:machForm.machineStatus,
-          stopReason:machForm.stopReason||'',
-          remarks:'',
+          plant:machForm.plant,machine:machForm.machine,
+          operator:prod.operator,operator2:prod.operator2,
+          product:prod.product,mould:prod.mould,
+          cavities:prod.cavities||'0',cycleTime:prod.cycleTime||'0',
+          material:prod.material,machineStatus:machForm.machineStatus,
+          stopReason:machForm.stopReason||'',remarks:'',
           slots:isRunning?prod.slots:prod.slots.map(s=>({...s,good:'0',rejection:'0',down:'180',remarks:machForm.machineStatus+' - '+machForm.stopReason})),
           enteredBy:user.name
         })
       }).then(r=>r.json())
-      
       if(res.success) savedCount++
       else errors.push(res.msg)
     }
-    
     setSaving(false)
-    if(savedCount>0) setToast({msg:`${savedCount} product entries saved!`,ok:true})
-    else setToast({msg:errors[0]||'Error!',ok:false})
+    if(savedCount>0){
+      setToast({msg:`${savedCount} product entries saved!`,ok:true})
+      loadExistingEntries(machForm.date,machForm.machine)
+    } else setToast({msg:errors[0]||'Error!',ok:false})
   }
 
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
   return <div>
-    {/* Machine Details Card - Common */}
     <div style={{...S.card,border:'2px solid #1F3864'}}>
       <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:14}}>🏭 Machine Details</div>
       <div style={S.fr}>
@@ -875,21 +869,17 @@ function ProductionTab({user}:{user:User}) {
           </select>
         </div>
         <div style={S.f}><label style={S.lbl}>Machine</label>
-          <select style={S.fi} value={machForm.machine} onChange={async e=>{
+          <select style={S.fi} value={machForm.machine} onChange={e=>{
             setMachForm(p=>({...p,machine:e.target.value}))
-            // Load existing entries for this machine today
-            if(e.target.value&&machForm.date){
-              const res=await fetch(`/api/production?date=${machForm.date}&machine=${encodeURIComponent(e.target.value)}`).then(r=>r.json())
-              const slots=((res.data||[]) as any[]).flatMap((r:any)=>
-                (r.slots||[]).map((s:any)=>({machine:e.target.value,slot:s.slot_name||s.slot}))
-              )
-              setExistingEntries(slots)
-            }
+            loadExistingEntries(machForm.date,e.target.value)
           }}>
-            <option>Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
+            <option value="">Select</option>{machines.map(m=><option key={m}>{m}</option>)}
           </select>
         </div>
       </div>
+      {existingEntries.length>0&&<div style={{background:'#E8F5E9',border:'1px solid #276221',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#276221',fontWeight:600}}>
+        ✅ Already entered today: {existingEntries.map(e=>e.slot.split('(')[0]).join(', ')}
+      </div>}
       <div style={S.f}><label style={S.lbl}>Machine Status</label>
         <select style={S.fi} value={machForm.machineStatus} onChange={e=>setMachForm(p=>({...p,machineStatus:e.target.value}))}>
           <option value="running">Running</option>
@@ -906,13 +896,12 @@ function ProductionTab({user}:{user:User}) {
       </>}
     </div>
 
-    {/* Products */}
     {products.map((prod,prodIdx)=>{
       const proj=calcProj(prod.cavities,prod.cycleTime)
       const totalGood=prod.slots.reduce((a,s)=>a+(parseFloat(s.good)||0),0)
       const totalRej=prod.slots.reduce((a,s)=>a+(parseFloat(s.rejection)||0),0)
       const totalDown=prod.slots.reduce((a,s)=>a+(parseFloat(s.down)||0),0)
-      
+
       return <div key={prod.id} style={{...S.card,border:`2px solid ${prodIdx===0?'#276221':'#854F0B'}`,marginBottom:8}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontWeight:700,color:prodIdx===0?'#276221':'#854F0B',fontSize:14}}>
@@ -920,8 +909,7 @@ function ProductionTab({user}:{user:User}) {
           </div>
           {products.length>1&&<button onClick={()=>removeProduct(prod.id)} style={{background:'#FFEBEE',color:'#C00000',border:'none',borderRadius:6,padding:'4px 10px',fontSize:12,cursor:'pointer'}}>Remove</button>}
         </div>
-        
-        {/* Product details */}
+
         <div style={S.fr}>
           <div style={S.f}><label style={S.lbl}>Product</label>
             <select style={S.fi} value={prod.product} onChange={e=>updateProduct(prod.id,'product',e.target.value)}>
@@ -931,7 +919,7 @@ function ProductionTab({user}:{user:User}) {
           <div style={S.f}><label style={S.lbl}>Mould No.</label>
             <select style={{...S.fi,background:prod.mould?'#E2EFDA':'#FAFAFA'}} value={prod.mould} onChange={e=>updateProduct(prod.id,'mould',e.target.value)}>
               <option value="">-- Select Mould --</option>
-              <optgroup label="── Tub Moulds ──">
+              <optgroup label="── Tub/Container Moulds ──">
                 {MOULDS.filter(m=>!m.name.includes('Lid')&&!m.name.includes('Sipper')).map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
               </optgroup>
               <optgroup label="── Lid Moulds ──">
@@ -961,41 +949,35 @@ function ProductionTab({user}:{user:User}) {
           </div>
         </div>
 
-        {/* Slots */}
         {isRunning&&<div style={{background:'#F8F9FF',border:'1px solid #E0E8FF',borderRadius:8,padding:10,marginTop:8}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
             <div style={{fontWeight:700,fontSize:12,color:'#1F3864'}}>Slot-wise Production</div>
             <div style={{display:'flex',gap:4,flexWrap:'wrap' as const}}>
-              {prod.slots.map((_:any,si:number)=>(
-                <button key={si} onClick={()=>{
-                  const el=document.getElementById(`slot-${prod.id}-${si}`)
-                  el?.scrollIntoView({behavior:'smooth',block:'center'})
-                  el?.classList.add('highlight-slot')
-                  setTimeout(()=>el?.classList.remove('highlight-slot'),2000)
-                }} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:'1px solid #1F3864',borderRadius:999,background:'#1F3864',color:'#fff',cursor:'pointer'}}>
-                  {(()=>{
+              {prod.slots.map((_:any,si:number)=>{
                 const slotName=(machForm.shift==='night'?NIGHT_SLOTS:DAY_SLOTS)[si]
                 const isDone=existingEntries.some(e=>e.slot===slotName)
-                return <>{slotName?.split('(')[0]||`Slot ${si+1}`}{isDone&&' ✅'}</>
-              })()}
+                return <button key={si} onClick={()=>document.getElementById(`slot-${prod.id}-${si}`)?.scrollIntoView({behavior:'smooth',block:'center'})}
+                  style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:`1px solid ${isDone?'#276221':'#1F3864'}`,borderRadius:999,background:isDone?'#276221':'#1F3864',color:'#fff',cursor:'pointer'}}>
+                  {slotName?.split('(')[0]||`S${si+1}`}{isDone?' ✅':''}
                 </button>
-              ))}
+              })}
             </div>
           </div>
-          {/* Summary */}
+
           <div style={{background:'#1F3864',borderRadius:6,padding:'6px 10px',marginBottom:8,display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,textAlign:'center'}}>
             <div><div style={{fontSize:9,color:'#90A8C8'}}>Good Parts</div><div style={{fontSize:13,fontWeight:700,color:'#4CAF50'}}>{Math.round(totalGood).toLocaleString()}</div></div>
             <div><div style={{fontSize:9,color:'#90A8C8'}}>Rejection</div><div style={{fontSize:13,fontWeight:700,color:'#FF5252'}}>{Math.round(totalRej).toLocaleString()}</div></div>
             <div><div style={{fontSize:9,color:'#90A8C8'}}>Downtime</div><div style={{fontSize:13,fontWeight:700,color:'#FF9800'}}>{Math.round(totalDown)}m</div></div>
             <div><div style={{fontSize:9,color:'#90A8C8'}}>Projected</div><div style={{fontSize:13,fontWeight:700,color:'#FFD966'}}>{proj>0?(proj*prod.slots.length).toLocaleString():'--'}</div></div>
           </div>
+
           {prod.slots.map((slot,si)=>{
             const slotProj=proj
             const eff=calcEff(slot.good,slotProj)
             const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
-            const slotAlreadyDone=existingEntries.some(e=>e.slot===slot.slot)
-            return <div key={si} id={`slot-${prod.id}-${si}`} style={{background:slotAlreadyDone?'#FFF3E0':'#fff',border:`1px solid ${slotAlreadyDone?'#FF9800':'#E0E8FF'}`,borderRadius:6,padding:'8px 10px',marginBottom:6}}>
-              {slotAlreadyDone&&<div style={{background:'#FF9800',color:'#fff',borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:600,marginBottom:6}}>⚠️ Is slot ki entry already ho chuki hai aaj! Dobara daalna chahte ho?</div>}
+            const isDone=existingEntries.some(e=>e.slot===slot.slot)
+            return <div key={si} id={`slot-${prod.id}-${si}`} style={{background:isDone?'#FFF3E0':'#fff',border:`1px solid ${isDone?'#FF9800':'#E0E8FF'}`,borderRadius:6,padding:'8px 10px',marginBottom:6}}>
+              {isDone&&<div style={{background:'#FF9800',color:'#fff',borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:600,marginBottom:6}}>⚠️ Already entered! Dobara daalna chahte ho?</div>}
               <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
                 <span style={{fontWeight:700,fontSize:11,color:'#1F3864'}}>{slot.slot}</span>
                 <span style={{background:'#1F3864',color:'#FFD966',padding:'2px 8px',borderRadius:999,fontSize:9}}>Proj: {slotProj>0?slotProj.toLocaleString():'--'}</span>
@@ -1021,7 +1003,6 @@ function ProductionTab({user}:{user:User}) {
       </div>
     })}
 
-    {/* Add product button */}
     {isRunning&&<button onClick={addProduct} style={{width:'100%',padding:10,border:'2px dashed #854F0B',borderRadius:8,background:'#FFF9E6',color:'#854F0B',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:8}}>
       + Mould Change — Doosra Product Add Karo
     </button>}
