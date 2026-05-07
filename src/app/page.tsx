@@ -914,7 +914,7 @@ function ProductionTab({user}:{user:User}) {
         </div>
       </div>
       {existingEntries.length>0&&<div style={{background:'#E8F5E9',border:'1px solid #276221',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#276221',fontWeight:600}}>
-        ✅ Already entered today: {existingEntries.map(e=>e.slot.split('(')[0]).join(', ')}
+        ✅ Already entered today: {todayEntries.filter((e:any)=>e.machine===machForm.machine).flatMap((e:any)=>(e.production_slots||[]).map((s:any)=>s.slot_name?.split('(')[0]||s.slot_name)).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i).join(', ')}
       </div>}
       <div style={S.f}><label style={S.lbl}>Machine Status</label>
         <select style={S.fi} value={machForm.machineStatus} onChange={e=>setMachForm(p=>({...p,machineStatus:e.target.value}))}>
@@ -991,10 +991,10 @@ function ProductionTab({user}:{user:User}) {
             <div style={{display:'flex',gap:4,flexWrap:'wrap' as const}}>
               {prod.slots.map((_:any,si:number)=>{
                 const slotName=(machForm.shift==='night'?NIGHT_SLOTS:DAY_SLOTS)[si]
-                const isDone=machForm.machine&&prod.product&&todayEntries.some((e:any)=>
-                  e.machine===machForm.machine&&e.product===prod.product&&
+                const isDone=machForm.machine?todayEntries.some((e:any)=>
+                  e.machine===machForm.machine&&
                   (e.production_slots||[]).some((s:any)=>s.slot_name===slotName)
-                )
+                ):false
                 return <button key={si} onClick={()=>document.getElementById(`slot-${prod.id}-${si}`)?.scrollIntoView({behavior:'smooth',block:'center'})}
                   style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:`1px solid ${isDone?'#276221':'#1F3864'}`,borderRadius:999,background:isDone?'#276221':'#1F3864',color:'#fff',cursor:'pointer'}}>
                   {slotName?.split('(')[0]||`S${si+1}`}{isDone?' ✅':''}
@@ -1014,12 +1014,11 @@ function ProductionTab({user}:{user:User}) {
             const slotProj=proj
             const eff=calcEff(slot.good,slotProj)
             const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
-            // Only freeze if same machine + same product + same slot
-            const isDone=machForm.machine&&prod.product&&todayEntries.some((e:any)=>
+            // Freeze if same machine + same slot already saved
+            const isDone=machForm.machine?todayEntries.some((e:any)=>
               e.machine===machForm.machine&&
-              e.product===prod.product&&
               (e.production_slots||[]).some((s:any)=>s.slot_name===slot.slot)
-            )
+            ):false
             
             // Find existing data for this slot
             const existingSlotData=todayEntries
@@ -2246,23 +2245,41 @@ function SparesTab({user}:{user:User}) {
       </div>}
     </div>
 
-    <div id="spares-entry-form" style={{...S.card,border:'1px solid #1F3864'}}>
-      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>Stock Entry (Purchase / Use)</div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Vendor Name</label>
-          <input style={S.fi} value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Vendor naam..." list="vendor-list"/>
-          <datalist id="vendor-list">{vendors.map((v:any)=><option key={v} value={v}/>)}</datalist>
-          {vendor&&<div style={{fontSize:10,color:'#276221',marginTop:2}}>✅ Saved — next time auto-fill hoga!</div>}
-        </div>
-        <div style={S.f}><label style={S.lbl}>Slip No. (Optional)</label><input style={S.fi} value={slipNo} onChange={e=>setSlipNo(e.target.value)} placeholder="INV-001"/></div>
+    {/* Entry Type Tabs */}
+    <div style={{display:'flex',gap:8,marginBottom:8}}>
+      <button onClick={()=>setAction('Stock In')} style={{flex:1,padding:'10px',border:`2px solid ${action==='Stock In'?'#276221':'#E0E0E0'}`,borderRadius:8,background:action==='Stock In'?'#E8F5E9':'#fff',color:action==='Stock In'?'#276221':'#666',fontWeight:700,fontSize:12,cursor:'pointer'}}>
+        📦 Purchase Entry
+      </button>
+      <button onClick={()=>setAction('Used in Machine')} style={{flex:1,padding:'10px',border:`2px solid ${action==='Used in Machine'?'#854F0B':'#E0E0E0'}`,borderRadius:8,background:action==='Used in Machine'?'#FFF3E0':'#fff',color:action==='Used in Machine'?'#854F0B':'#666',fontWeight:700,fontSize:12,cursor:'pointer'}}>
+        🔧 Use Entry
+      </button>
+    </div>
+
+    <div id="spares-entry-form" style={{...S.card,border:`2px solid ${action==='Stock In'?'#276221':'#854F0B'}`}}>
+      <div style={{fontWeight:700,color:action==='Stock In'?'#276221':'#854F0B',marginBottom:10,fontSize:13}}>
+        {action==='Stock In'?'📦 Purchase Entry — Naya Samaan Aaya':'🔧 Use Entry — Machine Mein Lagaya'}
       </div>
+
+      {/* Purchase fields - only for Stock In */}
+      {action==='Stock In'&&<div>
+        <div style={S.fr}>
+          <div style={S.f}><label style={S.lbl}>Vendor Name</label>
+            <input style={S.fi} value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Vendor naam..." list="vendor-list"/>
+            <datalist id="vendor-list">{vendors.map((v:any)=><option key={v} value={v}/>)}</datalist>
+            {vendor&&<div style={{fontSize:10,color:'#276221',marginTop:2}}>✅ Next time auto-fill hoga!</div>}
+          </div>
+          <div style={S.f}><label style={S.lbl}>Slip / Invoice No.</label><input style={S.fi} value={slipNo} onChange={e=>setSlipNo(e.target.value)} placeholder="INV-001"/></div>
+        </div>
+      </div>}
+
+      {/* Use Entry info */}
+      {action==='Used in Machine'&&<div style={{background:'#FFF3E0',border:'1px solid #FF9800',borderRadius:6,padding:'8px 12px',marginBottom:10,fontSize:11,color:'#854F0B'}}>
+        ℹ️ Sirf Part Name aur Qty bharo — Stock automatically kam ho jaayega!
+      </div>}
+
       <div style={S.fr}>
         <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
-        <div style={S.f}><label style={S.lbl}>Action</label>
-          <select style={S.fi} value={action} onChange={e=>setAction(e.target.value)}>
-            <option>Stock In</option><option>Stock Out</option><option>Used in Machine</option>
-          </select>
-        </div>
+        <div style={S.f}><label style={S.lbl}>Done By</label><input style={S.fi} value={user.name} disabled/></div>
       </div>
 
       {/* Items */}
