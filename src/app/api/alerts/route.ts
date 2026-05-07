@@ -7,16 +7,21 @@ const supabase = createClient(
 )
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL = 'MOS Alerts <onboarding@resend.dev>'
+const ADMIN_EMAIL = 'nitin.nagpall@gmail.com'
 
 async function sendEmail(to: string[], subject: string, html: string) {
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'api-key': RESEND_API_KEY || '',
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ from: FROM_EMAIL, to, subject, html })
+    body: JSON.stringify({
+      sender: { name: 'Mayur MOS', email: 'nitin.nagpall@gmail.com' },
+      to: to.map(email => ({ email })),
+      subject,
+      htmlContent: html
+    })
   })
   return res.json()
 }
@@ -103,9 +108,7 @@ export async function POST(req: Request) {
       <a href="https://mayur-mos.vercel.app" style="background:#1F3864;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">MOS Dashboard Kholo →</a>
     `
 
-    const emails = adminEmails.length > 0 ? adminEmails : allEmails
-    if (emails.length === 0) return NextResponse.json({ success: false, msg: 'No emails found!' })
-
+    const emails = [ADMIN_EMAIL]
     await sendEmail(emails, `MOS Daily Report — ${today}`, emailTemplate('📊 Daily Production Report', body))
     return NextResponse.json({ success: true, msg: `Daily report sent to ${emails.length} people!`, emails })
   }
