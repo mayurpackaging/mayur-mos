@@ -7,7 +7,7 @@ const supabase = createClient(
 )
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-const ADMIN_EMAIL = 'nitin.nagpall@gmail.com'
+const ADMIN_EMAIL = 'mayurshreeja@gmail.com'
 
 async function sendEmail(to: string[], subject: string, html: string) {
   const res = await fetch('https://api.resend.com/emails', {
