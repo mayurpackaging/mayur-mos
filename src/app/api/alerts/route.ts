@@ -6,71 +6,24 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const GMAIL_USER = 'nitin.nagpall@gmail.com'
-const GMAIL_PASS = process.env.GMAIL_APP_PASSWORD || ''
+const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
 const ADMIN_EMAIL = 'nitin.nagpall@gmail.com'
 
 async function sendEmail(to: string[], subject: string, html: string) {
-  // Using Gmail SMTP via fetch to a relay
-  const emailData = {
-    from: `Mayur MOS <${GMAIL_USER}>`,
-    to: to.join(','),
-    subject,
-    html
-  }
-
-  // Use Nodemailer-compatible approach via edge-compatible SMTP
-  const boundary = `boundary_${Date.now()}`
-  const rawEmail = [
-    `From: Mayur MOS <${GMAIL_USER}>`,
-    `To: ${to.join(', ')}`,
-    `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=UTF-8`,
-    ``,
-    html
-  ].join('\r\n')
-
-  // Base64 encode
-  const encodedEmail = Buffer.from(rawEmail).toString('base64').replace(/\+/g, '-').replace(/\//g, '_')
-
-  // Use Gmail API
-  const token = await getGmailToken()
-  if (!token) return { error: 'No token' }
-
-  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/send`, {
+  const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ raw: encodedEmail })
-  })
-  return res.json()
-}
-
-async function getGmailToken() {
-  // Use Brevo as fallback - it's already configured
-  return null
-}
-
-// Actually use Brevo which is already set up
-async function sendEmailBrevo(to: string[], subject: string, html: string) {
-  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'api-key': process.env.RESEND_API_KEY || '',
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      sender: { name: 'Mayur MOS', email: 'nitin.nagpall@gmail.com' },
-      to: to.map(email => ({ email })),
+      from: 'onboarding@resend.dev',
+      to: [ADMIN_EMAIL], // Resend free plan - only to verified email
       subject,
-      htmlContent: html
+      html
     })
   })
-  const data = await res.json()
-  return data
+  return res.json()
 }
 
 function emailTemplate(title: string, body: string, color: string = '#1F3864') {
@@ -95,17 +48,6 @@ export async function POST(req: Request) {
   const body = await req.json()
   const { type } = body
   const today = new Date().toISOString().split('T')[0]
-
-  // Get all emails from users table
-  const { data: users } = await supabase
-    .from('users')
-    .select('username, full_name, role, email')
-    .neq('email', '')
-    .eq('status', 'Active')
-
-  const allEmails = (users||[]).filter(u=>u.email).map(u=>u.email)
-  const adminEmails = (users||[]).filter(u=>['Admin','Plant Head'].includes(u.role)&&u.email).map(u=>u.email)
-  const maintenanceEmails = (users||[]).filter(u=>['Maintenance','Maintenance Foreman'].includes(u.role)&&u.email).map(u=>u.email)
 
   if (type === 'daily_report') {
     const { data: prod } = await supabase.from('production').select('plant,good_parts,rejection,shift').eq('date', today)
@@ -134,11 +76,9 @@ export async function POST(req: Request) {
       <br><a href="https://mayur-mos.vercel.app" style="background:#1F3864;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">MOS Dashboard Kholo →</a>
     `
 
-    const emails = adminEmails.length>0 ? adminEmails : [ADMIN_EMAIL]
-    const result = await sendEmailBrevo(emails, `MOS Daily Report — ${today}`, emailTemplate('📊 Daily Production Report', htmlBody))
-    
-    if (result.messageId || result.code === 'success') {
-      return NextResponse.json({ success: true, msg: `Daily report sent to ${emails.length} people!`, emails })
+    const result = await sendEmail([ADMIN_EMAIL], `MOS Daily Report — ${today}`, emailTemplate('📊 Daily Production Report', htmlBody))
+    if (result.id) {
+      return NextResponse.json({ success: true, msg: `Daily report sent to ${ADMIN_EMAIL}!` })
     } else {
       return NextResponse.json({ success: false, msg: `Error: ${JSON.stringify(result)}` })
     }
@@ -147,19 +87,15 @@ export async function POST(req: Request) {
   if (type === 'pm_overdue_alert') {
     const { data: overdueMoulds } = await supabase.from('mould_master').select('mould_name,plant,current_shots,next_pm_at_shots').eq('status','OVERDUE')
     if (!overdueMoulds?.length) return NextResponse.json({ success: true, msg: 'Koi PM overdue nahi!' })
-
-    const rows = overdueMoulds.map(m=>`<tr><td style="padding:8px;border:1px solid #E0E0E0;font-weight:bold">${m.mould_name}</td><td style="padding:8px;border:1px solid #E0E0E0">${m.plant}</td><td style="padding:8px;border:1px solid #E0E0E0;color:#C00000">${(m.current_shots||0).toLocaleString()}</td></tr>`).join('')
-    const htmlBody = `<p style="color:#C00000;font-weight:bold">${overdueMoulds.length} moulds ka PM overdue hai!</p><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#1F3864;color:#fff"><th style="padding:8px;text-align:left">Mould</th><th style="padding:8px;text-align:left">Plant</th><th style="padding:8px;text-align:left">Current Shots</th></tr></thead><tbody>${rows}</tbody></table>`
-    
-    const emails = [...maintenanceEmails,...adminEmails].filter((v,i,a)=>a.indexOf(v)===i)
-    const result = await sendEmailBrevo(emails.length>0?emails:[ADMIN_EMAIL], `⚙️ PM Overdue — ${overdueMoulds.length} Moulds`, emailTemplate('Mould PM Overdue!', htmlBody, '#854F0B'))
-    return NextResponse.json({ success: true, msg: `PM alert sent!` })
+    const rows = overdueMoulds.map(m=>`<tr><td style="padding:8px;border:1px solid #E0E0E0">${m.mould_name}</td><td style="padding:8px;border:1px solid #E0E0E0">${m.plant}</td><td style="padding:8px;border:1px solid #E0E0E0;color:#C00000">${(m.current_shots||0).toLocaleString()} shots</td></tr>`).join('')
+    const htmlBody = `<p style="color:#C00000;font-weight:bold">${overdueMoulds.length} moulds PM overdue!</p><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#1F3864;color:#fff"><th style="padding:8px;text-align:left">Mould</th><th style="padding:8px;text-align:left">Plant</th><th style="padding:8px;text-align:left">Shots</th></tr></thead><tbody>${rows}</tbody></table>`
+    const result = await sendEmail([ADMIN_EMAIL], `⚙️ PM Overdue — ${overdueMoulds.length} Moulds`, emailTemplate('Mould PM Overdue!', htmlBody, '#854F0B'))
+    return NextResponse.json({ success: result.id?true:false, msg: result.id?'PM alert sent!':JSON.stringify(result) })
   }
 
   if (type === 'breakdown_alert') {
-    const { plant, machine, problem, operator, bdId } = body
+    const { plant, machine, problem, operator } = body
     const htmlBody = `
-      <div style="background:#FFEBEE;border:2px solid #C00000;border-radius:8px;padding:16px;margin-bottom:16px"><h3 style="color:#C00000;margin:0">🚨 Machine Breakdown!</h3></div>
       <table style="width:100%;border-collapse:collapse">
         <tr><td style="padding:8px;font-weight:bold;border:1px solid #E0E0E0">Plant</td><td style="padding:8px;border:1px solid #E0E0E0">${plant}</td></tr>
         <tr style="background:#F5F5F5"><td style="padding:8px;font-weight:bold;border:1px solid #E0E0E0">Machine</td><td style="padding:8px;border:1px solid #E0E0E0">${machine}</td></tr>
@@ -168,20 +104,17 @@ export async function POST(req: Request) {
         <tr><td style="padding:8px;font-weight:bold;border:1px solid #E0E0E0">Time</td><td style="padding:8px;border:1px solid #E0E0E0">${new Date().toLocaleTimeString('en-IN')}</td></tr>
       </table>
     `
-    const emails = [...maintenanceEmails,...adminEmails].filter((v,i,a)=>a.indexOf(v)===i)
-    await sendEmailBrevo(emails.length>0?emails:[ADMIN_EMAIL], `🚨 Breakdown — ${plant} ${machine}`, emailTemplate('Breakdown Alert!', htmlBody, '#C00000'))
-    return NextResponse.json({ success: true, msg: `Breakdown alert sent!` })
+    const result = await sendEmail([ADMIN_EMAIL], `🚨 Breakdown — ${plant} ${machine}`, emailTemplate('Breakdown Alert!', htmlBody, '#C00000'))
+    return NextResponse.json({ success: result.id?true:false, msg: result.id?'Breakdown alert sent!':JSON.stringify(result) })
   }
 
   if (type === 'stock_alert') {
     const { data: criticalItems } = await supabase.from('ims_stock').select('item_name,stock_cartons').eq('date', today).lte('stock_cartons', 10)
     if (!criticalItems?.length) return NextResponse.json({ success: true, msg: 'Koi critical stock nahi!' })
-
-    const rows = criticalItems.map(i=>`<tr><td style="padding:8px;border:1px solid #E0E0E0;font-weight:bold">${i.item_name}</td><td style="padding:8px;border:1px solid #E0E0E0;color:#C00000;font-weight:bold">${i.stock_cartons} Ctn</td></tr>`).join('')
+    const rows = criticalItems.map(i=>`<tr><td style="padding:8px;border:1px solid #E0E0E0">${i.item_name}</td><td style="padding:8px;border:1px solid #E0E0E0;color:#C00000">${i.stock_cartons} Ctn</td></tr>`).join('')
     const htmlBody = `<p style="color:#C00000;font-weight:bold">${criticalItems.length} items critical!</p><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#C00000;color:#fff"><th style="padding:8px;text-align:left">Item</th><th style="padding:8px;text-align:left">Stock</th></tr></thead><tbody>${rows}</tbody></table>`
-    
-    await sendEmailBrevo(adminEmails.length>0?adminEmails:[ADMIN_EMAIL], `📦 Stock Alert — ${criticalItems.length} Items`, emailTemplate('Stock Critical!', htmlBody, '#C00000'))
-    return NextResponse.json({ success: true, msg: `Stock alert sent!` })
+    const result = await sendEmail([ADMIN_EMAIL], `📦 Stock Alert — ${criticalItems.length} Items`, emailTemplate('Stock Critical!', htmlBody, '#C00000'))
+    return NextResponse.json({ success: result.id?true:false, msg: result.id?'Stock alert sent!':JSON.stringify(result) })
   }
 
   return NextResponse.json({ success: false, msg: 'Unknown type' })
