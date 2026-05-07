@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   }
 
   if (module === 'production') {
-    let q = supabase.from('production').select('*').gte('date', from).lte('date', to).order('date', { ascending: false })
+    let q = supabase.from('production').select('*').gte('date', from).lte('date', to).order('date', { ascending: false }).limit(1000)
     if (plant) q = q.eq('plant', plant)
     const { data, error } = await q
     if (error) return NextResponse.json({ success: false, msg: error.message })
@@ -41,7 +41,7 @@ export async function GET(req: Request) {
       byDate[r.date].good += r.good_parts || 0
       byDate[r.date].rej += r.rejection || 0
       byDate[r.date].down += r.downtime || 0
-      byDate[r.date].entries++
+      byDate[r.date].entries += 1
     })
     return NextResponse.json({ success: true, data: data || [], summary: { totalGood, totalRej, totalDown, avgEff, entries: data?.length || 0 }, byDate: Object.values(byDate).sort((a: any, b: any) => b.date.localeCompare(a.date)) })
   }
