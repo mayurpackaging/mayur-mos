@@ -32,28 +32,7 @@ export async function POST(req: Request) {
   const cavities = parseFloat(d.cavities) || 0
   const shotsThisShift = cavities > 0 ? Math.round((totalGood + totalRej) / cavities) : 0
 
-  // Check for duplicate slot entries
-  if (d.machine && slots.length > 0) {
-    const { data: existing } = await supabase
-      .from('production')
-      .select('id, production_slots(slot_name)')
-      .eq('date', d.date || today)
-      .eq('machine', d.machine)
-
-    const existingSlots = (existing || []).flatMap((r: any) =>
-      (r.production_slots || []).map((s: any) => s.slot_name)
-    )
-
-    const duplicateSlots = slots.filter((s: any) => existingSlots.includes(s.slot))
-    if (duplicateSlots.length > 0 && !d.forceOverride) {
-      return NextResponse.json({
-        success: false,
-        isDuplicate: true,
-        msg: `${duplicateSlots.map((s: any) => s.slot).join(', ')} — in slots ki entry already ho chuki hai!`,
-        duplicateSlots: duplicateSlots.map((s: any) => s.slot)
-      })
-    }
-  }
+  // No duplicate blocking - just warn on frontend
 
   const { data: prod, error } = await supabase.from('production').insert({
     date: d.date || today,
