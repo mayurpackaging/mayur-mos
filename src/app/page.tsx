@@ -952,7 +952,21 @@ function ProductionTab({user}:{user:User}) {
 
         {/* Slots */}
         {isRunning&&<div style={{background:'#F8F9FF',border:'1px solid #E0E8FF',borderRadius:8,padding:10,marginTop:8}}>
-          <div style={{fontWeight:700,fontSize:12,color:'#1F3864',marginBottom:8}}>Slot-wise Production</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#1F3864'}}>Slot-wise Production</div>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap' as const}}>
+              {prod.slots.map((_:any,si:number)=>(
+                <button key={si} onClick={()=>{
+                  const el=document.getElementById(`slot-${prod.id}-${si}`)
+                  el?.scrollIntoView({behavior:'smooth',block:'center'})
+                  el?.classList.add('highlight-slot')
+                  setTimeout(()=>el?.classList.remove('highlight-slot'),2000)
+                }} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:'1px solid #1F3864',borderRadius:999,background:'#1F3864',color:'#fff',cursor:'pointer'}}>
+                  {(machForm.shift==='night'?NIGHT_SLOTS:DAY_SLOTS)[si]?.split('(')[0]||`Slot ${si+1}`}
+                </button>
+              ))}
+            </div>
+          </div>
           {/* Summary */}
           <div style={{background:'#1F3864',borderRadius:6,padding:'6px 10px',marginBottom:8,display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,textAlign:'center'}}>
             <div><div style={{fontSize:9,color:'#90A8C8'}}>Good Parts</div><div style={{fontSize:13,fontWeight:700,color:'#4CAF50'}}>{Math.round(totalGood).toLocaleString()}</div></div>
@@ -964,7 +978,7 @@ function ProductionTab({user}:{user:User}) {
             const slotProj=proj
             const eff=calcEff(slot.good,slotProj)
             const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
-            return <div key={si} style={{background:'#fff',border:'1px solid #E0E8FF',borderRadius:6,padding:'8px 10px',marginBottom:6}}>
+            return <div key={si} id={`slot-${prod.id}-${si}`} style={{background:'#fff',border:'1px solid #E0E8FF',borderRadius:6,padding:'8px 10px',marginBottom:6}}>
               <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
                 <span style={{fontWeight:700,fontSize:11,color:'#1F3864'}}>{slot.slot}</span>
                 <span style={{background:'#1F3864',color:'#FFD966',padding:'2px 8px',borderRadius:999,fontSize:9}}>Proj: {slotProj>0?slotProj.toLocaleString():'--'}</span>
