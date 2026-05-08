@@ -4126,8 +4126,25 @@ function BulkProductionTab({user}:{user:User}) {
   const [machineSetup,setMachineSetup]=useState<any[]>([])
   const [setupLoaded,setSetupLoaded]=useState(false)
   
-  // Slot entries
+  // Slot entries - each machine can have multiple rows (mould change)
   const [entries,setEntries]=useState<any[]>([])
+  
+  const addMouldChange=(machine:string)=>{
+    const existing=entries.find(e=>e.machine===machine)
+    setEntries(prev=>[...prev,{
+      machine,product:'',mould:'',cavities:existing?.cavities||'',
+      cycleTime:existing?.cycleTime||'',operator:existing?.operator||'',
+      operator2:existing?.operator2||'',good:'',rejection:'',down:'',
+      remarks:'',status:'running',stopReason:'',editId:null,isMC:true
+    }])
+  }
+  
+  const removeMCRow=(machine:string,idx:number)=>{
+    const machineRows=entries.filter(e=>e.machine===machine)
+    if(machineRows.length<=1) return
+    const globalIdx=entries.indexOf(machineRows[idx])
+    setEntries(prev=>prev.filter((_,i)=>i!==globalIdx))
+  }
   
   // Today's production history
   const [history,setHistory]=useState<any[]>([])
@@ -4188,8 +4205,20 @@ function BulkProductionTab({user}:{user:User}) {
     setEntries(prev=>prev.map(e=>e.machine===machine?{...e,[field==='cycle_time'?'cycleTime':field]:val}:e))
   }
 
-  const updateEntry=(machine:string,field:string,val:string)=>{
-    setEntries(prev=>prev.map(e=>e.machine===machine?{...e,[field]:val}:e))
+  const updateEntry=(machine:string,field:string,val:string,rowIdx:number=0)=>{
+    setEntries(prev=>{
+      const machineRows=prev.filter(e=>e.machine===machine)
+      const targetEntry=machineRows[rowIdx]
+      if(!targetEntry) return prev
+      const globalIdx=prev.indexOf(targetEntry)
+      const newEntries=[...prev]
+      newEntries[globalIdx]={...newEntries[globalIdx],[field]:val}
+      if(field==='product'){
+        const mould=PRODUCT_MOULD_MAP[val]||''
+        if(mould) newEntries[globalIdx].mould=mould
+      }
+      return newEntries
+    })
   }
 
   const saveSetup=async()=>{
@@ -4384,8 +4413,14 @@ function BulkProductionTab({user}:{user:User}) {
               const eff=calcEff(e.good,proj)
               const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
               const isRunning=e.status==='running'
-              return <tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
-                <td style={{padding:'5px 6px',fontWeight:700,color:'#1F3864',textAlign:'center',whiteSpace:'nowrap' as const}}>{e.machine}</td>
+              const machineRows=entries.filter(x=>x.machine===e.machine)
+              const machineRowIdx=machineRows.indexOf(e)
+              const isFirstRow=machineRowIdx===0
+              const totalMachineRows=machineRows.length
+              return <tr key={i} style={{background:e.isMC?'#FFF9E6':i%2===0?'#F8F9FF':'#fff',borderTop:e.isMC?'2px dashed #854F0B':'none'}}>
+                <td style={{padding:'5px 6px',fontWeight:700,color:e.isMC?'#854F0B':'#1F3864',textAlign:'center',whiteSpace:'nowrap' as const}}>
+                  {e.isMC?<span>↳ {e.machine}<br/><span style={{fontSize:9,color:'#854F0B'}}>MC</span></span>:e.machine}
+                </td>
                 <td style={{padding:2,fontSize:10,maxWidth:100}}>
                   <select style={{width:'100%',padding:'3px',border:'1px solid #E0E0E0',borderRadius:4,fontSize:10}} value={e.product||''} onChange={ev=>{const mould=PRODUCT_MOULD_MAP[ev.target.value]||'';updateEntry(e.machine,'product',ev.target.value);if(mould)updateEntry(e.machine,'mould',mould)}}>
                     <option value="">--</option>{items.map(it=><option key={it.name}>{it.name}</option>)}
@@ -4413,15 +4448,19 @@ function BulkProductionTab({user}:{user:User}) {
                   {eff>0?eff+'%':'--'}
                 </td>
                 <td style={{padding:2}}>
-                  <select style={{width:'100%',padding:'3px',border:'1px solid #E0E0E0',borderRadius:4,fontSize:10,background:!isRunning?'#FFEBEE':'#fff'}}
-                    value={e.status||'running'} onChange={ev=>updateEntry(e.machine,'status',ev.target.value)}>
-                    <option value="running">Running</option>
-                    <option value="noplan">No Plan</option>
-                    <option value="breakdown">Breakdown</option>
-                    <option value="mouldchange">Mould Change</option>
-                    <option value="maintenance">Maintenance</option>
-                    <option value="powercut">Power Cut</option>
-                  </select>
+                  <div style={{display:'flex',flexDirection:'column' as const,gap:3}}>
+                    <select style={{width:'100%',padding:'3px',border:'1px solid #E0E0E0',borderRadius:4,fontSize:10,background:!isRunning?'#FFEBEE':'#fff'}}
+                      value={e.status||'running'} onChange={ev=>updateEntry(e.machine,'status',ev.target.value)}>
+                      <option value="running">Running</option>
+                      <option value="noplan">No Plan</option>
+                      <option value="breakdown">Breakdown</option>
+                      <option value="mouldchange">Mould Change</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="powercut">Power Cut</option>
+                    </select>
+                    {isFirstRow&&<button onClick={()=>addMouldChange(e.machine)} style={{background:'#854F0B',color:'#fff',border:'none',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer',fontWeight:700}}>+ MC</button>}
+                    {e.isMC&&<button onClick={()=>removeMCRow(e.machine,machineRowIdx)} style={{background:'#FFEBEE',color:'#C00000',border:'1px solid #C00000',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer'}}>✕ Remove</button>}
+                  </div>
                 </td>
               </tr>
             })}</tbody>
