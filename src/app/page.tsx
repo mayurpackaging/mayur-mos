@@ -14,7 +14,7 @@ const ML: Record<string, string> = {
 const MACH: Record<string, string[]> = {
   "Plant 477": ["M1-Sumitomo 180T","M2-Sumitomo 180T","M3-Sumitomo 180T","M4-Sumitomo 280T","M5-JSW 180T","M6-Sumitomo 180T"],
   "Plant 488": ["M1-Sumitomo 180T","M2-Sumitomo 180T","M3-JSW 350T","M4-Sumitomo 180T","M5-Sumitomo 350T","M6-JSW 350T","M7-JSW 350T"],
-  "Plant 433": ["M1-Milacron 200T","M2-Milacron 200T"]
+  "Plant 433": ["M1-Milacron N200T","M2-Milacron N200T"]
 }
 
 const OPS = ["Dayanand","Alok Kumar","Satyanand","Uday","Sudarshan","Rahul","Pintoo","Parveen","Rahul Singh","Deepak","Karan","Ankush"]
@@ -3622,3 +3622,4 @@ function MISAlertsSection() {
     </div>
   </div>
 }
+
