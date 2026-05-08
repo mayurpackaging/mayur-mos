@@ -272,6 +272,127 @@ export default function MOS() {
   )
 }
 
+
+// ─── Rejection Comparison Component ──────────────────────────
+function RejectionComparison({from,to,plant}:{from:string,to:string,plant:string}) {
+  const [data,setData]=useState<any[]>([])
+  const [loading,setLoading]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+
+  const load=async()=>{
+    setLoading(true)
+    // Get production rejection data
+    const [prodRes,rejRes]=await Promise.all([
+      fetch(`/api/reports?module=production&from=${from}&to=${to}${plant?`&plant=${plant}`:''}`).then(r=>r.json()),
+      fetch(`/api/reports?module=rejection&from=${from}&to=${to}${plant?`&plant=${plant}`:''}`).then(r=>r.json())
+    ])
+
+    const prodData=prodRes.data||[]
+    const rejData=rejRes.data||[]
+
+    // Group production by date+machine+product
+    const prodMap:Record<string,any>={}
+    prodData.forEach((r:any)=>{
+      const key=`${r.date}||${r.machine}||${r.product}`
+      if(!prodMap[key]) prodMap[key]={date:r.date,machine:r.machine,product:r.product,plant:r.plant,operatorRej:0,shift:r.shift}
+      prodMap[key].operatorRej+=(r.rejection||0)
+    })
+
+    // Group rejection by date+machine+product
+    const rejMap:Record<string,any>={}
+    rejData.forEach((r:any)=>{
+      const key=`${r.date}||${r.machine}||${r.product}`
+      if(!rejMap[key]) rejMap[key]={date:r.date,machine:r.machine,product:r.product,plant:r.plant,qcRej:0,reason:r.reason}
+      rejMap[key].qcRej+=(r.rejection_qty||0)
+    })
+
+    // Merge and compare
+    const allKeys=new Set([...Object.keys(prodMap),...Object.keys(rejMap)])
+    const comparison=Array.from(allKeys).map(key=>{
+      const prod=prodMap[key]||{}
+      const rej=rejMap[key]||{}
+      const operatorRej=prod.operatorRej||0
+      const qcRej=rej.qcRej||0
+      const diff=Math.abs(qcRej-operatorRej)
+      const diffPct=operatorRej>0?Math.round(diff/operatorRej*100):qcRej>0?100:0
+      const isAlert=diff>50&&diffPct>10
+      const isWarning=diff>5&&diffPct>5&&!isAlert
+      return {
+        date:prod.date||rej.date,
+        machine:prod.machine||rej.machine,
+        product:prod.product||rej.product,
+        plant:prod.plant||rej.plant,
+        shift:prod.shift||'--',
+        operatorRej,qcRej,diff,diffPct,isAlert,isWarning,
+        reason:rej.reason||'--'
+      }
+    }).sort((a,b)=>b.diff-a.diff)
+
+    setData(comparison)
+    setLoading(false)
+  }
+
+  const alerts=data.filter(d=>d.isAlert)
+  const warnings=data.filter(d=>d.isWarning)
+  const ok=data.filter(d=>!d.isAlert&&!d.isWarning)
+
+  return <div>
+    {/* Summary */}
+    {data.length>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+      <div style={{...S.met,background:'#FFEBEE',border:'1px solid #C00000'}}>
+        <div style={{fontSize:10,color:'#C00000',fontWeight:600}}>🚨 Alert (>10% & >50pcs)</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#C00000'}}>{alerts.length}</div>
+      </div>
+      <div style={{...S.met,background:'#FFF3E0',border:'1px solid #FF9800'}}>
+        <div style={{fontSize:10,color:'#E65100',fontWeight:600}}>⚠️ Warning (>5%)</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#E65100'}}>{warnings.length}</div>
+      </div>
+      <div style={{...S.met,background:'#E8F5E9',border:'1px solid #276221'}}>
+        <div style={{fontSize:10,color:'#276221',fontWeight:600}}>✅ OK (≤5pcs)</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#276221'}}>{ok.length}</div>
+      </div>
+    </div>}
+
+    <button style={S.sb} onClick={load} disabled={loading}>
+      {loading?'Loading...':'🔍 Cross-Check Rejection Data'}
+    </button>
+
+    {data.length>0&&<div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:10}}>🔍 Operator vs QC Rejection Comparison</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            {['Date','Machine','Product','Shift','Operator Rej','QC Actual Rej','Difference','Diff %','Status'].map(h=>
+              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{data.map((r:any,i:number)=>{
+            const bg=r.isAlert?'#FFEBEE':r.isWarning?'#FFF3E0':'#fff'
+            const col=r.isAlert?'#C00000':r.isWarning?'#E65100':'#276221'
+            return <tr key={i} style={{background:bg}}>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.date}</td>
+              <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{r.machine}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.product}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.shift?.includes('Day')?'☀️':'🌙'}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#854F0B'}}>{r.operatorRej.toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#1F3864'}}>{r.qcRej.toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>{r.diff>0?'+':''}{(r.qcRej-r.operatorRej).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>{r.diffPct}%</td>
+              <td style={{padding:'6px 8px'}}>
+                <span style={{background:r.isAlert?'#C00000':r.isWarning?'#FF9800':'#276221',color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>
+                  {r.isAlert?'🚨 ALERT':r.isWarning?'⚠️ WARNING':'✅ OK'}
+                </span>
+              </td>
+            </tr>
+          })}</tbody>
+        </table>
+      </div>
+      <div style={{marginTop:8,fontSize:11,color:'#666',background:'#F5F5F5',padding:'8px 12px',borderRadius:6}}>
+        📋 Rule: Difference &gt; 50 pcs AND &gt; 10% → 🚨 Alert | Difference &gt; 5 pcs AND &gt; 5% → ⚠️ Warning
+      </div>
+    </div>}
+  </div>
+}
+
 function MISTab() {
   const [data,setData]=useState<any>(null)
   const [loading,setLoading]=useState(true)
