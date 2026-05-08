@@ -4615,11 +4615,20 @@ function BulkProductionTab({user}:{user:User}) {
                     {e.isMC&&<button onClick={()=>removeMCRow(e.machine,machineRowIdx)} style={{background:'#FFEBEE',color:'#C00000',border:'1px solid #C00000',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer'}}>✕ Remove</button>}
                   </div>
                 </td>
+                <td style={{padding:2}}>
+                  <input value={e.remarks||''} 
+                    onChange={ev=>{
+                      const idx=entries.indexOf(e)
+                      setEntries(prev=>{const n=[...prev];n[idx]={...n[idx],remarks:ev.target.value};return n})
+                    }}
+                    placeholder="Remarks..." 
+                    style={{width:100,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,fontSize:10,background:'#FFFFF0'}}/>
+                </td>
               </tr>
             })}</tbody>
             {/* Summary row */}
             <tfoot><tr style={{background:'#1F3864'}}>
-              <td colSpan={6} style={{padding:'6px 8px',color:'#FFD966',fontWeight:700}}>TOTAL</td>
+              <td colSpan={7} style={{padding:'6px 8px',color:'#FFD966',fontWeight:700}}>TOTAL</td>
               <td style={{padding:'6px 5px',color:'#4CAF50',fontWeight:700,textAlign:'center',fontSize:13}}>
                 {entries.reduce((a,e)=>a+(parseFloat(e.good)||0),0).toLocaleString()}
               </td>
