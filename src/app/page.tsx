@@ -8,7 +8,7 @@ const ML: Record<string, string> = {
   quality:"Quality", rejection:"Rejection", mouldchange:"Mould Change",
   dispatch:"Dispatch", batch:"Batch", sales:"Sales", spares:"Spares",
   mouldpm:"Mould PM", breakdown:"Breakdown", maintenance:"Maintenance",
-  reports:"Reports", users:"Users", performance:"Performance"
+  bulkproduction:"Bulk Production", reports:"Reports", users:"Users", performance:"Performance"
 }
 
 const MACH: Record<string, string[]> = {
@@ -263,7 +263,8 @@ export default function MOS() {
         {tab==='users'&&<UsersTab user={user}/>}
         {tab==='performance'&&<PerformanceTab user={user}/>}
         {tab==='maintenance'&&<MaintenanceTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance'].includes(tab)&&(
+        {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -4103,6 +4104,397 @@ function MaintenanceTab({user}:{user:User}) {
 
     {!machine&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32}}>
       Plant aur Machine select karo — checklist load hogi! 👆
+    </div>}
+  </div>
+}
+
+// ─── Bulk Production Tab ──────────────────────────────────────
+function BulkProductionTab({user}:{user:User}) {
+  const [items,setItems]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [activeView,setActiveView]=useState<'setup'|'entry'|'history'>('entry')
+  
+  // Common fields
+  const [date,setDate]=useState(nd())
+  const [shift,setShift]=useState('day')
+  const [plant,setPlant]=useState('')
+  const [slot,setSlot]=useState('8am-11am')
+  
+  // Machine setup for today
+  const [machineSetup,setMachineSetup]=useState<any[]>([])
+  const [setupLoaded,setSetupLoaded]=useState(false)
+  
+  // Slot entries
+  const [entries,setEntries]=useState<any[]>([])
+  
+  // Today's production history
+  const [history,setHistory]=useState<any[]>([])
+  const [editingId,setEditingId]=useState<string|null>(null)
+  const [editVals,setEditVals]=useState<any>({})
+
+  useEffect(()=>{
+    fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})
+  },[])
+
+  const machines=MACH[plant]||[]
+
+  // Load setup when plant/date changes
+  const loadSetup=async(p:string,d:string)=>{
+    if(!p||!d) return
+    const res=await fetch(`/api/machine-setup?date=${d}&plant=${p}`).then(r=>r.json())
+    const setup=res.setup||[]
+    
+    if(setup.length>0){
+      setMachineSetup(setup)
+      setSetupLoaded(true)
+      // Init entries from setup
+      setEntries(MACH[p]?.map(m=>{
+        const s=setup.find((x:any)=>x.machine===m&&x.valid_from_slot===slot)||setup.find((x:any)=>x.machine===m)
+        return {machine:m,product:s?.product||'',mould:s?.mould||'',cavities:s?.cavities||'',cycleTime:s?.cycle_time||'',operator:s?.operator||'',operator2:s?.operator2||'',good:'',rejection:'',down:'',remarks:'',status:'running',stopReason:'',editId:null}
+      })||[])
+    } else {
+      setSetupLoaded(false)
+      setMachineSetup(MACH[p]?.map(m=>({machine:m,product:'',mould:'',cavities:'',cycleTime:'',operator:'',operator2:'',validFromSlot:'8am-11am'}))||[])
+      setEntries(MACH[p]?.map(m=>({machine:m,product:'',mould:'',cavities:'',cycleTime:'',operator:'',operator2:'',good:'',rejection:'',down:'',remarks:'',status:'running',stopReason:'',editId:null}))||[])
+    }
+  }
+
+  // Load today's history
+  const loadHistory=async()=>{
+    if(!plant||!date) return
+    const res=await fetch(`/api/production?date=${date}&plant=${encodeURIComponent(plant)}`).then(r=>r.json())
+    setHistory(res.data||[])
+  }
+
+  useEffect(()=>{
+    if(plant&&date){loadSetup(plant,date);loadHistory()}
+  },[plant,date])
+
+  // Update slot in entries when slot changes
+  useEffect(()=>{
+    if(setupLoaded&&plant){
+      setEntries(prev=>prev.map(e=>{
+        const s=machineSetup.find((x:any)=>x.machine===e.machine&&x.valid_from_slot===slot)||machineSetup.find((x:any)=>x.machine===e.machine)
+        return {...e,product:s?.product||e.product,mould:s?.mould||e.mould,cavities:s?.cavities||e.cavities,cycleTime:s?.cycle_time||e.cycleTime,good:'',rejection:'',down:'',remarks:'',editId:null}
+      }))
+    }
+  },[slot])
+
+  const updateSetup=(machine:string,field:string,val:string)=>{
+    setMachineSetup(prev=>prev.map(m=>m.machine===machine?{...m,[field]:val}:m))
+    // Also update entries
+    setEntries(prev=>prev.map(e=>e.machine===machine?{...e,[field==='cycle_time'?'cycleTime':field]:val}:e))
+  }
+
+  const updateEntry=(machine:string,field:string,val:string)=>{
+    setEntries(prev=>prev.map(e=>e.machine===machine?{...e,[field]:val}:e))
+  }
+
+  const saveSetup=async()=>{
+    if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/machine-setup',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'setup',date,plant,createdBy:user.name,machines:machineSetup.map(m=>({...m,validFromSlot:m.validFromSlot||'8am-11am'}))})
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success){setSetupLoaded(true);setActiveView('entry')}
+  }
+
+  const saveSlot=async()=>{
+    if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
+    const filledEntries=entries.filter(e=>e.good||e.rejection||e.down||e.status!=='running')
+    if(filledEntries.length===0){setToast({msg:'Koi data nahi bhara!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/machine-setup',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        type:'bulk_slot',date,
+        shift:shift==='night'?'Night (8pm-8am)':'Day (8am-8pm)',
+        plant,slot,enteredBy:user.name,entries:filledEntries
+      })
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success){
+      // Clear entries
+      setEntries(prev=>prev.map(e=>({...e,good:'',rejection:'',down:'',remarks:'',editId:null})))
+      loadHistory()
+    }
+  }
+
+  const startEdit=(prod:any)=>{
+    setEditingId(prod.id)
+    setEditVals({good:prod.good_parts,rejection:prod.rejection,down:prod.downtime,remarks:prod.remarks||''})
+  }
+
+  const saveEdit=async(prod:any)=>{
+    setSaving(true)
+    const res=await fetch('/api/machine-setup',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        type:'bulk_slot',date,
+        shift:prod.shift,plant,slot:prod.production_slots?.[0]?.slot_name||slot,
+        enteredBy:user.name,
+        entries:[{machine:prod.machine,product:prod.product,mould:prod.mould,cavities:prod.cavities,cycleTime:prod.cycle_time,operator:prod.operator,good:editVals.good,rejection:editVals.rejection,down:editVals.down,remarks:editVals.remarks,editId:prod.id}]
+      })
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.success?'Entry updated!':res.msg,ok:res.success})
+    if(res.success){setEditingId(null);loadHistory()}
+  }
+
+  const slotNames=shift==='night'?NIGHT_SLOTS:DAY_SLOTS
+  const calcProj=(cav:string,ct:string)=>{const c=parseFloat(cav||'0'),t=parseFloat(ct||'0');return c>0&&t>0?Math.floor((180*60)/t)*c:0}
+  const calcEff=(good:string,proj:number)=>{const g=parseFloat(good||'0');return proj>0&&g>0?Math.round(g/proj*100):0}
+
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  return <div>
+    {/* View tabs */}
+    <div style={{display:'flex',gap:6,marginBottom:8}}>
+      {[{id:'entry',label:'📝 Slot Entry'},{id:'setup',label:'⚙️ Machine Setup'},{id:'history',label:'📋 Today\'s History'}].map(v=>
+        <button key={v.id} onClick={()=>{setActiveView(v.id as any);if(v.id==='history')loadHistory()}}
+          style={{flex:1,padding:'8px',border:`2px solid #1F3864`,borderRadius:8,background:activeView===v.id?'#1F3864':'#fff',color:activeView===v.id?'#fff':'#1F3864',fontWeight:700,fontSize:12,cursor:'pointer'}}>
+          {v.label}
+        </button>
+      )}
+    </div>
+
+    {/* Common header */}
+    <div style={S.card}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
+        <div style={S.f}><label style={S.lbl}>Shift</label>
+          <select style={S.fi} value={shift} onChange={e=>setShift(e.target.value)}>
+            <option value="day">Day Shift (8am-8pm)</option>
+            <option value="night">Night Shift (8pm-8am)</option>
+          </select>
+        </div>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Plant</label>
+        <select style={S.fi} value={plant} onChange={e=>setPlant(e.target.value)}>
+          <option value="">Select Plant</option>
+          <option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+        </select>
+      </div>
+      {setupLoaded&&plant&&<div style={{background:'#E8F5E9',border:'1px solid #276221',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#276221',fontWeight:600,marginTop:6}}>
+        ✅ Aaj ka machine setup loaded! Slot entry karo.
+      </div>}
+      {!setupLoaded&&plant&&<div style={{background:'#FFF3E0',border:'1px solid #FF9800',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#E65100',fontWeight:600,marginTop:6}}>
+        ⚠️ Aaj ka setup nahi hai! Pehle ⚙️ Machine Setup karo.
+      </div>}
+    </div>
+
+    {/* MACHINE SETUP VIEW */}
+    {activeView==='setup'&&plant&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:14}}>⚙️ Aaj Ka Machine Setup — {date}</div>
+      <div style={{fontSize:11,color:'#666',marginBottom:10}}>Ek baar define karo — phir din bhar slot entry mein auto-fill hoga!</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            {['Machine','Product','Mould No.','Cavities','Cycle Time (sec)','Operator 1','Operator 2'].map(h=>
+              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'8px 6px',textAlign:'center',whiteSpace:'nowrap' as const}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{machineSetup.map((m:any,i:number)=>(
+            <tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
+              <td style={{padding:'6px 8px',fontWeight:700,color:'#1F3864',textAlign:'center'}}>{m.machine}</td>
+              <td style={{padding:3}}>
+                <select style={{width:'100%',padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11}}
+                  value={m.product||''} onChange={e=>{
+                    const mould=PRODUCT_MOULD_MAP[e.target.value]||''
+                    updateSetup(m.machine,'product',e.target.value)
+                    if(mould) updateSetup(m.machine,'mould',mould)
+                  }}>
+                  <option value="">-- Select --</option>
+                  {items.map(it=><option key={it.name}>{it.name}</option>)}
+                </select>
+              </td>
+              <td style={{padding:3}}>
+                <select style={{width:'100%',padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11,background:m.mould?'#E2EFDA':'#fff'}}
+                  value={m.mould||''} onChange={e=>updateSetup(m.machine,'mould',e.target.value)}>
+                  <option value="">-- Mould --</option>
+                  <optgroup label="Tub/Container">
+                    {MOULDS.filter(md=>!md.name.includes('Lid')&&!md.name.includes('Sipper')).map(md=><option key={md.code} value={md.code+' - '+md.name}>{md.code} - {md.name}</option>)}
+                  </optgroup>
+                  <optgroup label="Lid Moulds">
+                    {MOULDS.filter(md=>md.name.includes('Lid')||md.name.includes('Sipper')).map(md=><option key={md.code} value={md.code+' - '+md.name}>{md.code} - {md.name}</option>)}
+                  </optgroup>
+                </select>
+              </td>
+              <td style={{padding:3}}><input type="number" style={{width:60,padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600}} value={m.cavities||''} onChange={e=>updateSetup(m.machine,'cavities',e.target.value)} placeholder="4"/></td>
+              <td style={{padding:3}}><input type="number" style={{width:60,padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600}} value={m.cycle_time||''} onChange={e=>updateSetup(m.machine,'cycle_time',e.target.value)} placeholder="12"/></td>
+              <td style={{padding:3}}>
+                <select style={{width:'100%',padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11}} value={m.operator||''} onChange={e=>updateSetup(m.machine,'operator',e.target.value)}>
+                  <option value="">Select</option>{OPS.map(o=><option key={o}>{o}</option>)}
+                </select>
+              </td>
+              <td style={{padding:3}}>
+                <select style={{width:'100%',padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11}} value={m.operator2||''} onChange={e=>updateSetup(m.machine,'operator2',e.target.value)}>
+                  <option value="">None</option>{OPS.map(o=><option key={o}>{o}</option>)}
+                </select>
+              </td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <button style={{...S.sb,marginTop:12,background:'#276221'}} onClick={saveSetup} disabled={saving}>
+        {saving?'Saving...':'💾 Save Today\'s Machine Setup'}
+      </button>
+      {toast&&<Toast {...toast}/>}
+    </div>}
+
+    {/* SLOT ENTRY VIEW */}
+    {activeView==='entry'&&plant&&<div>
+      {/* Slot selector */}
+      <div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>⏰ Slot Select Karo</div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
+          {slotNames.map(s=>{
+            const isDone=history.some((h:any)=>h.plant===plant&&(h.production_slots||[]).some((ps:any)=>ps.slot_name===s))
+            return <button key={s} onClick={()=>setSlot(s)} style={{
+              padding:'8px 12px',border:`2px solid ${slot===s?'#1F3864':isDone?'#276221':'#E0E0E0'}`,
+              borderRadius:8,background:slot===s?'#1F3864':isDone?'#E8F5E9':'#fff',
+              color:slot===s?'#fff':isDone?'#276221':'#666',
+              fontWeight:700,fontSize:12,cursor:'pointer'
+            }}>{s.split('(')[0]}{isDone?' ✅':''}</button>
+          })}
+        </div>
+      </div>
+
+      {/* Bulk entry table */}
+      <div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:6,fontSize:14}}>
+          📝 {slot} — {plant} — {shift==='day'?'☀️ Day':'🌙 Night'} Shift
+        </div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Machine','Product','Mould','Cav','CT(s)','Proj','Good Parts','Rejection','Down(min)','Eff%','Status'].map(h=>
+                <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 5px',textAlign:'center',whiteSpace:'nowrap' as const,fontSize:10}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{entries.map((e:any,i:number)=>{
+              const proj=calcProj(e.cavities,e.cycleTime)
+              const eff=calcEff(e.good,proj)
+              const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
+              const isRunning=e.status==='running'
+              return <tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
+                <td style={{padding:'5px 6px',fontWeight:700,color:'#1F3864',textAlign:'center',whiteSpace:'nowrap' as const}}>{e.machine}</td>
+                <td style={{padding:2,fontSize:10,maxWidth:100}}>
+                  <select style={{width:'100%',padding:'3px',border:'1px solid #E0E0E0',borderRadius:4,fontSize:10}} value={e.product||''} onChange={ev=>{const mould=PRODUCT_MOULD_MAP[ev.target.value]||'';updateEntry(e.machine,'product',ev.target.value);if(mould)updateEntry(e.machine,'mould',mould)}}>
+                    <option value="">--</option>{items.map(it=><option key={it.name}>{it.name}</option>)}
+                  </select>
+                </td>
+                <td style={{padding:2,fontSize:10,color:'#666',maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>
+                  <span title={e.mould||''}>{e.mould?.split(' - ')[0]||'--'}</span>
+                </td>
+                <td style={{padding:'5px',textAlign:'center',fontWeight:600}}>{e.cavities||'--'}</td>
+                <td style={{padding:'5px',textAlign:'center',color:'#666'}}>{e.cycleTime||'--'}</td>
+                <td style={{padding:'5px',textAlign:'center',color:'#854F0B',fontWeight:600}}>{proj>0?proj.toLocaleString():'--'}</td>
+                <td style={{padding:2}}>
+                  <input type="number" min="0" value={e.good||''} onChange={ev=>updateEntry(e.machine,'good',ev.target.value)} disabled={!isRunning}
+                    style={{width:70,padding:'5px 3px',border:'2px solid #276221',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,background:isRunning?'#fff':'#F5F5F5'}} placeholder="0"/>
+                </td>
+                <td style={{padding:2}}>
+                  <input type="number" min="0" value={e.rejection||''} onChange={ev=>updateEntry(e.machine,'rejection',ev.target.value)} disabled={!isRunning}
+                    style={{width:60,padding:'5px 3px',border:'2px solid #C00000',borderRadius:6,textAlign:'center',fontSize:12,background:isRunning?'#fff':'#F5F5F5'}} placeholder="0"/>
+                </td>
+                <td style={{padding:2}}>
+                  <input type="number" min="0" value={e.down||''} onChange={ev=>updateEntry(e.machine,'down',ev.target.value)}
+                    style={{width:55,padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12}} placeholder="0"/>
+                </td>
+                <td style={{padding:'5px',textAlign:'center',fontWeight:700,color:eff>0?effCol:'#ccc',background:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':eff>0?'#FFEBEE':'transparent'}}>
+                  {eff>0?eff+'%':'--'}
+                </td>
+                <td style={{padding:2}}>
+                  <select style={{width:'100%',padding:'3px',border:'1px solid #E0E0E0',borderRadius:4,fontSize:10,background:!isRunning?'#FFEBEE':'#fff'}}
+                    value={e.status||'running'} onChange={ev=>updateEntry(e.machine,'status',ev.target.value)}>
+                    <option value="running">Running</option>
+                    <option value="noplan">No Plan</option>
+                    <option value="breakdown">Breakdown</option>
+                    <option value="mouldchange">Mould Change</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="powercut">Power Cut</option>
+                  </select>
+                </td>
+              </tr>
+            })}</tbody>
+            {/* Summary row */}
+            <tfoot><tr style={{background:'#1F3864'}}>
+              <td colSpan={6} style={{padding:'6px 8px',color:'#FFD966',fontWeight:700}}>TOTAL</td>
+              <td style={{padding:'6px 5px',color:'#4CAF50',fontWeight:700,textAlign:'center',fontSize:13}}>
+                {entries.reduce((a,e)=>a+(parseFloat(e.good)||0),0).toLocaleString()}
+              </td>
+              <td style={{padding:'6px 5px',color:'#FF5252',fontWeight:700,textAlign:'center',fontSize:13}}>
+                {entries.reduce((a,e)=>a+(parseFloat(e.rejection)||0),0).toLocaleString()}
+              </td>
+              <td style={{padding:'6px 5px',color:'#FF9800',fontWeight:700,textAlign:'center'}}>
+                {entries.reduce((a,e)=>a+(parseFloat(e.down)||0),0)}m
+              </td>
+              <td colSpan={2} style={{padding:'6px 5px',color:'#90A8C8',textAlign:'center'}}>
+                {entries.filter(e=>e.status==='running').length}/{entries.length} Running
+              </td>
+            </tr></tfoot>
+          </table>
+        </div>
+        <button style={{...S.sb,marginTop:12}} onClick={saveSlot} disabled={saving}>
+          {saving?'Saving...':`💾 Save ${slot} — ${entries.filter(e=>e.good||e.rejection||e.down).length} Machines`}
+        </button>
+        {toast&&<Toast {...toast}/>}
+      </div>
+    </div>}
+
+    {/* HISTORY VIEW with EDIT */}
+    {activeView==='history'&&plant&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:14}}>📋 Aaj Ki Entries — {date} — {plant}</div>
+      {history.length===0?<div style={{textAlign:'center',color:'#666',padding:24}}>Koi entry nahi aaj!</div>:
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            {['Machine','Shift','Product','Slot','Good','Rej','Down','By','Action'].map(h=>
+              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{history.map((h:any,i:number)=>{
+            const isEditing=editingId===h.id
+            const slotName=h.production_slots?.[0]?.slot_name||'--'
+            return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'6px 8px',fontWeight:700,color:'#1F3864'}}>{h.machine}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{h.shift?.includes('Day')?'☀️ Day':'🌙 Night'}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{h.product}</td>
+              <td style={{padding:'6px 8px'}}><span style={{background:'#E6F1FB',color:'#1F3864',padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:600}}>{slotName}</span></td>
+              {isEditing?<>
+                <td style={{padding:2}}><input type="number" value={editVals.good} onChange={e=>setEditVals((p:any)=>({...p,good:e.target.value}))} style={{width:70,padding:'4px',border:'2px solid #276221',borderRadius:4,textAlign:'center',fontSize:12,fontWeight:700}}/></td>
+                <td style={{padding:2}}><input type="number" value={editVals.rejection} onChange={e=>setEditVals((p:any)=>({...p,rejection:e.target.value}))} style={{width:60,padding:'4px',border:'2px solid #C00000',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
+                <td style={{padding:2}}><input type="number" value={editVals.down} onChange={e=>setEditVals((p:any)=>({...p,down:e.target.value}))} style={{width:55,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
+                <td style={{padding:'6px 8px',fontSize:10}}>{h.entered_by}</td>
+                <td style={{padding:4,display:'flex',gap:4}}>
+                  <button onClick={()=>saveEdit(h)} style={{background:'#276221',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',fontSize:10,cursor:'pointer',fontWeight:700}}>Save</button>
+                  <button onClick={()=>setEditingId(null)} style={{background:'#666',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',fontSize:10,cursor:'pointer'}}>Cancel</button>
+                </td>
+              </>:<>
+                <td style={{padding:'6px 8px',color:'#276221',fontWeight:700}}>{(h.good_parts||0).toLocaleString()}</td>
+                <td style={{padding:'6px 8px',color:'#C00000',fontWeight:700}}>{h.rejection||0}</td>
+                <td style={{padding:'6px 8px',color:'#854F0B'}}>{h.downtime||0}m</td>
+                <td style={{padding:'6px 8px',fontSize:10}}>{h.entered_by}</td>
+                <td style={{padding:4}}>
+                  <button onClick={()=>startEdit(h)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>✏️ Edit</button>
+                </td>
+              </>}
+            </tr>
+          })}</tbody>
+        </table>
+      </div>}
+      {toast&&<Toast {...toast}/>}
+    </div>}
+
+    {!plant&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32}}>
+      Plant select karo upar se! 👆
     </div>}
   </div>
 }
