@@ -4548,7 +4548,7 @@ function BulkProductionTab({user}:{user:User}) {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
             <thead><tr>
-              {['Machine','Product','Mould','Cav','CT(s)','Proj','Good Parts','Rejection','Down(min)','Eff%','Status'].map(h=>
+              {['Machine','Product','Mould','Cav','CT(s)','Proj','Good Parts','Rejection','Down(min)','Eff%','Status','Remarks'].map(h=>
                 <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 5px',textAlign:'center',whiteSpace:'nowrap' as const,fontSize:10}}>{h}</th>)}
             </tr></thead>
             <tbody>{entries.map((e:any,i:number)=>{
