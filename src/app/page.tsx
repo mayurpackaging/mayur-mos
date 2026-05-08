@@ -7,8 +7,8 @@ const ML: Record<string, string> = {
   mis:"MIS", ims:"IMS Stock", production:"Production", planning:"Planning",
   quality:"Quality", rejection:"Rejection", mouldchange:"Mould Change",
   dispatch:"Dispatch", batch:"Batch", sales:"Sales", spares:"Spares",
-  mouldpm:"Mould PM", breakdown:"Breakdown", reports:"Reports",
-  users:"Users", performance:"Performance"
+  mouldpm:"Mould PM", breakdown:"Breakdown", maintenance:"Maintenance",
+  reports:"Reports", users:"Users", performance:"Performance"
 }
 
 const MACH: Record<string, string[]> = {
@@ -262,7 +262,8 @@ export default function MOS() {
         {tab==='planning'&&<PlanningTab user={user}/>}
         {tab==='users'&&<UsersTab user={user}/>}
         {tab==='performance'&&<PerformanceTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance'].includes(tab)&&(
+        {tab==='maintenance'&&<MaintenanceTab user={user}/>}
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -3623,3 +3624,384 @@ function MISAlertsSection() {
   </div>
 }
 
+// ─── Maintenance Checklist Data ───────────────────────────────
+const MAINT_CHECKS: Record<string, Record<string, string[][]>> = {
+  Daily: {
+    "⚡ Electric Drive System": [
+      ["Check servo motor status on HMI — no fault/alarm", "HMI Display", "Green status, no fault code"],
+      ["Check servo drive temperature", "HMI / Temp Gun", "Max 70°C"],
+      ["Check regenerative resistor — no burning smell", "Visual + Smell", "No burn smell"],
+      ["Check encoder cable — no damage, no kink", "Visual", "Cable intact"],
+      ["Check UPS / power supply indicator lights", "Visual", "All green, no fault"],
+    ],
+    "🔧 Mechanical Checks": [
+      ["Check tie bar condition — no crack, no damage", "Visual", "No damage, no scoring"],
+      ["Check ball screw lubrication — grease level", "Visual / Touch", "Lightly greased, not dry"],
+      ["Check linear guide — smooth movement", "Manual Test", "No jerks, smooth sliding"],
+      ["Check platen movement — smooth, no vibration", "Test Run", "Smooth, no noise"],
+      ["Check mould clamping — proper alignment", "Visual + Test", "Properly clamped"],
+      ["Check ejector system — smooth movement", "Test Cycle", "Forward/backward smooth"],
+      ["Check hopper — no blockage, material flowing", "Visual", "Material freely flowing"],
+      ["Check nozzle — no drool, no carbonized material", "Visual", "Clean nozzle tip"],
+      ["Check toggle mechanism — no unusual noise", "Listen during cycle", "No grinding, no clicking"],
+    ],
+    "🌡️ Heating System": [
+      ["Check all barrel zone temperatures", "HMI Screen", "Set point ±5°C"],
+      ["Check nozzle temperature", "HMI Screen", "Set point ±5°C"],
+      ["Check heater band condition — no burn marks", "Visual", "No physical damage"],
+    ],
+    "💧 Cooling System": [
+      ["Check cooling water flow — mould + barrel", "Visual + Flow Meter", "Proper flow"],
+      ["Check water temperature in and out", "Temp Gun", "In: 25–30°C, Out: max 40°C"],
+      ["Check for water leaks near mould area", "Visual", "No leak"],
+    ],
+    "🔒 Safety Checks": [
+      ["Test emergency stop button", "Press E-Stop", "Machine turant rukni chahiye"],
+      ["Check safety door — interlock working", "Test", "Door khula ho toh cycle na chale"],
+      ["Check all machine guards — in place", "Visual", "Koi guard missing nahi"],
+      ["Clean machine exterior", "Cloth / Air", "Clean and dry machine body"],
+    ],
+    "💧 Hydraulic — Milacron Only": [
+      ["Check hydraulic oil level in tank", "Oil Level Sight Glass", "Min mark pe hona chahiye"],
+      ["Check oil temperature", "Oil Temp Gauge", "40–55°C Normal, Max 60°C"],
+      ["Check for hydraulic oil leaks", "Visual Inspection", "Koi bhi leak nahi"],
+      ["Check hydraulic pump — unusual noise", "Listen", "No grinding, no squealing"],
+      ["Check lubrication oil level", "Visual", "Half ya upar hona chahiye"],
+    ],
+  },
+  Weekly: {
+    "⚡ Electric System": [
+      ["Check servo drive fault history log", "HMI Screen", "No recurring faults"],
+      ["Check all servo motor connections — tighten", "Spanner Check", "No loose connectors"],
+      ["Clean servo drive cooling vents", "Compressed Air", "No dust blockage"],
+      ["Clean control panel filter", "Remove + Clean", "Clean mesh filter"],
+      ["Check panel cooling fan", "Visual + Listen", "Fan running, no noise"],
+      ["Check power cable condition — no damage", "Visual", "No cuts, no heat damage"],
+    ],
+    "🔧 Mechanical": [
+      ["Grease toggle links and pins", "Grease Gun", "Fresh grease"],
+      ["Grease platen guide rails", "Grease Gun", "Even coating"],
+      ["Grease ball screws — injection + clamping", "Grease Gun", "As per manual"],
+      ["Check tie bar nuts — tighten if required", "Torque Wrench", "As per machine spec"],
+      ["Check shot weight — 5 shots weigh karo", "Weighing Scale", "±2% variation max"],
+      ["Lubricate ejector pins and guide bushes", "Oil / Grease", "Light lubrication"],
+    ],
+    "🌡️ Heating": [
+      ["Check heater band resistance — all zones", "Multimeter", "Within 5% of rated"],
+      ["Check thermocouple readings", "HMI Screen", "Consistent readings"],
+    ],
+    "💧 Cooling": [
+      ["Check chiller water temperature setting", "Chiller Display", "As per product"],
+      ["Clean mould cooling water filter", "Remove + Clean", "No blockage"],
+      ["Check cooling hose connections — no leaks", "Visual", "All connections tight"],
+    ],
+    "🧹 Cleaning": [
+      ["Purge barrel — clean material", "Purging Compound", "Clean purge material"],
+      ["Clean mould area — debris remove karo", "Compressed Air + Cloth", "Clean and dry"],
+    ],
+    "💧 Hydraulic — Milacron Only": [
+      ["Check hydraulic oil condition — color check", "Visual", "Golden/amber — not dark"],
+      ["Check all hydraulic hose connections", "Spanner Check", "No loose connections"],
+      ["Check hydraulic filter indicator", "Visual", "Green=OK, Red=Change now"],
+      ["Check system pressure — relief valve", "Pressure Gauge", "As per machine spec"],
+    ],
+  },
+  Monthly: {
+    "⚡ Electric System": [
+      ["Check servo motor insulation — megger test", "Megger Tester (500V)", "Min 1 MΩ per phase"],
+      ["Tighten all electrical connections — full panel", "Torque Screwdriver", "As per OEM spec"],
+      ["Check servo drive parameters", "HMI + Drive Display", "No drift from settings"],
+      ["Check PLC backup battery voltage", "Multimeter / HMI", "Replace if < 3.0V"],
+      ["Thermal scan of panel — hot spots check", "Thermal Camera / Temp Gun", "No spot > 60°C"],
+      ["Test all interlocks — complete safety test", "Function Test", "All working"],
+    ],
+    "🔧 Mechanical": [
+      ["Measure tie bar diameter — wear check", "Vernier Caliper", "Within ±0.1mm"],
+      ["Check screw and barrel wear", "Micrometer", "Wear < 0.5mm from original"],
+      ["Check clamping force — actual vs set", "Dial Gauge", "±3% variation max"],
+      ["Lubricate all grease points — complete", "Grease Gun", "All points covered"],
+      ["Check ball screw end bearings — play check", "Dial Gauge", "No axial play"],
+    ],
+    "🌡️ Temperature": [
+      ["Calibrate all thermocouples", "Reference Thermometer", "±2°C accuracy"],
+      ["Check heater band wattage", "Clamp Meter", "Within 5% of rated"],
+    ],
+    "🔒 Safety": [
+      ["Test emergency stop circuit — full test", "Function Test", "Immediate stop < 0.5 sec"],
+      ["Check safety door interlock circuit", "Function Test", "Machine stops immediately"],
+      ["Test all limit switches", "Function Test", "Proper actuation at position"],
+    ],
+    "💧 Hydraulic — Milacron Only": [
+      ["Change hydraulic filter element", "Replace", "New element"],
+      ["Check hydraulic pump flow", "Flow Meter", "Within 5% of rated"],
+      ["Check all proportional valves", "Test Equipment", "As per machine spec"],
+      ["Check accumulator pre-charge pressure", "N2 Pressure Gauge", "As per spec"],
+    ],
+  },
+}
+
+// ─── MaintenanceTab ───────────────────────────────────────────
+function MaintenanceTab({user}:{user:User}) {
+  const [activeFreq,setActiveFreq]=useState('Daily')
+  const [plant,setPlant]=useState('')
+  const [machine,setMachine]=useState('')
+  const [date,setDate]=useState(nd())
+  const [shift,setShift]=useState('Day')
+  const [results,setResults]=useState<Record<string,{result:string,remarks:string}>>({})
+  const [shots,setShots]=useState<any[]>([])
+  const [history,setHistory]=useState<any[]>([])
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [showHistory,setShowHistory]=useState(false)
+
+  const machines=MACH[plant]||[]
+  const isHydraulic=machine.includes('Milacron')
+
+  // Load existing entries
+  useEffect(()=>{
+    if(machine&&date&&activeFreq){
+      fetch(`/api/maintenance?date=${date}&machine=${encodeURIComponent(machine)}&frequency=${activeFreq}`)
+        .then(r=>r.json()).then(d=>{
+          const r:Record<string,{result:string,remarks:string}>={}
+          ;(d.data||[]).forEach((item:any)=>{
+            r[`${item.section}||${item.check_point}`]={result:item.result,remarks:item.remarks}
+          })
+          setResults(r)
+          setShots(d.shots||[])
+        })
+    }
+  },[machine,date,activeFreq])
+
+  // Init shots for plant machines
+  useEffect(()=>{
+    if(plant&&machines.length>0&&activeFreq==='Daily'){
+      setShots(prev=>{
+        const existing=prev.filter(s=>s.plant===plant)
+        const newMachines=machines.filter(m=>!existing.find((s:any)=>s.machine===m))
+        return [...existing,...newMachines.map(m=>({machine:m,plant,product:'',mould:'',startCounter:'',endCounter:'',totalCounter:''}))]
+      })
+    }
+  },[plant,machines,activeFreq])
+
+  const getResult=(section:string,check:string)=>results[`${section}||${check}`]?.result||''
+  const getRemarks=(section:string,check:string)=>results[`${section}||${check}`]?.remarks||''
+
+  const setResult=(section:string,check:string,result:string)=>{
+    setResults(p=>({...p,[`${section}||${check}`]:{result,remarks:p[`${section}||${check}`]?.remarks||''}}))
+  }
+  const setRemarks=(section:string,check:string,val:string)=>{
+    setResults(p=>({...p,[`${section}||${check}`]:{result:p[`${section}||${check}`]?.result||'',remarks:val}}))
+  }
+
+  const sections=MAINT_CHECKS[activeFreq]||{}
+  const filteredSections=Object.entries(sections).filter(([sec])=>
+    isHydraulic?true:!sec.includes('Milacron')
+  )
+
+  // Count results
+  const allItems=filteredSections.flatMap(([sec,items])=>items.map(i=>`${sec}||${i[0]}`))
+  const okCount=allItems.filter(k=>results[k]?.result==='OK').length
+  const ngCount=allItems.filter(k=>results[k]?.result==='NG').length
+  const naCount=allItems.filter(k=>results[k]?.result==='NA').length
+  const doneCount=okCount+ngCount+naCount
+  const totalCount=allItems.length
+
+  const save=async()=>{
+    if(!plant||!machine){setToast({msg:'Plant aur Machine select karo!',ok:false});return}
+    setSaving(true)
+
+    // Save checklist
+    const items=filteredSections.flatMap(([sec,checks])=>
+      checks.map(c=>({
+        section:sec,
+        checkPoint:c[0],
+        result:results[`${sec}||${c[0]}`]?.result||'Pending',
+        remarks:results[`${sec}||${c[0]}`]?.remarks||''
+      }))
+    )
+
+    const res=await fetch('/api/maintenance',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        type:'checklist',date,frequency:activeFreq,plant,machine,
+        machineType:isHydraulic?'Hydraulic':'All Electric',
+        doneBy:user.name,items
+      })
+    }).then(r=>r.json())
+
+    // Save shots if Daily
+    if(activeFreq==='Daily'&&shots.length>0){
+      await fetch('/api/maintenance',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({type:'shots',date,shift,plant,doneBy:user.name,shots})
+      }).then(r=>r.json())
+    }
+
+    setSaving(false)
+    setToast({msg:res.success?`Checklist saved! ${doneCount}/${totalCount} items done`:res.msg,ok:res.success})
+  }
+
+  const FREQS=['Daily','Weekly','Monthly','Quarterly','Half Yearly','Yearly']
+  const FREQ_COLORS:Record<string,string>={Daily:'#276221',Weekly:'#2E75B6',Monthly:'#E65100',Quarterly:'#5B2C8D','Half Yearly':'#854F0B',Yearly:'#C00000'}
+
+  return <div>
+    {/* Frequency tabs */}
+    <div style={{display:'flex',gap:4,marginBottom:8,overflowX:'auto',flexWrap:'wrap' as const}}>
+      {FREQS.map(f=><button key={f} onClick={()=>setActiveFreq(f)} style={{
+        padding:'6px 10px',border:`2px solid ${FREQ_COLORS[f]}`,borderRadius:6,
+        background:activeFreq===f?FREQ_COLORS[f]:'#fff',
+        color:activeFreq===f?'#fff':FREQ_COLORS[f],
+        fontWeight:700,fontSize:11,cursor:'pointer',whiteSpace:'nowrap' as const
+      }}>{f}</button>)}
+    </div>
+
+    {/* Machine Selection */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>🔧 {activeFreq} Maintenance Checklist</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={S.f}><label style={S.lbl}>Date</label>
+          <input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Shift</label>
+          <select style={S.fi} value={shift} onChange={e=>setShift(e.target.value)}>
+            <option>Day</option><option>Night</option>
+          </select>
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div style={S.f}><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={plant} onChange={e=>{setPlant(e.target.value);setMachine('')}}>
+            <option value="">Select Plant</option>
+            <option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Machine</label>
+          <select style={S.fi} value={machine} onChange={e=>setMachine(e.target.value)}>
+            <option value="">Select Machine</option>
+            {machines.map(m=><option key={m}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+      {machine&&<div style={{marginTop:8,background:isHydraulic?'#FFF9E6':'#E6F1FB',border:`1px solid ${isHydraulic?'#854F0B':'#1F3864'}`,borderRadius:6,padding:'6px 10px',fontSize:11,fontWeight:600,color:isHydraulic?'#854F0B':'#1F3864'}}>
+        {isHydraulic?'💧 Hydraulic Machine — Extra hydraulic sections included!':'⚡ All Electric Machine — Servo + Ball Screw checks included!'}
+      </div>}
+    </div>
+
+    {/* Progress */}
+    {machine&&<div style={{...S.card,padding:'10px 14px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+        <span style={{fontSize:12,fontWeight:700,color:'#1F3864'}}>{doneCount}/{totalCount} items done</span>
+        <div style={{display:'flex',gap:6}}>
+          <span style={{background:'#E8F5E9',color:'#276221',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>✅ OK: {okCount}</span>
+          <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>❌ NG: {ngCount}</span>
+          <span style={{background:'#F5F5F5',color:'#666',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>N/A: {naCount}</span>
+        </div>
+      </div>
+      <div style={{height:8,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}>
+        <div style={{width:`${totalCount>0?Math.round(doneCount/totalCount*100):0}%`,height:'100%',background:ngCount>0?'#C00000':'#276221',borderRadius:999,transition:'width 0.3s'}}/>
+      </div>
+    </div>}
+
+    {/* Shot Counter — Daily only */}
+    {machine&&activeFreq==='Daily'&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>🔢 Machine Shot Counter — {date}</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            {['Machine','Product','Mould','Start Counter','End Counter','Shots This Shift','Total Counter'].map(h=>
+              <th key={h} style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'center',whiteSpace:'nowrap' as const}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{shots.filter((s:any)=>s.plant===plant).map((s:any,i:number)=>{
+            const shotsThisShift=(parseFloat(s.endCounter)||0)-(parseFloat(s.startCounter)||0)
+            return <tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
+              <td style={{padding:'6px 8px',fontWeight:700,color:'#1F3864',textAlign:'center'}}>{s.machine}</td>
+              {['product','mould'].map(f=><td key={f} style={{padding:3}}>
+                <input style={{width:'100%',padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,fontSize:11,textAlign:'center'}}
+                  value={s[f]||''} onChange={e=>setShots(prev=>prev.map((sh:any)=>sh.machine===s.machine?{...sh,[f]:e.target.value}:sh))}
+                  placeholder={f==='product'?'Product...':'Mould...'}/>
+              </td>)}
+              {['startCounter','endCounter'].map(f=><td key={f} style={{padding:3}}>
+                <input type="number" style={{width:'100%',padding:'4px',border:'1px solid #1F3864',borderRadius:4,fontSize:12,fontWeight:600,textAlign:'center',background:'#FFFDE7'}}
+                  value={s[f]||''} onChange={e=>setShots(prev=>prev.map((sh:any)=>sh.machine===s.machine?{...sh,[f]:e.target.value}:sh))}
+                  placeholder="0"/>
+              </td>)}
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,fontSize:13,color:shotsThisShift>0?'#276221':'#666'}}>
+                {shotsThisShift>0?shotsThisShift.toLocaleString():'--'}
+              </td>
+              <td style={{padding:3}}>
+                <input type="number" style={{width:'100%',padding:'4px',border:'1px solid #2E75B6',borderRadius:4,fontSize:12,fontWeight:600,textAlign:'center',background:'#E6F1FB'}}
+                  value={s.totalCounter||''} onChange={e=>setShots(prev=>prev.map((sh:any)=>sh.machine===s.machine?{...sh,totalCounter:e.target.value}:sh))}
+                  placeholder="Total"/>
+              </td>
+            </tr>
+          })}</tbody>
+          {shots.filter((s:any)=>s.plant===plant).length>0&&<tfoot>
+            <tr style={{background:'#1F3864'}}>
+              <td colSpan={5} style={{padding:'6px 8px',color:'#FFD966',fontWeight:700,textAlign:'right'}}>Total Shots Today:</td>
+              <td style={{padding:'6px 8px',color:'#FFD966',fontWeight:700,fontSize:14,textAlign:'center'}}>
+                {shots.filter((s:any)=>s.plant===plant).reduce((a:number,s:any)=>{
+                  const sh=(parseFloat(s.endCounter)||0)-(parseFloat(s.startCounter)||0)
+                  return a+(sh>0?sh:0)
+                },0).toLocaleString()}
+              </td>
+              <td style={{padding:'6px 8px',color:'#90A8C8',textAlign:'center'}}>—</td>
+            </tr>
+          </tfoot>}
+        </table>
+      </div>
+    </div>}
+
+    {/* Checklist */}
+    {machine&&filteredSections.map(([section,items])=>{
+      const secOK=items.filter(i=>results[`${section}||${i[0]}`]?.result==='OK').length
+      const secNG=items.filter(i=>results[`${section}||${i[0]}`]?.result==='NG').length
+      const secBg=section.includes('Milacron')?'#854F0B':FREQ_COLORS[activeFreq]||'#1F3864'
+      return <div key={section} style={{...S.card,marginBottom:8}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{section}</div>
+          <div style={{display:'flex',gap:4}}>
+            {secOK>0&&<span style={{background:'#E8F5E9',color:'#276221',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>✅ {secOK}</span>}
+            {secNG>0&&<span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>❌ {secNG}</span>}
+          </div>
+        </div>
+        {items.map((item,ii)=>{
+          const key=`${section}||${item[0]}`
+          const res=results[key]?.result||''
+          return <div key={ii} style={{background:res==='OK'?'#F0FFF4':res==='NG'?'#FFEBEE':'#FAFAFA',border:`1px solid ${res==='OK'?'#276221':res==='NG'?'#C00000':'#E0E0E0'}`,borderRadius:6,padding:'8px 10px',marginBottom:6}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600,marginBottom:2}}>{item[0]}</div>
+                <div style={{fontSize:10,color:'#666'}}>🔧 {item[1]} | ✅ {item[2]}</div>
+              </div>
+              <div style={{display:'flex',gap:4,flexShrink:0}}>
+                {['OK','NG','NA'].map(v=><button key={v} onClick={()=>setResult(section,item[0],v)} style={{
+                  padding:'4px 10px',fontSize:11,fontWeight:700,cursor:'pointer',
+                  border:`2px solid ${v==='OK'?'#276221':v==='NG'?'#C00000':'#666'}`,
+                  borderRadius:6,
+                  background:res===v?(v==='OK'?'#276221':v==='NG'?'#C00000':'#666'):'transparent',
+                  color:res===v?'#fff':(v==='OK'?'#276221':v==='NG'?'#C00000':'#666')
+                }}>{v}</button>)}
+              </div>
+            </div>
+            {res==='NG'&&<input value={results[key]?.remarks||''} onChange={e=>setRemarks(section,item[0],e.target.value)}
+              placeholder="NG reason / action taken..." 
+              style={{width:'100%',marginTop:6,padding:'4px 8px',border:'1px solid #C00000',borderRadius:4,fontSize:11,background:'#FFF9F9'}}/>}
+          </div>
+        })}
+      </div>
+    })}
+
+    {machine&&<>
+      <button style={S.sb} onClick={save} disabled={saving}>
+        {saving?'Saving...':`💾 Save ${activeFreq} Checklist (${doneCount}/${totalCount} done)`}
+      </button>
+      {toast&&<Toast {...toast}/>}
+    </>}
+
+    {!machine&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32}}>
+      Plant aur Machine select karo — checklist load hogi! 👆
+    </div>}
+  </div>
+}
