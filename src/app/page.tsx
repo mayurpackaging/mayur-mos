@@ -4322,8 +4322,17 @@ function BulkProductionTab({user}:{user:User}) {
 
   const updateSetup=(machine:string,field:string,val:string)=>{
     setMachineSetup(prev=>prev.map(m=>m.machine===machine?{...m,[field]:val}:m))
-    // Also update entries
-    setEntries(prev=>prev.map(e=>e.machine===machine?{...e,[field==='cycle_time'?'cycleTime':field]:val}:e))
+    // Also sync entries
+    const entryField=field==='cycle_time'?'cycleTime':field
+    setEntries(prev=>prev.map(e=>{
+      if(e.machine!==machine||e.isMC) return e
+      const update:{[k:string]:string}={[entryField]:val}
+      if(field==='product'){
+        const mould=PRODUCT_MOULD_MAP[val]||''
+        if(mould) update.mould=mould
+      }
+      return {...e,...update}
+    }))
   }
 
   const updateEntry=(machine:string,field:string,val:string,rowIdx:number=0)=>{
@@ -4348,7 +4357,19 @@ function BulkProductionTab({user}:{user:User}) {
     const res=await fetch('/api/machine-setup',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:'setup',date,plant,createdBy:user.name,machines:machineSetup.map(m=>({...m,validFromSlot:m.validFromSlot||'8am-11am'}))})
+      body:JSON.stringify({
+        type:'setup',date,plant,createdBy:user.name,
+        machines:machineSetup.map(m=>({
+          machine:m.machine,
+          product:m.product||'',
+          mould:m.mould||'',
+          cavities:m.cavities||m.cavities||0,
+          cycleTime:m.cycle_time||m.cycleTime||0,
+          operator:m.operator||'',
+          operator2:m.operator2||'',
+          validFromSlot:m.validFromSlot||'8am-11am'
+        }))
+      })
     }).then(r=>r.json())
     setSaving(false)
     setToast({msg:res.msg,ok:res.success})
