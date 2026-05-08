@@ -4354,6 +4354,7 @@ function BulkProductionTab({user}:{user:User}) {
   const saveSetup=async()=>{
     if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
     setSaving(true)
+    console.log('Saving setup:', {plant, date, machines: machineSetup})
     const res=await fetch('/api/machine-setup',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -4363,8 +4364,8 @@ function BulkProductionTab({user}:{user:User}) {
           machine:m.machine,
           product:m.product||'',
           mould:m.mould||'',
-          cavities:m.cavities||m.cavities||0,
-          cycleTime:m.cycle_time||m.cycleTime||0,
+          cavities:parseFloat(String(m.cavities||0)),
+          cycleTime:parseFloat(String(m.cycleTime||m.cycle_time||0)),
           operator:m.operator||'',
           operator2:m.operator2||'',
           validFromSlot:m.validFromSlot||'8am-11am'
