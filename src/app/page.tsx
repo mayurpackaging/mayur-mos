@@ -340,11 +340,11 @@ function RejectionComparison({from,to,plant}:{from:string,to:string,plant:string
     {/* Summary */}
     {data.length>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
       <div style={{...S.met,background:'#FFEBEE',border:'1px solid #C00000'}}>
-        <div style={{fontSize:10,color:'#C00000',fontWeight:600}}>🚨 Alert (>10% & >50pcs)</div>
+        <div style={{fontSize:10,color:'#C00000',fontWeight:600}}>🚨 Alert ({">"}10% {"&"} {">"}50pcs)</div>
         <div style={{fontSize:24,fontWeight:700,color:'#C00000'}}>{alerts.length}</div>
       </div>
       <div style={{...S.met,background:'#FFF3E0',border:'1px solid #FF9800'}}>
-        <div style={{fontSize:10,color:'#E65100',fontWeight:600}}>⚠️ Warning (>5%)</div>
+        <div style={{fontSize:10,color:'#E65100',fontWeight:600}}>⚠️ Warning ({">"}5%)</div>
         <div style={{fontSize:24,fontWeight:700,color:'#E65100'}}>{warnings.length}</div>
       </div>
       <div style={{...S.met,background:'#E8F5E9',border:'1px solid #276221'}}>
@@ -387,7 +387,7 @@ function RejectionComparison({from,to,plant}:{from:string,to:string,plant:string
         </table>
       </div>
       <div style={{marginTop:8,fontSize:11,color:'#666',background:'#F5F5F5',padding:'8px 12px',borderRadius:6}}>
-        📋 Rule: Difference &gt; 50 pcs AND &gt; 10% → 🚨 Alert | Difference &gt; 5 pcs AND &gt; 5% → ⚠️ Warning
+        📋 Rule: Diff {">"} 50 pcs AND {">"} 10% → 🚨 Alert | Diff {">"} 5 pcs AND {">"} 5% → ⚠️ Warning
       </div>
     </div>}
   </div>
