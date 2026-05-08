@@ -4429,8 +4429,18 @@ function BulkProductionTab({user}:{user:User}) {
                 <td style={{padding:2,fontSize:10,color:'#666',maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>
                   <span title={e.mould||''}>{e.mould?.split(' - ')[0]||'--'}</span>
                 </td>
-                <td style={{padding:'5px',textAlign:'center',fontWeight:600}}>{e.cavities||'--'}</td>
-                <td style={{padding:'5px',textAlign:'center',color:'#666'}}>{e.cycleTime||'--'}</td>
+                <td style={{padding:2}}>
+                  {e.isMC
+                    ? <input type="number" value={e.cavities||''} onChange={ev=>updateEntry(e.machine,'cavities',ev.target.value,machineRowIdx)}
+                        style={{width:45,padding:'4px 2px',border:'2px solid #854F0B',borderRadius:4,textAlign:'center',fontSize:12,fontWeight:700,background:'#FFF9E6'}} placeholder="Cav"/>
+                    : <span style={{fontWeight:600,padding:'0 4px'}}>{e.cavities||'--'}</span>}
+                </td>
+                <td style={{padding:2}}>
+                  {e.isMC
+                    ? <input type="number" value={e.cycleTime||''} onChange={ev=>updateEntry(e.machine,'cycleTime',ev.target.value,machineRowIdx)}
+                        style={{width:45,padding:'4px 2px',border:'2px solid #854F0B',borderRadius:4,textAlign:'center',fontSize:12,background:'#FFF9E6'}} placeholder="CT"/>
+                    : <span style={{color:'#666',padding:'0 4px'}}>{e.cycleTime||'--'}</span>}
+                </td>
                 <td style={{padding:'5px',textAlign:'center',color:'#854F0B',fontWeight:600}}>{proj>0?proj.toLocaleString():'--'}</td>
                 <td style={{padding:2}}>
                   <input type="number" min="0" value={e.good||''} onChange={ev=>updateEntry(e.machine,'good',ev.target.value)} disabled={!isRunning}
