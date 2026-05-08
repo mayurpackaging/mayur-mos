@@ -769,14 +769,42 @@ function IMSTab({user}:{user:User}) {
   const [savingMin,setSavingMin]=useState(false)
   const [viewDate,setViewDate]=useState(nd())
 
-  const loadStock=(date:string)=>{
+  const [prevItems,setPrevItems]=useState<any[]>([])
+  const [showComparison,setShowComparison]=useState(false)
+  const [showTrend,setShowTrend]=useState(false)
+  const [trendData,setTrendData]=useState<any>(null)
+  const [trendDays,setTrendDays]=useState(15)
+  const [trendLoading,setTrendLoading]=useState(false)
+
+  const loadTrend=async(days:number)=>{
+    setTrendLoading(true)
+    const res=await fetch(`/api/ims-trend?days=${days}`).then(r=>r.json())
+    setTrendData(res)
+    setTrendLoading(false)
+  }
+
+  const loadStock=(date:string, clearVals=false)=>{
     setLoading(true)
     fetch(`/api/ims?date=${date}`).then(r=>r.json()).then(d=>{
       setItems(d.items||[])
       const init:Record<string,any>={}
-      d.items?.forEach((it:any)=>{init[it.name]={pk:it.stockC||'',uc:it.unpackC||'',ul:it.unpackL||''}})
+      // If date changed or clearVals — start fresh (empty fields)
+      if(clearVals){
+        d.items?.forEach((it:any)=>{init[it.name]={pk:'',uc:'',ul:''}})
+      } else {
+        d.items?.forEach((it:any)=>{init[it.name]={pk:it.stockC||'',uc:it.unpackC||'',ul:it.unpackL||''}})
+      }
       setVals(init);setLoading(false)
     })
+  }
+
+  // Load previous day for comparison
+  const loadComparison=async(currentDate:string)=>{
+    const prev=new Date(currentDate)
+    prev.setDate(prev.getDate()-1)
+    const prevDate=prev.toISOString().slice(0,10)
+    const res=await fetch(`/api/ims?date=${prevDate}`).then(r=>r.json())
+    setPrevItems(res.items||[])
   }
 
   useEffect(()=>{loadStock(nd())},[])
@@ -799,8 +827,44 @@ function IMSTab({user}:{user:User}) {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
         <div style={{fontWeight:700}}>Bulk Stock Entry</div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <button onClick={()=>{setShowComparison(!showComparison);if(!showComparison)loadComparison(viewDate)}}
+            style={{padding:'4px 10px',border:'1px solid #1F3864',borderRadius:6,fontSize:11,fontWeight:600,background:showComparison?'#1F3864':'#fff',color:showComparison?'#fff':'#1F3864',cursor:'pointer'}}>
+            {showComparison?'✕ Comparison':'📊 Kal vs Aaj'}
+          </button>
+          <button onClick={()=>{setShowTrend(!showTrend);if(!showTrend)loadTrend(trendDays)}}
+            style={{padding:'4px 10px',border:'1px solid #276221',borderRadius:6,fontSize:11,fontWeight:600,background:showTrend?'#276221':'#fff',color:showTrend?'#fff':'#276221',cursor:'pointer'}}>
+            {showTrend?'✕ Trend':'📈 15-Day Trend'}
+          </button>
+          <button onClick={async()=>{
+            // Download Excel
+            const res=await fetch('/api/ims-trend?days=31').then(r=>r.json())
+            if(!res.success) return
+            // Generate CSV for now
+            let csv='Item,Category,'+res.dates.join(',')+'
+'
+            res.trendData.forEach((item:any)=>{
+              csv+=`"${item.name}",${item.category},`
+              csv+=item.trend.map((t:any)=>t.stock??'').join(',')
+              csv+='
+'
+            })
+            const blob=new Blob([csv],{type:'text/csv'})
+            const url=URL.createObjectURL(blob)
+            const a=document.createElement('a')
+            a.href=url
+            a.download=`IMS_Stock_Register_${new Date().toISOString().slice(0,7)}.csv`
+            a.click()
+            URL.revokeObjectURL(url)
+          }} style={{padding:'4px 10px',border:'1px solid #854F0B',borderRadius:6,fontSize:11,fontWeight:600,background:'#FFF9E6',color:'#854F0B',cursor:'pointer'}}>
+            📥 Download
+          </button>
           <span style={{fontSize:11,color:'#666'}}>Date:</span>
-          <input type="date" value={viewDate} onChange={e=>{setViewDate(e.target.value);loadStock(e.target.value)}} style={{padding:'4px 8px',border:'1px solid #1F3864',borderRadius:6,fontSize:12,fontWeight:600,color:'#1F3864'}}/>
+          <input type="date" value={viewDate} onChange={e=>{
+            setViewDate(e.target.value)
+            const isToday=e.target.value===nd()
+            loadStock(e.target.value, isToday)
+            loadComparison(e.target.value)
+          }} style={{padding:'4px 8px',border:'1px solid #1F3864',borderRadius:6,fontSize:12,fontWeight:600,color:'#1F3864'}}/>
         </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
