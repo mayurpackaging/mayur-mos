@@ -26,34 +26,47 @@ export async function POST(req: Request) {
   const today = new Date().toISOString().split('T')[0]
 
   if (d.type === 'setup') {
-    // Save machine setup for the day
+    const results = []
     for (const m of (d.machines || [])) {
       if (!m.machine) continue
-      await supabase.from('machine_setup').upsert({
+
+      // First try to delete existing, then insert fresh
+      await supabase.from('machine_setup')
+        .delete()
+        .eq('date', d.date || today)
+        .eq('plant', d.plant)
+        .eq('machine', m.machine)
+
+      const { data, error } = await supabase.from('machine_setup').insert({
         date: d.date || today,
         plant: d.plant,
         machine: m.machine,
         product: m.product || '',
         mould: m.mould || '',
-        cavities: parseFloat(m.cavities) || 0,
-        cycle_time: parseFloat(m.cycleTime) || 0,
+        cavities: parseFloat(String(m.cavities)) || 0,
+        cycle_time: parseFloat(String(m.cycleTime)) || 0,
         operator: m.operator || '',
         operator2: m.operator2 || '',
         valid_from_slot: m.validFromSlot || '8am-11am',
-        created_by: d.createdBy
-      }, { onConflict: 'date,plant,machine,valid_from_slot' })
+        created_by: d.createdBy || ''
+      })
+
+      if (error) {
+        console.error('Insert error:', error)
+        return NextResponse.json({ success: false, msg: error.message })
+      }
+      results.push(m.machine)
     }
-    return NextResponse.json({ success: true, msg: 'Machine setup saved!' })
+    return NextResponse.json({ success: true, msg: `${results.length} machines setup saved!` })
   }
 
   if (d.type === 'bulk_slot') {
-    // Save bulk slot entries for all machines
     let saved = 0
     const errors: string[] = []
 
     for (const entry of (d.entries || [])) {
       if (!entry.machine) continue
-      if (!entry.good && !entry.rejection && !entry.down) continue
+      if (!entry.good && !entry.rejection && !entry.down && entry.status === 'running') continue
 
       const totalGood = parseFloat(entry.good) || 0
       const totalRej = parseFloat(entry.rejection) || 0
@@ -61,9 +74,7 @@ export async function POST(req: Request) {
       const cavities = parseFloat(entry.cavities) || 0
       const shotsThisSlot = cavities > 0 ? Math.round((totalGood + totalRej) / cavities) : 0
 
-      // Check if entry exists for edit
       if (entry.editId) {
-        // Update existing production entry
         await supabase.from('production').update({
           good_parts: Math.round(totalGood),
           rejection: Math.round(totalRej),
@@ -71,7 +82,6 @@ export async function POST(req: Request) {
           remarks: entry.remarks || ''
         }).eq('id', entry.editId)
 
-        // Update slot
         await supabase.from('production_slots').update({
           good_parts: Math.round(totalGood),
           rejection: Math.round(totalRej),
@@ -83,7 +93,6 @@ export async function POST(req: Request) {
         continue
       }
 
-      // New entry
       const { data: prod, error } = await supabase.from('production').insert({
         date: d.date || today,
         shift: d.shift,
@@ -108,7 +117,6 @@ export async function POST(req: Request) {
 
       if (error) { errors.push(`${entry.machine}: ${error.message}`); continue }
 
-      // Save slot
       if (prod) {
         await supabase.from('production_slots').insert({
           production_id: prod.id,
@@ -119,7 +127,6 @@ export async function POST(req: Request) {
           remarks: entry.remarks || ''
         })
 
-        // Update mould shots
         if (entry.mould && shotsThisSlot > 0) {
           const mouldCode = entry.mould.split(' - ')[0]
           const { data: mould } = await supabase.from('mould_master').select('*').eq('mould_code', mouldCode).maybeSingle()
