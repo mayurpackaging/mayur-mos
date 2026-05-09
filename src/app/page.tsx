@@ -840,14 +840,12 @@ function IMSTab({user}:{user:User}) {
             const res=await fetch('/api/ims-trend?days=31').then(r=>r.json())
             if(!res.success) return
             // Generate CSV for now
-            let csv='Item,Category,'+res.dates.join(',')+'
-'
+            const nl='\n';let csv='Item,Category,'+res.dates.join(',')+nl
             res.trendData.forEach((item:any)=>{
               csv+=`"${item.name}",${item.category},`
               csv+=item.trend.map((t:any)=>t.stock??'').join(',')
               csv+='
-'
-            })
+              csv+=nl
             const blob=new Blob([csv],{type:'text/csv'})
             const url=URL.createObjectURL(blob)
             const a=document.createElement('a')
