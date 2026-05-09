@@ -793,7 +793,6 @@ function IMSTab({user}:{user:User}) {
         d.items?.forEach((it:any)=>{init[it.name]={pk:'',uc:'',ul:''}})
       } else {
         d.items?.forEach((it:any)=>{init[it.name]={pk:it.stockC||'',uc:it.unpackC||'',ul:it.unpackL||''}})
-      }
       setVals(init);setLoading(false)
     })
   }
@@ -844,8 +843,8 @@ function IMSTab({user}:{user:User}) {
             res.trendData.forEach((item:any)=>{
               csv+=`"${item.name}",${item.category},`
               csv+=item.trend.map((t:any)=>t.stock??'').join(',')
-              csv+='
               csv+=nl
+            })
             const blob=new Blob([csv],{type:'text/csv'})
             const url=URL.createObjectURL(blob)
             const a=document.createElement('a')
