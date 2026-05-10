@@ -1541,136 +1541,275 @@ function RejectionTab({user}:{user:User}) {
 }
 
 function MouldChangeTab({user}:{user:User}) {
-  const [data,setData]=useState<any>(null)
+  const [form,setForm]=useState({date:nd(),shift:'Day',plant:'',machine:'',oldMould:'',newMould:'',operator:'',helper:'',remarks:''})
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
-  const [spray,setSpray]=useState<number|null>(null)
-  const [timerStart,setTimerStart]=useState<number|null>(null)
+  const [history,setHistory]=useState<any[]>([])
+
+  // Timestamps
+  const [startTime,setStartTime]=useState<Date|null>(null)
+  const [sprayTime,setSprayTime]=useState<Date|null>(null)
+  const [loadTime,setLoadTime]=useState<Date|null>(null)
+  const [runTime,setRunTime]=useState<Date|null>(null)
   const [elapsed,setElapsed]=useState(0)
-  const [timerRunning,setTimerRunning]=useState(false)
-  const [form,setForm]=useState({date:nd(),shift:'Day',plant:'',machine:'',oldMould:'',newMould:'',operator:OPS[0],helper:'',estimatedTime:'',mouldLoadTime:'',mouldRunTime:'',remarks:''})
-  const timerRef=useRef<any>(null)
+  const [timerActive,setTimerActive]=useState(false)
 
-  useEffect(()=>{fetch('/api/mouldchange').then(r=>r.json()).then(setData)},[])
+  // Timer tick
+  useEffect(()=>{
+    if(!timerActive||!startTime) return
+    const iv=setInterval(()=>{
+      setElapsed(Math.floor((Date.now()-startTime.getTime())/1000))
+    },1000)
+    return ()=>clearInterval(iv)
+  },[timerActive,startTime])
 
-  const startTimer=()=>{
-    if(!form.estimatedTime){setToast({msg:'Estimated time daalo!',ok:false});return}
-    if(!form.plant||!form.oldMould||!form.newMould){setToast({msg:'Plant, Old aur New Mould select karo!',ok:false});return}
-    const now=Date.now();setTimerStart(now);setTimerRunning(true);setElapsed(0)
-    timerRef.current=setInterval(()=>setElapsed(Math.floor((Date.now()-now)/1000)),1000)
-    setToast({msg:`Timer started! Target: ${form.estimatedTime} min`,ok:true})
+  const loadHistory=async()=>{
+    const res=await fetch(`/api/mouldchange?date=${form.date}`).then(r=>r.json())
+    setHistory(res.data||[])
   }
 
-  const stopTimer=()=>{if(timerRef.current){clearInterval(timerRef.current);setTimerRunning(false)}}
+  useEffect(()=>{loadHistory()},[form.date])
 
-  const mins=Math.floor(elapsed/60),secs=elapsed%60
-  const targetSecs=(parseFloat(form.estimatedTime)||0)*60
-  const overTarget=elapsed>targetSecs&&targetSecs>0
-
-  const save=async()=>{
-    if(!form.plant||!form.oldMould||!form.newMould){setToast({msg:'Plant, Old aur New Mould select karo!',ok:false});return}
-    stopTimer()
-    const actualMin=timerStart?Math.round((Date.now()-timerStart)/60000):0
-    setSaving(true)
-    const res=await fetch('/api/mouldchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,actualTime:actualMin,sprayDone:spray===1?'Yes':'No',enteredBy:user.name})}).then(r=>r.json())
-    setSaving(false);setToast({msg:res.msg,ok:res.success})
-    if(res.success){setTimerStart(null);setElapsed(0);setSpray(null);fetch('/api/mouldchange').then(r=>r.json()).then(setData)}
+  const fmt=(d:Date|null)=>d?d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''
+  const diffMin=(a:Date,b:Date)=>Math.round(Math.abs(b.getTime()-a.getTime())/60000)
+  const fmtElapsed=(s:number)=>{
+    const m=Math.floor(s/60),sec=s%60
+    return `${m}m ${sec}s`
   }
 
   const machines=MACH[form.plant]||[]
 
+  const startTimer=()=>{
+    const now=new Date()
+    setStartTime(now)
+    setTimerActive(true)
+    setSprayTime(null)
+    setLoadTime(null)
+    setRunTime(null)
+    setElapsed(0)
+  }
+
+  const markSpray=()=>setSprayTime(new Date())
+  const markLoad=()=>setLoadTime(new Date())
+  const markRun=()=>{
+    setRunTime(new Date())
+    setTimerActive(false)
+  }
+
+  const save=async()=>{
+    if(!form.plant||!form.machine||!form.oldMould||!form.newMould){
+      setToast({msg:'Saari fields bharo!',ok:false});return
+    }
+    if(!startTime){setToast({msg:'Timer start karo pehle!',ok:false});return}
+
+    setSaving(true)
+    const totalTime=runTime&&startTime?diffMin(startTime,runTime):Math.round(elapsed/60)
+    const res=await fetch('/api/mouldchange',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        ...form,
+        startTime:startTime?.toISOString(),
+        sprayTime:sprayTime?.toISOString(),
+        loadTime:loadTime?.toISOString(),
+        runTime:runTime?.toISOString(),
+        totalMinutes:totalTime,
+        sprayDone:!!sprayTime,
+        enteredBy:user.name
+      })
+    }).then(r=>r.json())
+
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success){
+      // Reset
+      setStartTime(null);setSprayTime(null);setLoadTime(null);setRunTime(null)
+      setElapsed(0);setTimerActive(false)
+      setForm(p=>({...p,oldMould:'',newMould:'',remarks:''}))
+      loadHistory()
+    }
+  }
+
+  const stepDone=(step:Date|null)=>!!step
+  const stepStyle=(done:boolean,active:boolean)=>({
+    padding:'12px 16px',borderRadius:8,
+    border:`2px solid ${done?'#276221':active?'#1F3864':'#E0E0E0'}`,
+    background:done?'#E8F5E9':active?'#E6F1FB':'#F5F5F5',
+    marginBottom:8
+  })
+
   return <div>
+    {/* History Summary */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total Changes</div><div style={{fontSize:20,fontWeight:700}}>{data?.totalChanges||0}</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Avg Time</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{data?.avgTime||0}m</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Best Time</div><div style={{fontSize:20,fontWeight:700,color:'#276221'}}>{data?.bestTime||0}m</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total Changes</div><div style={{fontSize:20,fontWeight:700,color:'#1F3864'}}>{history.length}</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Avg Time</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{history.length>0?Math.round(history.reduce((a:number,h:any)=>a+(h.total_minutes||0),0)/history.length):0}m</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Best Time</div><div style={{fontSize:20,fontWeight:700,color:'#276221'}}>{history.length>0?Math.min(...history.map((h:any)=>h.total_minutes||999)):0}m</div></div>
     </div>
 
-    <div style={{...S.card,border:'1px solid #1F3864'}}>
-      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>New Mould Change Entry</div>
-      <div style={S.fr}>
+    {/* Form */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>🔄 New Mould Change Entry</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
         <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
-        <div style={S.f}><label style={S.lbl}>Shift</label><select style={S.fi} value={form.shift} onChange={e=>setForm(p=>({...p,shift:e.target.value}))}><option>Day</option><option>Night</option></select></div>
+        <div style={S.f}><label style={S.lbl}>Shift</label>
+          <select style={S.fi} value={form.shift} onChange={e=>setForm(p=>({...p,shift:e.target.value}))}>
+            <option>Day</option><option>Night</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={form.plant} onChange={e=>setForm(p=>({...p,plant:e.target.value,machine:''}))}>
+            <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Machine</label>
+          <select style={S.fi} value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}>
+            <option value="">Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
+          </select>
+        </div>
       </div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Plant</label><select style={S.fi} value={form.plant} onChange={e=>setForm(p=>({...p,plant:e.target.value,machine:''}))}>
-          <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
-        </select></div>
-        <div style={S.f}><label style={S.lbl}>Machine</label><select style={S.fi} value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}>
-          <option>Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
-        </select></div>
-      </div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Old Mould</label><select style={S.fi} value={form.oldMould} onChange={e=>setForm(p=>({...p,oldMould:e.target.value}))}>
-          <option value="">Select</option>{MOULDS.map(m=><option key={m.code} value={`${m.code} - ${m.name}`}>{m.code} - {m.name}</option>)}
-        </select></div>
-        <div style={S.f}><label style={S.lbl}>New Mould</label><select style={S.fi} value={form.newMould} onChange={e=>setForm(p=>({...p,newMould:e.target.value}))}>
-          <option value="">Select</option>{MOULDS.map(m=><option key={m.code} value={`${m.code} - ${m.name}`}>{m.code} - {m.name}</option>)}
-        </select></div>
-      </div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Operator</label><select style={S.fi} value={form.operator} onChange={e=>setForm(p=>({...p,operator:e.target.value}))}>
-          {OPS.map(o=><option key={o}>{o}</option>)}
-        </select></div>
-        <div style={S.f}><label style={S.lbl}>Helper</label><select style={S.fi} value={form.helper} onChange={e=>setForm(p=>({...p,helper:e.target.value}))}>
-          <option value="">None</option>{OPS.map(o=><option key={o}>{o}</option>)}
-        </select></div>
-      </div>
-
-      {/* Spray */}
-      <div style={{background:'#FFF9E6',border:'1px solid #F4B942',borderRadius:8,padding:10,marginBottom:10}}>
-        <div style={{fontSize:12,fontWeight:700,color:'#854F0B',marginBottom:6}}>Purane Mould ki Spray</div>
-        <div style={{display:'flex',gap:10}}>
-          <button onClick={()=>setSpray(1)} style={{flex:1,padding:8,border:`2px solid ${spray===1?'#276221':'#E0E0E0'}`,borderRadius:6,background:spray===1?'#E8F5E9':'#fff',fontSize:12,cursor:'pointer'}}>Yes — Spray Kiya ✅</button>
-          <button onClick={()=>setSpray(0)} style={{flex:1,padding:8,border:`2px solid ${spray===0?'#C00000':'#E0E0E0'}`,borderRadius:6,background:spray===0?'#FFEBEE':'#fff',fontSize:12,cursor:'pointer'}}>No — Spray Nahi ❌</button>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={S.f}><label style={S.lbl}>Old Mould</label>
+          <select style={S.fi} value={form.oldMould} onChange={e=>setForm(p=>({...p,oldMould:e.target.value}))}>
+            <option value="">Select</option>{MOULDS.map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>New Mould</label>
+          <select style={S.fi} value={form.newMould} onChange={e=>setForm(p=>({...p,newMould:e.target.value}))}>
+            <option value="">Select</option>{MOULDS.map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Operator</label>
+          <select style={S.fi} value={form.operator} onChange={e=>setForm(p=>({...p,operator:e.target.value}))}>
+            <option value="">Select</option>{OPS.map(o=><option key={o}>{o}</option>)}
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Helper</label>
+          <select style={S.fi} value={form.helper} onChange={e=>setForm(p=>({...p,helper:e.target.value}))}>
+            <option value="">None</option>{OPS.map(o=><option key={o}>{o}</option>)}
+          </select>
         </div>
       </div>
 
-      {/* Timer */}
-      <div style={{background:'#F0F4FF',border:'1px solid #1F3864',borderRadius:8,padding:10,marginBottom:10}}>
-        <div style={{fontSize:12,fontWeight:700,color:'#1F3864',marginBottom:8}}>Estimated Time → Timer</div>
-        <div style={S.fr}>
-          <div style={S.f}><label style={S.lbl}>Estimated Time (min)</label><input type="number" style={{...S.fi,fontSize:18,fontWeight:700}} value={form.estimatedTime} onChange={e=>setForm(p=>({...p,estimatedTime:e.target.value}))} placeholder="e.g. 45"/></div>
-          <div style={{display:'flex',alignItems:'flex-end'}}>
-            <button onClick={timerRunning?stopTimer:startTimer} style={{width:'100%',padding:10,background:timerRunning?'#C00000':'#1F3864',color:'#FFD966',border:'none',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>
-              {timerRunning?'⏹ Stop':'▶ Start Timer'}
-            </button>
+      {/* Timer Steps */}
+      <div style={{marginTop:12}}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:8,fontSize:12}}>⏱️ Step-by-Step Timer</div>
+
+        {/* Step 1 - Start */}
+        <div style={stepStyle(!!startTime,!startTime)}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:12}}>Step 1 — Mould Change Start</div>
+              {startTime&&<div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 Started at: {fmt(startTime)}</div>}
+              {timerActive&&<div style={{fontSize:13,fontWeight:700,color:'#1F3864',marginTop:4}}>⏱️ {fmtElapsed(elapsed)}</div>}
+            </div>
+            {!startTime
+              ? <button onClick={startTimer} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:8,padding:'10px 20px',fontSize:13,fontWeight:700,cursor:'pointer'}}>▶ Start Timer</button>
+              : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Started</span>
+            }
           </div>
         </div>
-        {(timerRunning||elapsed>0)&&<div style={{textAlign:'center',marginTop:10}}>
-          <div style={{fontSize:9,color:'#666'}}>Time Elapsed</div>
-          <div style={{fontSize:36,fontWeight:700,fontFamily:'monospace',color:overTarget?'#C00000':'#1F3864'}}>{String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')}</div>
-          <div style={{fontSize:11,color:overTarget?'#C00000':'#276221'}}>{overTarget?`⚠️ ${Math.floor((elapsed-targetSecs)/60)} min over!`:`Target: ${form.estimatedTime} min | ${Math.max(0,Math.ceil((targetSecs-elapsed)/60))} min baaki`}</div>
+
+        {/* Step 2 - Spray */}
+        {startTime&&<div style={stepStyle(!!sprayTime,!sprayTime)}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:12}}>Step 2 — Purane Mould ki Spray</div>
+              {sprayTime
+                ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 Spray at: {fmt(sprayTime)} {startTime&&<span style={{color:'#854F0B'}}>(+{diffMin(startTime,sprayTime)}m)</span>}</div>
+                : <div style={{fontSize:11,color:'#666',marginTop:2}}>Spray karo aur confirm karo</div>
+              }
+            </div>
+            {!sprayTime
+              ? <div style={{display:'flex',gap:6}}>
+                  <button onClick={markSpray} style={{background:'#276221',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:'pointer'}}>✅ Spray Kiya</button>
+                  <button onClick={()=>setSprayTime(new Date())} style={{background:'#C00000',color:'#fff',border:'none',borderRadius:8,padding:'8px 12px',fontSize:12,fontWeight:700,cursor:'pointer'}}>❌ Skip</button>
+                </div>
+              : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Done</span>
+            }
+          </div>
+        </div>}
+
+        {/* Step 3 - Mould Load */}
+        {startTime&&<div style={stepStyle(!!loadTime,!!sprayTime&&!loadTime)}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:12}}>Step 3 — Naya Mould Load</div>
+              {loadTime
+                ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 Loaded at: {fmt(loadTime)} {startTime&&<span style={{color:'#854F0B'}}>(+{diffMin(startTime,loadTime)}m)</span>}</div>
+                : <div style={{fontSize:11,color:'#666',marginTop:2}}>Mould machine mein daala toh confirm karo</div>
+              }
+            </div>
+            {!loadTime
+              ? <button onClick={markLoad} disabled={!sprayTime} style={{background:sprayTime?'#854F0B':'#ccc',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:sprayTime?'pointer':'not-allowed'}}>✅ Mould Loaded</button>
+              : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Done</span>
+            }
+          </div>
+        </div>}
+
+        {/* Step 4 - Mould Running */}
+        {startTime&&<div style={stepStyle(!!runTime,!!loadTime&&!runTime)}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:12}}>Step 4 — Mould Running ✅</div>
+              {runTime
+                ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>
+                    🕐 Running at: {fmt(runTime)} {startTime&&<span style={{color:'#854F0B'}}> — Total: {diffMin(startTime,runTime)}m</span>}
+                  </div>
+                : <div style={{fontSize:11,color:'#666',marginTop:2}}>Machine chalu hone par confirm karo — Timer stop hoga!</div>
+              }
+            </div>
+            {!runTime
+              ? <button onClick={markRun} disabled={!loadTime} style={{background:loadTime?'#276221':'#ccc',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:loadTime?'pointer':'not-allowed'}}>🏃 Mould Running!</button>
+              : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Running</span>
+            }
+          </div>
+        </div>}
+
+        {/* Summary when done */}
+        {runTime&&startTime&&<div style={{background:'#E8F5E9',border:'2px solid #276221',borderRadius:8,padding:'12px',marginTop:8}}>
+          <div style={{fontWeight:700,color:'#276221',marginBottom:8}}>✅ Mould Change Complete!</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,fontSize:11}}>
+            <div>🕐 Start: <strong>{fmt(startTime)}</strong></div>
+            <div>💨 Spray: <strong>{fmt(sprayTime)}</strong></div>
+            <div>📦 Load: <strong>{fmt(loadTime)}</strong></div>
+            <div>🏃 Run: <strong>{fmt(runTime)}</strong></div>
+            <div style={{gridColumn:'1/-1',marginTop:4}}>
+              ⏱️ <strong>Total Time: {diffMin(startTime,runTime)} minutes</strong>
+              {diffMin(startTime,runTime)<=30?<span style={{color:'#276221',marginLeft:8}}>🟢 On Time!</span>:diffMin(startTime,runTime)<=45?<span style={{color:'#854F0B',marginLeft:8}}>🟠 Thoda slow</span>:<span style={{color:'#C00000',marginLeft:8}}>🔴 Zyada time laga!</span>}
+            </div>
+          </div>
         </div>}
       </div>
 
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Mould Load Time</label><input type="time" style={S.fi} value={form.mouldLoadTime} onChange={e=>setForm(p=>({...p,mouldLoadTime:e.target.value}))}/></div>
-        <div style={S.f}><label style={S.lbl}>Mould Run Time</label><input type="time" style={S.fi} value={form.mouldRunTime} onChange={e=>setForm(p=>({...p,mouldRunTime:e.target.value}))}/></div>
-      </div>
-      <div style={S.f}><label style={S.lbl}>Remarks</label><input style={S.fi} value={form.remarks} onChange={e=>setForm(p=>({...p,remarks:e.target.value}))} placeholder="Any notes..."/></div>
-      <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Mould Change'}</button>
+      <input style={{...S.fi,marginTop:8}} value={form.remarks} onChange={e=>setForm(p=>({...p,remarks:e.target.value}))} placeholder="Remarks..."/>
+
+      <button style={{...S.sb,marginTop:10,background:runTime?'#276221':'#1F3864'}} onClick={save} disabled={saving||!startTime}>
+        {saving?'Saving...':`💾 Save Mould Change${runTime?` — ${diffMin(startTime!,runTime)} min`:''}` }
+      </button>
       {toast&&<Toast {...toast}/>}
     </div>
 
-    {data?.recent?.length>0&&<div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:8}}>Recent Changes</div>
+    {/* History */}
+    {history.length>0&&<div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:8,color:'#1F3864'}}>📋 Aaj Ki Mould Changes</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Date','Plant','Machine','Old','New','Target','Actual','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
-          <tbody>{data.recent.map((r:any,i:number)=>{
-            const col=r.on_time==='Yes'?'#276221':'#C00000'
-            return <tr key={i}>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.date}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.plant}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.machine}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.old_mould}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.new_mould}</td>
-              <td style={{padding:'6px 8px',textAlign:'center'}}>{r.estimated_time}m</td>
-              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>{r.actual_time}m</td>
-              <td style={{padding:'6px 8px'}}><span style={{background:r.on_time==='Yes'?'#E8F5E9':'#FFEBEE',color:col,padding:'2px 7px',borderRadius:999,fontSize:10}}>{r.on_time==='Yes'?'On Time':'Delayed'}</span></td>
-            </tr>
-          })}</tbody>
+          <thead><tr>
+            {['Machine','Old Mould','New Mould','Start','Spray','Load','Run','Total','Spray?','By'].map(h=>
+              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{history.map((h:any,i:number)=><tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
+            <td style={{padding:'6px 8px',fontWeight:600}}>{h.machine}</td>
+            <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{h.old_mould?.split(' - ')[0]}</td>
+            <td style={{padding:'6px 8px',fontSize:10,color:'#1F3864',fontWeight:600}}>{h.new_mould?.split(' - ')[0]}</td>
+            <td style={{padding:'6px 8px',fontSize:10}}>{h.start_time?new Date(h.start_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''}</td>
+            <td style={{padding:'6px 8px',fontSize:10}}>{h.spray_time?new Date(h.spray_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
+            <td style={{padding:'6px 8px',fontSize:10}}>{h.load_time?new Date(h.load_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
+            <td style={{padding:'6px 8px',fontSize:10}}>{h.run_time?new Date(h.run_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
+            <td style={{padding:'6px 8px',fontWeight:700,color:h.total_minutes<=30?'#276221':h.total_minutes<=45?'#854F0B':'#C00000'}}>{h.total_minutes}m</td>
+            <td style={{padding:'6px 8px'}}>{h.spray_done?'✅':'❌'}</td>
+            <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{h.entered_by}</td>
+          </tr>)}</tbody>
         </table>
       </div>
     </div>}
