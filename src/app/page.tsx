@@ -1545,109 +1545,96 @@ function MouldChangeTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [history,setHistory]=useState<any[]>([])
-
-  // Timestamps
-  const [startTime,setStartTime]=useState<Date|null>(null)
-  const [sprayTime,setSprayTime]=useState<Date|null>(null)
-  const [loadTime,setLoadTime]=useState<Date|null>(null)
-  const [runTime,setRunTime]=useState<Date|null>(null)
+  const [pendingEntry,setPendingEntry]=useState<any>(null)
   const [elapsed,setElapsed]=useState(0)
   const [timerActive,setTimerActive]=useState(false)
 
-  // Timer tick
-  useEffect(()=>{
-    if(!timerActive||!startTime) return
-    const iv=setInterval(()=>{
-      setElapsed(Math.floor((Date.now()-startTime.getTime())/1000))
-    },1000)
-    return ()=>clearInterval(iv)
-  },[timerActive,startTime])
-
-  const loadHistory=async()=>{
-    const res=await fetch(`/api/mouldchange?date=${form.date}`).then(r=>r.json())
-    setHistory(res.data||[])
-  }
-
-  useEffect(()=>{loadHistory()},[form.date])
-
-  const fmt=(d:Date|null)=>d?d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''
-  const diffMin=(a:Date,b:Date)=>Math.round(Math.abs(b.getTime()-a.getTime())/60000)
-  const fmtElapsed=(s:number)=>{
-    const m=Math.floor(s/60),sec=s%60
-    return `${m}m ${sec}s`
-  }
-
   const machines=MACH[form.plant]||[]
 
-  const startTimer=()=>{
-    const now=new Date()
-    setStartTime(now)
+  // Load pending entry and history
+  const loadData=async()=>{
+    const [histRes,pendRes]=await Promise.all([
+      fetch(`/api/mouldchange?date=${form.date}`).then(r=>r.json()),
+      fetch('/api/mouldchange?pending=1').then(r=>r.json())
+    ])
+    setHistory(histRes.data||[])
+    const pending=(pendRes.data||[]).filter((e:any)=>e.entered_by===user.name)
+    if(pending.length>0) setPendingEntry(pending[0])
+  }
+
+  useEffect(()=>{loadData()},[form.date])
+
+  // Timer tick from DB start_time
+  useEffect(()=>{
+    if(!pendingEntry?.start_time||pendingEntry?.run_time) return
     setTimerActive(true)
-    setSprayTime(null)
-    setLoadTime(null)
-    setRunTime(null)
-    setElapsed(0)
-  }
+    const iv=setInterval(()=>{
+      setElapsed(Math.floor((Date.now()-new Date(pendingEntry.start_time).getTime())/1000))
+    },1000)
+    return ()=>clearInterval(iv)
+  },[pendingEntry])
 
-  const markSpray=()=>setSprayTime(new Date())
-  const markLoad=()=>setLoadTime(new Date())
-  const markRun=()=>{
-    setRunTime(new Date())
-    setTimerActive(false)
-  }
+  const fmt=(ts:string|null)=>ts?new Date(ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''
+  const diffMin=(a:string,b:string)=>Math.round(Math.abs(new Date(b).getTime()-new Date(a).getTime())/60000)
+  const fmtElapsed=(s:number)=>`${Math.floor(s/60)}m ${s%60}s`
 
-  const save=async()=>{
+  const startTimer=async()=>{
     if(!form.plant||!form.machine||!form.oldMould||!form.newMould){
-      setToast({msg:'Saari fields bharo!',ok:false});return
+      setToast({msg:'Pehle Plant, Machine, Old aur New Mould select karo!',ok:false});return
     }
-    if(!startTime){setToast({msg:'Timer start karo pehle!',ok:false});return}
-
     setSaving(true)
-    const totalTime=runTime&&startTime?diffMin(startTime,runTime):Math.round(elapsed/60)
     const res=await fetch('/api/mouldchange',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        ...form,
-        startTime:startTime?.toISOString(),
-        sprayTime:sprayTime?.toISOString(),
-        loadTime:loadTime?.toISOString(),
-        runTime:runTime?.toISOString(),
-        totalMinutes:totalTime,
-        sprayDone:!!sprayTime,
-        enteredBy:user.name
-      })
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'start',...form,enteredBy:user.name})
     }).then(r=>r.json())
+    setSaving(false)
+    if(res.success){
+      setToast({msg:'Timer started! Ab step by step karo.',ok:true})
+      await loadData()
+    } else setToast({msg:res.msg,ok:false})
+  }
 
+  const updateStep=async(step:string)=>{
+    if(!pendingEntry?.id) return
+    setSaving(true)
+    const res=await fetch('/api/mouldchange',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'update_step',id:pendingEntry.id,step,remarks:form.remarks,enteredBy:user.name})
+    }).then(r=>r.json())
     setSaving(false)
     setToast({msg:res.msg,ok:res.success})
     if(res.success){
-      // Reset
-      setStartTime(null);setSprayTime(null);setLoadTime(null);setRunTime(null)
-      setElapsed(0);setTimerActive(false)
-      setForm(p=>({...p,oldMould:'',newMould:'',remarks:''}))
-      loadHistory()
+      await loadData()
+      if(step==='run') setTimerActive(false)
     }
   }
 
-  const stepDone=(step:Date|null)=>!!step
+  const stepDone=(ts:string|null)=>!!ts
   const stepStyle=(done:boolean,active:boolean)=>({
-    padding:'12px 16px',borderRadius:8,
+    padding:'12px 16px',borderRadius:8,marginBottom:8,
     border:`2px solid ${done?'#276221':active?'#1F3864':'#E0E0E0'}`,
-    background:done?'#E8F5E9':active?'#E6F1FB':'#F5F5F5',
-    marginBottom:8
+    background:done?'#E8F5E9':active?'#E6F1FB':'#F5F5F5'
   })
 
+  const pe=pendingEntry
+
   return <div>
-    {/* History Summary */}
+    {/* Summary */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total Changes</div><div style={{fontSize:20,fontWeight:700,color:'#1F3864'}}>{history.length}</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Avg Time</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{history.length>0?Math.round(history.reduce((a:number,h:any)=>a+(h.total_minutes||0),0)/history.length):0}m</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Best Time</div><div style={{fontSize:20,fontWeight:700,color:'#276221'}}>{history.length>0?Math.min(...history.map((h:any)=>h.total_minutes||999)):0}m</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Avg Time</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{history.filter((h:any)=>h.total_minutes>0).length>0?Math.round(history.filter((h:any)=>h.total_minutes>0).reduce((a:number,h:any)=>a+(h.total_minutes||0),0)/history.filter((h:any)=>h.total_minutes>0).length):0}m</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Best Time</div><div style={{fontSize:20,fontWeight:700,color:'#276221'}}>{history.filter((h:any)=>h.total_minutes>0).length>0?Math.min(...history.filter((h:any)=>h.total_minutes>0).map((h:any)=>h.total_minutes)):0}m</div></div>
     </div>
 
-    {/* Form */}
-    <div style={S.card}>
+    {/* Pending Alert */}
+    {pe&&!pe.run_time&&<div style={{background:'#FFF3E0',border:'2px solid #FF9800',borderRadius:8,padding:'10px 14px',marginBottom:8}}>
+      <div style={{fontWeight:700,color:'#E65100',fontSize:13}}>⚠️ Mould Change In Progress!</div>
+      <div style={{fontSize:11,color:'#666',marginTop:4}}>{pe.machine} | {pe.old_mould?.split(' - ')[0]} → {pe.new_mould?.split(' - ')[0]}</div>
+      <div style={{fontSize:13,fontWeight:700,color:'#1F3864',marginTop:4}}>⏱️ {fmtElapsed(elapsed)}</div>
+    </div>}
+
+    {/* Form — only show if no pending */}
+    {!pe&&<div style={S.card}>
       <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>🔄 New Mould Change Entry</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
         <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
@@ -1666,8 +1653,6 @@ function MouldChangeTab({user}:{user:User}) {
             <option value="">Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
           </select>
         </div>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
         <div style={S.f}><label style={S.lbl}>Old Mould</label>
           <select style={S.fi} value={form.oldMould} onChange={e=>setForm(p=>({...p,oldMould:e.target.value}))}>
             <option value="">Select</option>{MOULDS.map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
@@ -1689,126 +1674,117 @@ function MouldChangeTab({user}:{user:User}) {
           </select>
         </div>
       </div>
-
-      {/* Timer Steps */}
-      <div style={{marginTop:12}}>
-        <div style={{fontWeight:700,color:'#1F3864',marginBottom:8,fontSize:12}}>⏱️ Step-by-Step Timer</div>
-
-        {/* Step 1 - Start */}
-        <div style={stepStyle(!!startTime,!startTime)}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <div style={{fontWeight:600,fontSize:12}}>Step 1 — Mould Change Start</div>
-              {startTime&&<div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 Started at: {fmt(startTime)}</div>}
-              {timerActive&&<div style={{fontSize:13,fontWeight:700,color:'#1F3864',marginTop:4}}>⏱️ {fmtElapsed(elapsed)}</div>}
-            </div>
-            {!startTime
-              ? <button onClick={startTimer} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:8,padding:'10px 20px',fontSize:13,fontWeight:700,cursor:'pointer'}}>▶ Start Timer</button>
-              : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Started</span>
-            }
-          </div>
-        </div>
-
-        {/* Step 2 - Spray */}
-        {startTime&&<div style={stepStyle(!!sprayTime,!sprayTime)}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <div style={{fontWeight:600,fontSize:12}}>Step 2 — Purane Mould ki Spray</div>
-              {sprayTime
-                ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 Spray at: {fmt(sprayTime)} {startTime&&<span style={{color:'#854F0B'}}>(+{diffMin(startTime,sprayTime)}m)</span>}</div>
-                : <div style={{fontSize:11,color:'#666',marginTop:2}}>Spray karo aur confirm karo</div>
-              }
-            </div>
-            {!sprayTime
-              ? <div style={{display:'flex',gap:6}}>
-                  <button onClick={markSpray} style={{background:'#276221',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:'pointer'}}>✅ Spray Kiya</button>
-                  <button onClick={()=>setSprayTime(new Date())} style={{background:'#C00000',color:'#fff',border:'none',borderRadius:8,padding:'8px 12px',fontSize:12,fontWeight:700,cursor:'pointer'}}>❌ Skip</button>
-                </div>
-              : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Done</span>
-            }
-          </div>
-        </div>}
-
-        {/* Step 3 - Mould Load */}
-        {startTime&&<div style={stepStyle(!!loadTime,!!sprayTime&&!loadTime)}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <div style={{fontWeight:600,fontSize:12}}>Step 3 — Naya Mould Load</div>
-              {loadTime
-                ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 Loaded at: {fmt(loadTime)} {startTime&&<span style={{color:'#854F0B'}}>(+{diffMin(startTime,loadTime)}m)</span>}</div>
-                : <div style={{fontSize:11,color:'#666',marginTop:2}}>Mould machine mein daala toh confirm karo</div>
-              }
-            </div>
-            {!loadTime
-              ? <button onClick={markLoad} disabled={!sprayTime} style={{background:sprayTime?'#854F0B':'#ccc',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:sprayTime?'pointer':'not-allowed'}}>✅ Mould Loaded</button>
-              : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Done</span>
-            }
-          </div>
-        </div>}
-
-        {/* Step 4 - Mould Running */}
-        {startTime&&<div style={stepStyle(!!runTime,!!loadTime&&!runTime)}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <div style={{fontWeight:600,fontSize:12}}>Step 4 — Mould Running ✅</div>
-              {runTime
-                ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>
-                    🕐 Running at: {fmt(runTime)} {startTime&&<span style={{color:'#854F0B'}}> — Total: {diffMin(startTime,runTime)}m</span>}
-                  </div>
-                : <div style={{fontSize:11,color:'#666',marginTop:2}}>Machine chalu hone par confirm karo — Timer stop hoga!</div>
-              }
-            </div>
-            {!runTime
-              ? <button onClick={markRun} disabled={!loadTime} style={{background:loadTime?'#276221':'#ccc',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:loadTime?'pointer':'not-allowed'}}>🏃 Mould Running!</button>
-              : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Running</span>
-            }
-          </div>
-        </div>}
-
-        {/* Summary when done */}
-        {runTime&&startTime&&<div style={{background:'#E8F5E9',border:'2px solid #276221',borderRadius:8,padding:'12px',marginTop:8}}>
-          <div style={{fontWeight:700,color:'#276221',marginBottom:8}}>✅ Mould Change Complete!</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,fontSize:11}}>
-            <div>🕐 Start: <strong>{fmt(startTime)}</strong></div>
-            <div>💨 Spray: <strong>{fmt(sprayTime)}</strong></div>
-            <div>📦 Load: <strong>{fmt(loadTime)}</strong></div>
-            <div>🏃 Run: <strong>{fmt(runTime)}</strong></div>
-            <div style={{gridColumn:'1/-1',marginTop:4}}>
-              ⏱️ <strong>Total Time: {diffMin(startTime,runTime)} minutes</strong>
-              {diffMin(startTime,runTime)<=30?<span style={{color:'#276221',marginLeft:8}}>🟢 On Time!</span>:diffMin(startTime,runTime)<=45?<span style={{color:'#854F0B',marginLeft:8}}>🟠 Thoda slow</span>:<span style={{color:'#C00000',marginLeft:8}}>🔴 Zyada time laga!</span>}
-            </div>
-          </div>
-        </div>}
-      </div>
-
-      <input style={{...S.fi,marginTop:8}} value={form.remarks} onChange={e=>setForm(p=>({...p,remarks:e.target.value}))} placeholder="Remarks..."/>
-
-      <button style={{...S.sb,marginTop:10,background:runTime?'#276221':'#1F3864'}} onClick={save} disabled={saving||!startTime}>
-        {saving?'Saving...':`💾 Save Mould Change${runTime?` — ${diffMin(startTime!,runTime)} min`:''}` }
+      <button style={{...S.sb,background:'#1F3864'}} onClick={startTimer} disabled={saving}>
+        {saving?'Starting...':'▶ Start Mould Change Timer'}
       </button>
       {toast&&<Toast {...toast}/>}
-    </div>
+    </div>}
 
-    {/* History */}
-    {history.length>0&&<div style={S.card}>
+    {/* Steps — only show if pending */}
+    {pe&&!pe.run_time&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:4,fontSize:14}}>⏱️ Step-by-Step Progress</div>
+      <div style={{fontSize:11,color:'#666',marginBottom:12}}>{pe.machine} | {pe.old_mould?.split(' - ')[0]} → {pe.new_mould?.split(' - ')[0]}</div>
+
+      {/* Step 1 - Done */}
+      <div style={stepStyle(true,false)}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:12}}>Step 1 — Mould Change Start</div>
+            <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 Started: {fmt(pe.start_time)} | ⏱️ {fmtElapsed(elapsed)}</div>
+          </div>
+          <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Started</span>
+        </div>
+      </div>
+
+      {/* Step 2 - Spray */}
+      <div style={stepStyle(stepDone(pe.spray_time),!stepDone(pe.spray_time))}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:12}}>Step 2 — Purane Mould ki Spray</div>
+            {pe.spray_time
+              ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 {fmt(pe.spray_time)} (+{diffMin(pe.start_time,pe.spray_time)}m)</div>
+              : <div style={{fontSize:11,color:'#666',marginTop:2}}>Spray karo aur confirm karo</div>}
+          </div>
+          {!pe.spray_time
+            ? <div style={{display:'flex',gap:6}}>
+                <button onClick={()=>updateStep('spray')} style={{background:'#276221',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:'pointer'}}>✅ Spray Kiya</button>
+                <button onClick={()=>updateStep('spray_skip')} style={{background:'#C00000',color:'#fff',border:'none',borderRadius:8,padding:'8px 10px',fontSize:12,fontWeight:700,cursor:'pointer'}}>❌ Skip</button>
+              </div>
+            : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Done</span>}
+        </div>
+      </div>
+
+      {/* Step 3 - Load */}
+      <div style={stepStyle(stepDone(pe.load_time),(pe.spray_time||pe.spray_done===false)&&!pe.load_time)}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:12}}>Step 3 — Naya Mould Load</div>
+            {pe.load_time
+              ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 {fmt(pe.load_time)} (+{diffMin(pe.start_time,pe.load_time)}m)</div>
+              : <div style={{fontSize:11,color:'#666',marginTop:2}}>Mould machine mein daala toh confirm karo</div>}
+          </div>
+          {!pe.load_time
+            ? <button onClick={()=>updateStep('load')} disabled={!pe.spray_time&&pe.spray_done!==false} style={{background:(pe.spray_time||pe.spray_done===false)?'#854F0B':'#ccc',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:(pe.spray_time||pe.spray_done===false)?'pointer':'not-allowed'}}>✅ Mould Loaded</button>
+            : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Done</span>}
+        </div>
+      </div>
+
+      {/* Step 4 - Run */}
+      <div style={stepStyle(stepDone(pe.run_time),!!pe.load_time&&!pe.run_time)}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:12}}>Step 4 — Mould Running ✅</div>
+            {pe.run_time
+              ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 {fmt(pe.run_time)} — Total: {pe.total_minutes}m</div>
+              : <div style={{fontSize:11,color:'#666',marginTop:2}}>Machine chalu hone par confirm karo</div>}
+          </div>
+          {!pe.run_time
+            ? <button onClick={()=>updateStep('run')} disabled={!pe.load_time} style={{background:pe.load_time?'#276221':'#ccc',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:pe.load_time?'pointer':'not-allowed'}}>🏃 Mould Running!</button>
+            : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Running</span>}
+        </div>
+      </div>
+
+      <input style={{...S.fi,marginTop:6}} value={form.remarks} onChange={e=>setForm(p=>({...p,remarks:e.target.value}))} placeholder="Remarks..."/>
+      {toast&&<Toast {...toast}/>}
+    </div>}
+
+    {/* Complete Summary */}
+    {pe?.run_time&&<div style={{...S.card,border:'2px solid #276221',background:'#F0FFF4'}}>
+      <div style={{fontWeight:700,color:'#276221',fontSize:14,marginBottom:10}}>✅ Mould Change Complete!</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,fontSize:11,marginBottom:10}}>
+        <div>🕐 Start: <strong>{fmt(pe.start_time)}</strong></div>
+        <div>💨 Spray: <strong>{pe.spray_time?fmt(pe.spray_time):'Skipped'}</strong></div>
+        <div>📦 Load: <strong>{fmt(pe.load_time)}</strong></div>
+        <div>🏃 Run: <strong>{fmt(pe.run_time)}</strong></div>
+        <div style={{gridColumn:'1/-1',marginTop:6,fontSize:13}}>
+          ⏱️ <strong>Total: {pe.total_minutes} minutes</strong>
+          {pe.total_minutes<=30?<span style={{color:'#276221',marginLeft:8,fontWeight:600}}>🟢 Excellent!</span>:pe.total_minutes<=45?<span style={{color:'#854F0B',marginLeft:8,fontWeight:600}}>🟠 Average</span>:<span style={{color:'#C00000',marginLeft:8,fontWeight:600}}>🔴 Slow</span>}
+        </div>
+      </div>
+      <button onClick={()=>{setPendingEntry(null);loadData()}} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+        🔄 New Mould Change
+      </button>
+    </div>}
+
+    {/* History Table */}
+    {history.filter((h:any)=>h.status==='complete').length>0&&<div style={S.card}>
       <div style={{fontWeight:700,marginBottom:8,color:'#1F3864'}}>📋 Aaj Ki Mould Changes</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['Machine','Old Mould','New Mould','Start','Spray','Load','Run','Total','Spray?','By'].map(h=>
+            {['Machine','Old Mould','New Mould','Start','Spray','Load','Run','Total','Spray?'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
           </tr></thead>
-          <tbody>{history.map((h:any,i:number)=><tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
+          <tbody>{history.filter((h:any)=>h.status==='complete').map((h:any,i:number)=><tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
             <td style={{padding:'6px 8px',fontWeight:600}}>{h.machine}</td>
             <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{h.old_mould?.split(' - ')[0]}</td>
             <td style={{padding:'6px 8px',fontSize:10,color:'#1F3864',fontWeight:600}}>{h.new_mould?.split(' - ')[0]}</td>
-            <td style={{padding:'6px 8px',fontSize:10}}>{h.start_time?new Date(h.start_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''}</td>
-            <td style={{padding:'6px 8px',fontSize:10}}>{h.spray_time?new Date(h.spray_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
-            <td style={{padding:'6px 8px',fontSize:10}}>{h.load_time?new Date(h.load_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
-            <td style={{padding:'6px 8px',fontSize:10}}>{h.run_time?new Date(h.run_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
+            <td style={{padding:'6px 8px',fontSize:10}}>{fmt(h.start_time)}</td>
+            <td style={{padding:'6px 8px',fontSize:10}}>{h.spray_time?fmt(h.spray_time):'-'}</td>
+            <td style={{padding:'6px 8px',fontSize:10}}>{h.load_time?fmt(h.load_time):'-'}</td>
+            <td style={{padding:'6px 8px',fontSize:10}}>{h.run_time?fmt(h.run_time):'-'}</td>
             <td style={{padding:'6px 8px',fontWeight:700,color:h.total_minutes<=30?'#276221':h.total_minutes<=45?'#854F0B':'#C00000'}}>{h.total_minutes}m</td>
             <td style={{padding:'6px 8px'}}>{h.spray_done?'✅':'❌'}</td>
-            <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{h.entered_by}</td>
           </tr>)}</tbody>
         </table>
       </div>
