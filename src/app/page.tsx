@@ -5409,14 +5409,12 @@ function KRAReport({user}:{user:User}) {
   const week=getWeekDates(weekOffset)
 
   useEffect(()=>{
-    // Load users from auth API
-    fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'list'})})
-      .then(r=>r.json()).then(d=>{
-        if(d.users&&d.users.length>0) setAllUsers(d.users)
-        else setAllUsers(OPS.map(name=>({name,full_name:name,role:'Operator'})))
-      }).catch(()=>{
-        setAllUsers(OPS.map(name=>({name,full_name:name,role:'Operator'})))
-      })
+    fetch('/api/users').then(r=>r.json()).then(d=>{
+      if(d.data&&d.data.length>0) setAllUsers(d.data)
+      else setAllUsers(OPS.map(name=>({full_name:name,role:'Operator'})))
+    }).catch(()=>{
+      setAllUsers(OPS.map(name=>({full_name:name,role:'Operator'})))
+    })
   },[])
 
   useEffect(()=>{loadReport()},[selectedUser,weekOffset])
