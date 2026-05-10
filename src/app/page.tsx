@@ -5432,9 +5432,16 @@ function KRAReport({user}:{user:User}) {
     ])
 
     // Production stats for this person
-    const myProd=(prodRes.data||[]).filter((e:any)=>
-      e.entered_by===selectedUser||e.operator===selectedUser||e.operator2===selectedUser
-    )
+    // Ranjan = Plant Head → responsible for ALL production
+    const isPlantHead=selectedUser==='Ranjan Kumar'
+    const myProd=isPlantHead
+      ? (prodRes.data||[]) // All entries
+      : (prodRes.data||[]).filter((e:any)=>
+          e.entered_by===selectedUser||
+          e.operator===selectedUser||
+          e.operator2===selectedUser||  // Helper bhi counted
+          e.operator2===selectedUser    // Operator 2 = helper
+        )
     const totalGood=myProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
     const totalRej=myProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
     const totalDown=myProd.reduce((a:number,e:any)=>a+(e.downtime||0),0)
@@ -5444,25 +5451,35 @@ function KRAReport({user}:{user:User}) {
     // Previous week for comparison
     const prevWeek=getWeekDates(weekOffset-1)
     const prevProdRes=await fetch(`/api/production?from=${prevWeek.from}&to=${prevWeek.to}`).then(r=>r.json())
-    const prevProd=(prevProdRes.data||[]).filter((e:any)=>
-      e.entered_by===selectedUser||e.operator===selectedUser||e.operator2===selectedUser
-    )
+    const prevProd=isPlantHead
+      ? (prevProdRes.data||[])
+      : (prevProdRes.data||[]).filter((e:any)=>
+          e.entered_by===selectedUser||e.operator===selectedUser||e.operator2===selectedUser
+        )
     const prevGood=prevProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
     const prevRej=prevProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
     const prevEff=prevGood+prevRej>0?Math.round(prevGood/(prevGood+prevRej)*100):0
 
     // Rejection stats
-    const myRej=(rejRes.data||[]).filter((e:any)=>e.operator===selectedUser||e.entered_by===selectedUser)
+    const myRej=isPlantHead
+      ? (rejRes.data||[])
+      : (rejRes.data||[]).filter((e:any)=>e.operator===selectedUser||e.entered_by===selectedUser)
     const rejQty=myRej.reduce((a:number,e:any)=>a+(e.rejection_qty||0),0)
 
     // Breakdown stats
-    const myBd=(bdRes.data||[]).filter((e:any)=>e.entered_by===selectedUser||e.operator_name===selectedUser)
+    const myBd=isPlantHead
+      ? (bdRes.data||[])
+      : (bdRes.data||[]).filter((e:any)=>e.entered_by===selectedUser||e.operator_name===selectedUser)
     const bdResolved=myBd.filter((e:any)=>e.status==='Resolved').length
     const avgBdTime=myBd.filter((e:any)=>e.total_minutes>0).length>0
       ?Math.round(myBd.filter((e:any)=>e.total_minutes>0).reduce((a:number,e:any)=>a+(e.downtime_min||0),0)/myBd.filter((e:any)=>e.total_minutes>0).length):0
 
     // Mould change stats
-    const myMC=(mcRes.data||[]).filter((e:any)=>e.entered_by===selectedUser)
+    const myMC=isPlantHead
+      ? (mcRes.data||[])
+      : (mcRes.data||[]).filter((e:any)=>
+          e.entered_by===selectedUser||e.operator_name===selectedUser
+        )
     const mcCount=myMC.filter((e:any)=>e.status==='complete').length
     const avgMCTime=myMC.filter((e:any)=>e.total_minutes>0).length>0
       ?Math.round(myMC.filter((e:any)=>e.total_minutes>0).reduce((a:number,e:any)=>a+(e.total_minutes||0),0)/myMC.filter((e:any)=>e.total_minutes>0).length):0
@@ -5502,9 +5519,13 @@ function KRAReport({user}:{user:User}) {
     return {grade:'D',color:'#C00000',msg:'Improvement chahiye — supervisor se baat karo!'}
   }
 
-  const generateAnalysis=(d:any)=>{
+  const generateAnalysis=(d:any,isHead:boolean)=>{
     const points:string[]=[]
     const improvements:string[]=[]
+    if(isHead){
+      points.push('📋 Plant Head Score: Saari machines ka combined performance')
+      points.push(`👥 Total ${d.shifts} shifts across all operators supervised`)
+    }
 
     if(d.eff>=90) points.push(`✅ Efficiency ${d.eff}% rahi — bahut badhiya!`)
     else improvements.push(`⚠️ Efficiency ${d.eff}% hai — target 90%+ karo. Cycle time aur downtime kam karo.`)
@@ -5530,7 +5551,8 @@ function KRAReport({user}:{user:User}) {
   }
 
   const grade=data?getGrade(data.eff):null
-  const analysis=data?generateAnalysis(data):null
+  const isHead=selectedUser==='Ranjan Kumar'
+  const analysis=data?generateAnalysis(data,isHead):null
   const prodTrend=data?trend(data.totalGood,data.prevGood):null
 
   return <div>
@@ -5568,7 +5590,9 @@ function KRAReport({user}:{user:User}) {
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div>
             <div style={{fontSize:13,opacity:0.8}}>{selectedUser}</div>
-            <div style={{fontSize:11,opacity:0.6}}>{week.label}</div>
+            {selectedUser==='Ranjan Kumar'&&<div style={{background:'#FFD966',color:'#1F3864',borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700,display:'inline-block',marginTop:4}}>🏆 Plant Head — All Plant Score</div>}
+            {data?.myProdHelper&&data.myProdHelper>0&&selectedUser!=='Ranjan Kumar'&&<div style={{background:'rgba(255,255,255,0.2)',borderRadius:4,padding:'2px 8px',fontSize:10,marginTop:4}}>👥 Helper entries bhi included</div>}
+            <div style={{fontSize:11,opacity:0.6,marginTop:4}}>{week.label}</div>
             <div style={{fontSize:28,fontWeight:700,marginTop:8,color:'#FFD966'}}>{grade?.grade}</div>
             <div style={{fontSize:12,marginTop:4}}>{grade?.msg}</div>
           </div>
