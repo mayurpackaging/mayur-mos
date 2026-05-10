@@ -30,10 +30,10 @@ export async function POST(req: Request) {
       machine: d.machine || '',
       problem: d.problem || '',
       category: d.category || 'Mechanical',
-      operator: d.operator || '',
+      operator_name: d.operator || '',
       reported_time: now,
       status: 'Pending',
-      entered_by: d.enteredBy || '',
+      reported_by: d.enteredBy || '',
       remarks: d.remarks || ''
     }).select().single()
 
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       resolved_time: resolvedTime,
       status: 'Resolved',
       solution: d.solution || '',
-      downtime: downtimeMins,
+      downtime_min: downtimeMins,
       resolved_by: d.enteredBy || '',
       remarks: d.remarks || ''
     }).eq('id', d.id)
