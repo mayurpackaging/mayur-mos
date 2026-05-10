@@ -2193,7 +2193,7 @@ function BreakdownTab({user}:{user:User}) {
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
           </tr></thead>
           <tbody>{resolved.map((b:any,i:number)=>{
-            const downtime=b.reported_time&&b.resolved_time?calcDowntime(b.reported_time,b.resolved_time):b.downtime?`${b.downtime}m`:'--'
+            const downtime=b.reported_time&&b.resolved_time?calcDowntime(b.reported_time,b.resolved_time):b.downtime_min?`${b.downtime_min}m`:'--'
             const dtMins=b.reported_time&&b.resolved_time?Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000):0
             const dtCol=dtMins>0?(dtMins<=60?'#276221':dtMins<=180?'#854F0B':'#C00000'):'#666'
             return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
@@ -2204,7 +2204,7 @@ function BreakdownTab({user}:{user:User}) {
               <td style={{padding:'6px 8px',fontSize:10,color:'#854F0B',fontWeight:600}}>{b.work_started_time?fmtTime(b.work_started_time):'--'}</td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#276221',fontWeight:600}}>{b.resolved_time?fmtTime(b.resolved_time):'--'}</td>
               <td style={{padding:'6px 8px',fontWeight:700,color:dtCol}}>{downtime}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{b.resolved_by||b.entered_by}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{b.resolved_by||b.reported_by}</td>
             </tr>
           })}</tbody>
         </table>
