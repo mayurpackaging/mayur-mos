@@ -2026,7 +2026,7 @@ function ReportsTab() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                     <thead><tr>
-                      {['Date', 'Good Parts', 'Rejection', 'Rej %', 'Downtime', 'Entries'].map(h =>
+                      {['Date', 'Good Parts', 'Rejection', 'Rej %', 'Efficiency', 'Downtime', 'Entries'].map(h =>
                         <th key={h} style={{ background: '#1F3864', color: '#fff', padding: '6px 8px', textAlign: 'left' }}>{h}</th>)}
                     </tr></thead>
                     <tbody>
@@ -4577,14 +4577,17 @@ function BulkProductionTab({user}:{user:User}) {
   }
 
   // Load today's history
-  const loadHistory=async()=>{
-    if(!plant||!date) return
-    const res=await fetch(`/api/production?date=${date}&plant=${encodeURIComponent(plant)}`).then(r=>r.json())
-    setHistory(res.data||[])
+  const loadHistory=async(p?:string,d?:string)=>{
+    const usePlant=p||plant
+    const useDate=d||date
+    if(!usePlant||!useDate) return
+    const res=await fetch(`/api/production?date=${useDate}&plant=${encodeURIComponent(usePlant)}`).then(r=>r.json())
+    // Filter strictly by plant
+    setHistory((res.data||[]).filter((e:any)=>e.plant===usePlant))
   }
 
   useEffect(()=>{
-    if(plant&&date){loadSetup(plant,date);loadHistory()}
+    if(plant&&date){loadSetup(plant,date);loadHistory(plant,date)}
   },[plant,date])
 
   // Update slot in entries when slot changes
@@ -4768,7 +4771,7 @@ function BulkProductionTab({user}:{user:User}) {
     {/* View tabs */}
     <div style={{display:'flex',gap:6,marginBottom:8}}>
       {[{id:'entry',label:'📝 Slot Entry'},{id:'setup',label:'⚙️ Machine Setup'},{id:'history',label:'📋 Today\'s History'}].map(v=>
-        <button key={v.id} onClick={()=>{setActiveView(v.id as any);if(v.id==='history')loadHistory()}}
+        <button key={v.id} onClick={()=>{setActiveView(v.id as any);if(v.id==='history')loadHistory(plant,date)}}
           style={{flex:1,padding:'8px',border:`2px solid #1F3864`,borderRadius:8,background:activeView===v.id?'#1F3864':'#fff',color:activeView===v.id?'#fff':'#1F3864',fontWeight:700,fontSize:12,cursor:'pointer'}}>
           {v.label}
         </button>
