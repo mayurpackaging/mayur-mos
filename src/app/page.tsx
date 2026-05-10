@@ -1545,34 +1545,45 @@ function MouldChangeTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [history,setHistory]=useState<any[]>([])
-  const [pendingEntry,setPendingEntry]=useState<any>(null)
-  const [elapsed,setElapsed]=useState(0)
-  const [timerActive,setTimerActive]=useState(false)
+  const [pendingEntries,setPendingEntries]=useState<any[]>([]) // All machines in progress
+  const [activeEntry,setActiveEntry]=useState<any>(null) // Currently working on
+  const [elapsed,setElapsed]=useState<Record<string,number>>({}) // per entry id
+  const [showNewForm,setShowNewForm]=useState(false)
 
   const machines=MACH[form.plant]||[]
 
-  // Load pending entry and history
   const loadData=async()=>{
     const [histRes,pendRes]=await Promise.all([
-      fetch(`/api/mouldchange?date=${form.date}`).then(r=>r.json()),
+      fetch(`/api/mouldchange?date=${nd()}`).then(r=>r.json()),
       fetch('/api/mouldchange?pending=1').then(r=>r.json())
     ])
     setHistory(histRes.data||[])
-    const pending=(pendRes.data||[]).filter((e:any)=>e.entered_by===user.name)
-    if(pending.length>0) setPendingEntry(pending[0])
+    setPendingEntries(pendRes.data||[])
   }
 
-  useEffect(()=>{loadData()},[form.date])
+  useEffect(()=>{loadData()},[])
 
-  // Timer tick from DB start_time
+  // Auto refresh every 30 seconds - so all users see updates
   useEffect(()=>{
-    if(!pendingEntry?.start_time||pendingEntry?.run_time) return
-    setTimerActive(true)
+    const iv=setInterval(loadData, 30000)
+    return ()=>clearInterval(iv)
+  },[])
+
+  // Timer tick for all pending entries
+  useEffect(()=>{
+    if(pendingEntries.length===0) return
     const iv=setInterval(()=>{
-      setElapsed(Math.floor((Date.now()-new Date(pendingEntry.start_time).getTime())/1000))
+      const now=Date.now()
+      const newElapsed:Record<string,number>={}
+      pendingEntries.forEach((pe:any)=>{
+        if(pe.start_time&&!pe.run_time){
+          newElapsed[pe.id]=Math.floor((now-new Date(pe.start_time).getTime())/1000)
+        }
+      })
+      setElapsed(newElapsed)
     },1000)
     return ()=>clearInterval(iv)
-  },[pendingEntry])
+  },[pendingEntries])
 
   const fmt=(ts:string|null)=>ts?new Date(ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''
   const diffMin=(a:string,b:string)=>Math.round(Math.abs(new Date(b).getTime()-new Date(a).getTime())/60000)
@@ -1582,6 +1593,11 @@ function MouldChangeTab({user}:{user:User}) {
     if(!form.plant||!form.machine||!form.oldMould||!form.newMould){
       setToast({msg:'Pehle Plant, Machine, Old aur New Mould select karo!',ok:false});return
     }
+    // Check if this machine already has pending
+    const alreadyPending=pendingEntries.find((pe:any)=>pe.machine===form.machine)
+    if(alreadyPending){
+      setToast({msg:`${form.machine} ka mould change already chal raha hai!`,ok:false});return
+    }
     setSaving(true)
     const res=await fetch('/api/mouldchange',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -1589,53 +1605,146 @@ function MouldChangeTab({user}:{user:User}) {
     }).then(r=>r.json())
     setSaving(false)
     if(res.success){
-      setToast({msg:'Timer started! Ab step by step karo.',ok:true})
+      setShowNewForm(false)
+      setToast({msg:'Timer started!',ok:true})
       await loadData()
     } else setToast({msg:res.msg,ok:false})
   }
 
-  const updateStep=async(step:string)=>{
-    if(!pendingEntry?.id) return
+  const updateStep=async(step:string,entryId:string)=>{
     setSaving(true)
     const res=await fetch('/api/mouldchange',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:'update_step',id:pendingEntry.id,step,remarks:form.remarks,enteredBy:user.name})
+      body:JSON.stringify({type:'update_step',id:entryId,step,remarks:form.remarks,enteredBy:user.name})
     }).then(r=>r.json())
     setSaving(false)
     setToast({msg:res.msg,ok:res.success})
-    if(res.success){
-      await loadData()
-      if(step==='run') setTimerActive(false)
-    }
+    if(res.success) await loadData()
   }
 
-  const stepDone=(ts:string|null)=>!!ts
   const stepStyle=(done:boolean,active:boolean)=>({
-    padding:'12px 16px',borderRadius:8,marginBottom:8,
+    padding:'10px 14px',borderRadius:8,marginBottom:6,
     border:`2px solid ${done?'#276221':active?'#1F3864':'#E0E0E0'}`,
     background:done?'#E8F5E9':active?'#E6F1FB':'#F5F5F5'
   })
 
-  const pe=pendingEntry
-
   return <div>
     {/* Summary */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total Changes</div><div style={{fontSize:20,fontWeight:700,color:'#1F3864'}}>{history.length}</div></div>
+      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total Changes</div><div style={{fontSize:20,fontWeight:700,color:'#1F3864'}}>{history.filter((h:any)=>h.status==='complete').length}</div></div>
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Avg Time</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{history.filter((h:any)=>h.total_minutes>0).length>0?Math.round(history.filter((h:any)=>h.total_minutes>0).reduce((a:number,h:any)=>a+(h.total_minutes||0),0)/history.filter((h:any)=>h.total_minutes>0).length):0}m</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Best Time</div><div style={{fontSize:20,fontWeight:700,color:'#276221'}}>{history.filter((h:any)=>h.total_minutes>0).length>0?Math.min(...history.filter((h:any)=>h.total_minutes>0).map((h:any)=>h.total_minutes)):0}m</div></div>
+      <div style={{...S.met,background:pendingEntries.length>0?'#FFF3E0':'#fff',border:pendingEntries.length>0?'2px solid #FF9800':'1px solid #E0E0E0'}}>
+        <div style={{fontSize:10,color:pendingEntries.length>0?'#E65100':'#666'}}>🔄 In Progress</div>
+        <div style={{fontSize:20,fontWeight:700,color:pendingEntries.length>0?'#E65100':'#276221'}}>{pendingEntries.length}</div>
+      </div>
     </div>
 
-    {/* Pending Alert */}
-    {pe&&!pe.run_time&&<div style={{background:'#FFF3E0',border:'2px solid #FF9800',borderRadius:8,padding:'10px 14px',marginBottom:8}}>
-      <div style={{fontWeight:700,color:'#E65100',fontSize:13}}>⚠️ Mould Change In Progress!</div>
-      <div style={{fontSize:11,color:'#666',marginTop:4}}>{pe.machine} | {pe.old_mould?.split(' - ')[0]} → {pe.new_mould?.split(' - ')[0]}</div>
-      <div style={{fontSize:13,fontWeight:700,color:'#1F3864',marginTop:4}}>⏱️ {fmtElapsed(elapsed)}</div>
+    {/* ALL PENDING ENTRIES — visible to all users */}
+    {pendingEntries.length>0&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#E65100',marginBottom:10,fontSize:13}}>🔄 Mould Change In Progress — {pendingEntries.length} Machine(s)</div>
+      {pendingEntries.map((pe:any,pi:number)=>{
+        const isActive=activeEntry?.id===pe.id
+        const myEntry=pe.entered_by===user.name
+        const el=elapsed[pe.id]||0
+        const elMin=Math.floor(el/60)
+        const elCol=elMin<=30?'#276221':elMin<=45?'#854F0B':'#C00000'
+
+        return <div key={pi} style={{border:`2px solid ${isActive?'#1F3864':'#FF9800'}`,borderRadius:8,padding:'10px 12px',marginBottom:8,background:isActive?'#E6F1FB':'#FFF9E6'}}>
+          {/* Header */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:13,color:'#1F3864'}}>{pe.machine}</div>
+              <div style={{fontSize:11,color:'#666'}}>{pe.old_mould?.split(' - ')[0]} → <strong>{pe.new_mould?.split(' - ')[0]}</strong></div>
+              <div style={{fontSize:11,color:'#666'}}>{pe.plant} | Started by: {pe.entered_by}</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:18,fontWeight:700,color:elCol}}>⏱️ {fmtElapsed(el)}</div>
+              {!isActive&&<button onClick={()=>setActiveEntry(pe)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'5px 12px',fontSize:11,cursor:'pointer',marginTop:4}}>
+                {myEntry?'Continue ▶':'View Steps'}
+              </button>}
+              {isActive&&<button onClick={()=>setActiveEntry(null)} style={{background:'#666',color:'#fff',border:'none',borderRadius:6,padding:'5px 12px',fontSize:11,cursor:'pointer',marginTop:4}}>Close ✕</button>}
+            </div>
+          </div>
+
+          {/* Steps Progress Bar */}
+          <div style={{display:'flex',gap:4,marginBottom:isActive?10:0}}>
+            {[
+              {label:'Start',done:!!pe.start_time},
+              {label:'Spray',done:!!pe.spray_time||pe.spray_done===false},
+              {label:'Load',done:!!pe.load_time},
+              {label:'Run',done:!!pe.run_time},
+            ].map((step,si)=><div key={si} style={{flex:1,textAlign:'center'}}>
+              <div style={{height:6,borderRadius:3,background:step.done?'#276221':'#E0E0E0',marginBottom:3}}/>
+              <div style={{fontSize:9,color:step.done?'#276221':'#999',fontWeight:step.done?700:400}}>{step.label}</div>
+            </div>)}
+          </div>
+
+          {/* Step Controls — only when active */}
+          {isActive&&<div>
+            <div style={stepStyle(true,false)}>
+              <div style={{display:'flex',justifyContent:'space-between'}}>
+                <div><div style={{fontWeight:600,fontSize:11}}>Step 1 — Start</div><div style={{fontSize:10,color:'#276221'}}>🕐 {fmt(pe.start_time)}</div></div>
+                <span style={{background:'#276221',color:'#fff',padding:'2px 10px',borderRadius:999,fontSize:10}}>✅</span>
+              </div>
+            </div>
+
+            <div style={stepStyle(!!pe.spray_time||pe.spray_done===false,!pe.spray_time&&pe.spray_done!==false)}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div><div style={{fontWeight:600,fontSize:11}}>Step 2 — Spray</div>
+                  {pe.spray_time?<div style={{fontSize:10,color:'#276221'}}>🕐 {fmt(pe.spray_time)} (+{diffMin(pe.start_time,pe.spray_time)}m)</div>:<div style={{fontSize:10,color:'#666'}}>Spray karo</div>}
+                </div>
+                {!pe.spray_time&&pe.spray_done!==false
+                  ? <div style={{display:'flex',gap:4}}>
+                      <button onClick={()=>updateStep('spray',pe.id)} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>✅ Spray</button>
+                      <button onClick={()=>updateStep('spray_skip',pe.id)} style={{background:'#C00000',color:'#fff',border:'none',borderRadius:6,padding:'6px 8px',fontSize:11,cursor:'pointer'}}>❌ Skip</button>
+                    </div>
+                  : <span style={{background:'#276221',color:'#fff',padding:'2px 10px',borderRadius:999,fontSize:10}}>✅</span>}
+              </div>
+            </div>
+
+            <div style={stepStyle(!!pe.load_time,(pe.spray_time||pe.spray_done===false)&&!pe.load_time)}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div><div style={{fontWeight:600,fontSize:11}}>Step 3 — Mould Load</div>
+                  {pe.load_time?<div style={{fontSize:10,color:'#276221'}}>🕐 {fmt(pe.load_time)} (+{diffMin(pe.start_time,pe.load_time)}m)</div>:<div style={{fontSize:10,color:'#666'}}>Mould daalo</div>}
+                </div>
+                {!pe.load_time
+                  ? <button onClick={()=>updateStep('load',pe.id)} disabled={!pe.spray_time&&pe.spray_done!==false} style={{background:(pe.spray_time||pe.spray_done===false)?'#854F0B':'#ccc',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:(pe.spray_time||pe.spray_done===false)?'pointer':'not-allowed'}}>✅ Loaded</button>
+                  : <span style={{background:'#276221',color:'#fff',padding:'2px 10px',borderRadius:999,fontSize:10}}>✅</span>}
+              </div>
+            </div>
+
+            <div style={stepStyle(!!pe.run_time,!!pe.load_time&&!pe.run_time)}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div><div style={{fontWeight:600,fontSize:11}}>Step 4 — Machine Running</div>
+                  {pe.run_time?<div style={{fontSize:10,color:'#276221'}}>🕐 {fmt(pe.run_time)} — Total: {pe.total_minutes}m</div>:<div style={{fontSize:10,color:'#666'}}>Machine chalu hone par</div>}
+                </div>
+                {!pe.run_time
+                  ? <button onClick={()=>updateStep('run',pe.id)} disabled={!pe.load_time} style={{background:pe.load_time?'#276221':'#ccc',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:pe.load_time?'pointer':'not-allowed'}}>🏃 Running!</button>
+                  : <span style={{background:'#276221',color:'#fff',padding:'2px 10px',borderRadius:999,fontSize:10}}>✅</span>}
+              </div>
+            </div>
+          </div>}
+
+          {/* Complete */}
+          {pe.run_time&&<div style={{background:'#E8F5E9',borderRadius:6,padding:'8px 10px',fontSize:11}}>
+            ✅ Complete! Total: <strong style={{color:pe.total_minutes<=30?'#276221':pe.total_minutes<=45?'#854F0B':'#C00000'}}>{pe.total_minutes}m</strong>
+            {pe.total_minutes<=30?' 🟢':pe.total_minutes<=45?' 🟠':' 🔴'}
+          </div>}
+        </div>
+      })}
     </div>}
 
-    {/* Form — only show if no pending */}
-    {!pe&&<div style={S.card}>
-      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>🔄 New Mould Change Entry</div>
+    {/* New Mould Change Button */}
+    {!showNewForm&&<button onClick={()=>setShowNewForm(true)} style={{...S.sb,background:'#1F3864',marginBottom:8}}>
+      + New Mould Change Entry
+    </button>}
+
+    {/* New Form */}
+    {showNewForm&&<div style={S.card}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontWeight:700,color:'#1F3864'}}>🔄 New Mould Change</div>
+        <button onClick={()=>setShowNewForm(false)} style={{background:'none',border:'none',fontSize:18,cursor:'pointer',color:'#666'}}>✕</button>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
         <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
         <div style={S.f}><label style={S.lbl}>Shift</label>
@@ -1650,7 +1759,10 @@ function MouldChangeTab({user}:{user:User}) {
         </div>
         <div style={S.f}><label style={S.lbl}>Machine</label>
           <select style={S.fi} value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}>
-            <option value="">Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
+            <option value="">Select</option>{machines.map(m=>{
+              const busy=pendingEntries.find((pe:any)=>pe.machine===m&&!pe.run_time)
+              return <option key={m} value={m} disabled={!!busy}>{m}{busy?' (In Progress)':''}</option>
+            })}
           </select>
         </div>
         <div style={S.f}><label style={S.lbl}>Old Mould</label>
@@ -1675,104 +1787,18 @@ function MouldChangeTab({user}:{user:User}) {
         </div>
       </div>
       <button style={{...S.sb,background:'#1F3864'}} onClick={startTimer} disabled={saving}>
-        {saving?'Starting...':'▶ Start Mould Change Timer'}
+        {saving?'Starting...':'▶ Start Timer'}
       </button>
       {toast&&<Toast {...toast}/>}
     </div>}
 
-    {/* Steps — only show if pending */}
-    {pe&&!pe.run_time&&<div style={S.card}>
-      <div style={{fontWeight:700,color:'#1F3864',marginBottom:4,fontSize:14}}>⏱️ Step-by-Step Progress</div>
-      <div style={{fontSize:11,color:'#666',marginBottom:12}}>{pe.machine} | {pe.old_mould?.split(' - ')[0]} → {pe.new_mould?.split(' - ')[0]}</div>
-
-      {/* Step 1 - Done */}
-      <div style={stepStyle(true,false)}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div>
-            <div style={{fontWeight:600,fontSize:12}}>Step 1 — Mould Change Start</div>
-            <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 Started: {fmt(pe.start_time)} | ⏱️ {fmtElapsed(elapsed)}</div>
-          </div>
-          <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Started</span>
-        </div>
-      </div>
-
-      {/* Step 2 - Spray */}
-      <div style={stepStyle(stepDone(pe.spray_time),!stepDone(pe.spray_time))}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div>
-            <div style={{fontWeight:600,fontSize:12}}>Step 2 — Purane Mould ki Spray</div>
-            {pe.spray_time
-              ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 {fmt(pe.spray_time)} (+{diffMin(pe.start_time,pe.spray_time)}m)</div>
-              : <div style={{fontSize:11,color:'#666',marginTop:2}}>Spray karo aur confirm karo</div>}
-          </div>
-          {!pe.spray_time
-            ? <div style={{display:'flex',gap:6}}>
-                <button onClick={()=>updateStep('spray')} style={{background:'#276221',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:'pointer'}}>✅ Spray Kiya</button>
-                <button onClick={()=>updateStep('spray_skip')} style={{background:'#C00000',color:'#fff',border:'none',borderRadius:8,padding:'8px 10px',fontSize:12,fontWeight:700,cursor:'pointer'}}>❌ Skip</button>
-              </div>
-            : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Done</span>}
-        </div>
-      </div>
-
-      {/* Step 3 - Load */}
-      <div style={stepStyle(stepDone(pe.load_time),(pe.spray_time||pe.spray_done===false)&&!pe.load_time)}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div>
-            <div style={{fontWeight:600,fontSize:12}}>Step 3 — Naya Mould Load</div>
-            {pe.load_time
-              ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 {fmt(pe.load_time)} (+{diffMin(pe.start_time,pe.load_time)}m)</div>
-              : <div style={{fontSize:11,color:'#666',marginTop:2}}>Mould machine mein daala toh confirm karo</div>}
-          </div>
-          {!pe.load_time
-            ? <button onClick={()=>updateStep('load')} disabled={!pe.spray_time&&pe.spray_done!==false} style={{background:(pe.spray_time||pe.spray_done===false)?'#854F0B':'#ccc',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:(pe.spray_time||pe.spray_done===false)?'pointer':'not-allowed'}}>✅ Mould Loaded</button>
-            : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Done</span>}
-        </div>
-      </div>
-
-      {/* Step 4 - Run */}
-      <div style={stepStyle(stepDone(pe.run_time),!!pe.load_time&&!pe.run_time)}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div>
-            <div style={{fontWeight:600,fontSize:12}}>Step 4 — Mould Running ✅</div>
-            {pe.run_time
-              ? <div style={{fontSize:11,color:'#276221',marginTop:2}}>🕐 {fmt(pe.run_time)} — Total: {pe.total_minutes}m</div>
-              : <div style={{fontSize:11,color:'#666',marginTop:2}}>Machine chalu hone par confirm karo</div>}
-          </div>
-          {!pe.run_time
-            ? <button onClick={()=>updateStep('run')} disabled={!pe.load_time} style={{background:pe.load_time?'#276221':'#ccc',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:pe.load_time?'pointer':'not-allowed'}}>🏃 Mould Running!</button>
-            : <span style={{background:'#276221',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>✅ Running</span>}
-        </div>
-      </div>
-
-      <input style={{...S.fi,marginTop:6}} value={form.remarks} onChange={e=>setForm(p=>({...p,remarks:e.target.value}))} placeholder="Remarks..."/>
-      {toast&&<Toast {...toast}/>}
-    </div>}
-
-    {/* Complete Summary */}
-    {pe?.run_time&&<div style={{...S.card,border:'2px solid #276221',background:'#F0FFF4'}}>
-      <div style={{fontWeight:700,color:'#276221',fontSize:14,marginBottom:10}}>✅ Mould Change Complete!</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,fontSize:11,marginBottom:10}}>
-        <div>🕐 Start: <strong>{fmt(pe.start_time)}</strong></div>
-        <div>💨 Spray: <strong>{pe.spray_time?fmt(pe.spray_time):'Skipped'}</strong></div>
-        <div>📦 Load: <strong>{fmt(pe.load_time)}</strong></div>
-        <div>🏃 Run: <strong>{fmt(pe.run_time)}</strong></div>
-        <div style={{gridColumn:'1/-1',marginTop:6,fontSize:13}}>
-          ⏱️ <strong>Total: {pe.total_minutes} minutes</strong>
-          {pe.total_minutes<=30?<span style={{color:'#276221',marginLeft:8,fontWeight:600}}>🟢 Excellent!</span>:pe.total_minutes<=45?<span style={{color:'#854F0B',marginLeft:8,fontWeight:600}}>🟠 Average</span>:<span style={{color:'#C00000',marginLeft:8,fontWeight:600}}>🔴 Slow</span>}
-        </div>
-      </div>
-      <button onClick={()=>{setPendingEntry(null);loadData()}} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-        🔄 New Mould Change
-      </button>
-    </div>}
-
-    {/* History Table */}
+    {/* History */}
     {history.filter((h:any)=>h.status==='complete').length>0&&<div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:8,color:'#1F3864'}}>📋 Aaj Ki Mould Changes</div>
+      <div style={{fontWeight:700,marginBottom:8,color:'#1F3864'}}>📋 Aaj Ki Completed Changes</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['Machine','Old Mould','New Mould','Start','Spray','Load','Run','Total','Spray?'].map(h=>
+            {['Machine','Old','New','Start','Spray','Load','Run','Total','Spray?','By'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
           </tr></thead>
           <tbody>{history.filter((h:any)=>h.status==='complete').map((h:any,i:number)=><tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
@@ -1785,6 +1811,7 @@ function MouldChangeTab({user}:{user:User}) {
             <td style={{padding:'6px 8px',fontSize:10}}>{h.run_time?fmt(h.run_time):'-'}</td>
             <td style={{padding:'6px 8px',fontWeight:700,color:h.total_minutes<=30?'#276221':h.total_minutes<=45?'#854F0B':'#C00000'}}>{h.total_minutes}m</td>
             <td style={{padding:'6px 8px'}}>{h.spray_done?'✅':'❌'}</td>
+            <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{h.entered_by}</td>
           </tr>)}</tbody>
         </table>
       </div>
