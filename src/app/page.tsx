@@ -5409,9 +5409,14 @@ function KRAReport({user}:{user:User}) {
   const week=getWeekDates(weekOffset)
 
   useEffect(()=>{
-    fetch('/api/performance').then(r=>r.json()).then(d=>{
-      setAllUsers(d.users||[])
-    })
+    // Load users from auth API
+    fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'list'})})
+      .then(r=>r.json()).then(d=>{
+        if(d.users&&d.users.length>0) setAllUsers(d.users)
+        else setAllUsers(OPS.map(name=>({name,full_name:name,role:'Operator'})))
+      }).catch(()=>{
+        setAllUsers(OPS.map(name=>({name,full_name:name,role:'Operator'})))
+      })
   },[])
 
   useEffect(()=>{loadReport()},[selectedUser,weekOffset])
@@ -5535,7 +5540,10 @@ function KRAReport({user}:{user:User}) {
         <div style={S.f}><label style={S.lbl}>Staff Member</label>
           <select style={S.fi} value={selectedUser} onChange={e=>setSelectedUser(e.target.value)}>
             {user.role==='Admin'||user.role==='Plant Head'
-              ? allUsers.map((u:any)=><option key={u.username} value={u.name}>{u.name} ({u.role})</option>)
+              ? (allUsers.length>0?allUsers:OPS.map(n=>({full_name:n,role:'Operator'}))).map((u:any)=>{
+                const name=u.full_name||u.name||u.username||u
+                return <option key={name} value={name}>{name} {u.role?`(${u.role})`:''}</option>
+              })
               : <option value={user.name}>{user.name}</option>
             }
           </select>
