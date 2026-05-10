@@ -505,6 +505,7 @@ function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
             <th style={{background:'#1F3864',color:'#fff',padding:'8px 10px',textAlign:'left',minWidth:140}}>Machine</th>
             {slots.map(s=><th key={s} style={{background:'#1F3864',color:'#fff',padding:'8px 6px',textAlign:'center',minWidth:90}}>{s}</th>)}
             <th style={{background:'#1F3864',color:'#fff',padding:'8px 6px',textAlign:'center'}}>Total Good</th>
+            <th style={{background:'#276221',color:'#fff',padding:'8px 6px',textAlign:'center'}}>Efficiency</th>
             <th style={{background:'#1F3864',color:'#fff',padding:'8px 6px',textAlign:'center'}}>Status</th>
           </tr></thead>
           <tbody>{machines.map((machine:string,mi:number)=>{
@@ -530,6 +531,26 @@ function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
               })}
               <td style={{padding:'8px 6px',textAlign:'center',fontWeight:700,color:'#1F3864',fontSize:13,borderBottom:'1px solid #E0E0E0'}}>
                 {total>0?total.toLocaleString():'--'}
+              </td>
+              <td style={{padding:'6px',textAlign:'center',borderBottom:'1px solid #E0E0E0'}}>
+                {(()=>{
+                  // Calculate machine efficiency
+                  const machEntries=(data||[]).filter((e:any)=>
+                    e.machine===machine&&e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')
+                  )
+                  const totalGoodM=machEntries.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+                  const totalRejM=machEntries.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+                  const cavities=machEntries[0]?.cavities||0
+                  const ct=machEntries[0]?.cycle_time||0
+                  const doneSlots=slots.length-pendingSlots.length
+                  const projPerSlot=cavities>0&&ct>0?Math.floor((180*60)/ct)*cavities:0
+                  const totalProj=projPerSlot*doneSlots
+                  const eff=totalProj>0?Math.round(totalGoodM/totalProj*100):0
+                  const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
+                  return <div style={{fontSize:eff>0?13:11,fontWeight:700,color:eff>0?effCol:'#ccc'}}>
+                    {eff>0?eff+'%':'--'}
+                  </div>
+                })()}
               </td>
               <td style={{padding:'6px',textAlign:'center',borderBottom:'1px solid #E0E0E0'}}>
                 {allDone
@@ -4640,16 +4661,66 @@ function BulkProductionTab({user}:{user:User}) {
     const filledEntries=entries.filter(e=>e.good||e.rejection||e.down||e.status!=='running')
     if(filledEntries.length===0){setToast({msg:'Koi data nahi bhara!',ok:false});return}
     
-    // Check if already saved this slot
+    // Validation checks
+    const warnings:string[]=[]
+    const errors:string[]=[]
+
+    for(const e of filledEntries){
+      const good=parseFloat(e.good)||0
+      const rej=parseFloat(e.rejection)||0
+      const proj=calcProj(e.cavities,e.cycleTime)
+      const eff=proj>0?Math.round(good/proj*100):0
+
+      // 1. Good = 0 but status running
+      if(good===0&&e.status==='running'){
+        warnings.push(`${e.machine}: Good Parts 0 hai — machine band thi?`)
+      }
+
+      // 2. Rejection > Good Parts
+      if(rej>good&&good>0){
+        errors.push(`${e.machine}: Rejection (${rej}) Good Parts (${good}) se zyada hai!`)
+      }
+
+      // 3. Efficiency < 50%
+      if(eff>0&&eff<50){
+        warnings.push(`${e.machine}: Efficiency bahut kam hai — sirf ${eff}%!`)
+      }
+
+      // 4. Product different from setup
+      const setupEntry=machineSetup.find((m:any)=>m.machine===e.machine)
+      if(setupEntry&&setupEntry.product&&e.product&&setupEntry.product!==e.product&&!e.isMC){
+        warnings.push(`${e.machine}: Product alag hai! Setup: "${setupEntry.product}" → Entry: "${e.product}"`)
+      }
+    }
+
+    // Check duplicate slot
     const alreadySaved=history.some((h:any)=>
       h.plant===plant&&
       h.shift?.toLowerCase().includes(shift==='night'?'night':'day')&&
       (h.production_slots||[]).some((s:any)=>s.slot_name===slot)&&
-      filledEntries.some(e=>e.machine===h.machine)
+      filledEntries.some(e=>e.machine===h.machine&&!e.editId)
     )
     if(alreadySaved){
-      const confirm=window.confirm(`${slot} mein kuch machines ki entry already hai! Phir bhi save karo?`)
-      if(!confirm) return
+      errors.push(`${slot} mein kuch machines ki entry already save hai!`)
+    }
+
+    // Show errors - block save
+    if(errors.length>0){
+      setToast({msg:'❌ '+errors[0],ok:false})
+      setSaving(false)
+      return
+    }
+
+    // Show warnings - ask confirm
+    if(warnings.length>0){
+      const msg=warnings.join('
+')
+      const ok=window.confirm('⚠️ WARNING:
+
+'+msg+'
+
+Phir bhi save karo?')
+      if(!ok){setSaving(false);return}
     }
     setSaving(true)
     const res=await fetch('/api/machine-setup',{
