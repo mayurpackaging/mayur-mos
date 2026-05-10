@@ -42,6 +42,7 @@ export async function POST(req: Request) {
       start_time: new Date().toISOString(),
       status: 'in_progress',
       spray_done: false,
+    estimated_time: d.estimatedTime || 0,
       entered_by: d.enteredBy || ''
     }).select().single()
 
