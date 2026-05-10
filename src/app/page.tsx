@@ -2038,6 +2038,7 @@ function ReportsTab() {
                           <td style={{ padding: '6px 8px', color: '#276221', fontWeight: 700 }}>{r.good.toLocaleString()}</td>
                           <td style={{ padding: '6px 8px', color: '#C00000', fontWeight: 700 }}>{r.rej.toLocaleString()}</td>
                           <td style={{ padding: '6px 8px', color: rejPct > 3 ? '#C00000' : '#276221', fontWeight: 700 }}>{rejPct}%</td>
+                          <td style={{ padding: '6px 8px', fontWeight: 700, color: r.good+r.rej>0?(Math.round(r.good/(r.good+r.rej)*100)>=90?'#276221':Math.round(r.good/(r.good+r.rej)*100)>=75?'#854F0B':'#C00000'):'#999' }}>{r.good+r.rej>0?Math.round(r.good/(r.good+r.rej)*100)+'%':'--'}</td>
                           <td style={{ padding: '6px 8px' }}>{Math.round(r.down)} min</td>
                           <td style={{ padding: '6px 8px' }}>{r.entries}</td>
                         </tr>
