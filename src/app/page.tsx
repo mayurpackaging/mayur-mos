@@ -4609,6 +4609,7 @@ function BulkProductionTab({user}:{user:User}) {
 
   const saveSetup=async()=>{
     if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
+    if(saving){return}
     setSaving(true)
     console.log('Saving setup:', {plant, date, machines: machineSetup})
     const res=await fetch('/api/machine-setup',{
@@ -4635,8 +4636,21 @@ function BulkProductionTab({user}:{user:User}) {
 
   const saveSlot=async()=>{
     if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
+    if(saving){return} // prevent double save
     const filledEntries=entries.filter(e=>e.good||e.rejection||e.down||e.status!=='running')
     if(filledEntries.length===0){setToast({msg:'Koi data nahi bhara!',ok:false});return}
+    
+    // Check if already saved this slot
+    const alreadySaved=history.some((h:any)=>
+      h.plant===plant&&
+      h.shift?.toLowerCase().includes(shift==='night'?'night':'day')&&
+      (h.production_slots||[]).some((s:any)=>s.slot_name===slot)&&
+      filledEntries.some(e=>e.machine===h.machine)
+    )
+    if(alreadySaved){
+      const confirm=window.confirm(`${slot} mein kuch machines ki entry already hai! Phir bhi save karo?`)
+      if(!confirm) return
+    }
     setSaving(true)
     const res=await fetch('/api/machine-setup',{
       method:'POST',
