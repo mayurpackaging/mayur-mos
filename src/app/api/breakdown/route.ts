@@ -6,102 +6,83 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export async function GET() {
-  const today = new Date().toISOString().split('T')[0]
-  
-  const { data: recent } = await supabase
-    .from('breakdowns')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(15)
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const date = searchParams.get('date') || ''
 
-  const { data: pending } = await supabase
-    .from('breakdowns')
-    .select('*')
-    .eq('status', 'Pending')
-    .order('created_at', { ascending: true })
+  let q = supabase.from('breakdowns').select('*').order('created_at', { ascending: false }).limit(100)
+  if (date) q = q.eq('date', date)
 
-  const { data: todayData } = await supabase
-    .from('breakdowns')
-    .select('downtime_min')
-    .eq('date', today)
-
-  const totalDowntime = todayData?.reduce((a, r) => a + (r.downtime_min || 0), 0) || 0
-
-  return NextResponse.json({
-    success: true,
-    recent: recent || [],
-    pending: pending || [],
-    totalBreakdowns: recent?.length || 0,
-    totalDowntime: Math.round(totalDowntime)
-  })
+  const { data } = await q
+  return NextResponse.json({ success: true, data: data || [] })
 }
 
 export async function POST(req: Request) {
   const d = await req.json()
   const today = new Date().toISOString().split('T')[0]
-  
-  if (d.action === 'report') {
-    // Generate BD ID
-    const { count } = await supabase.from('breakdowns').select('*', { count: 'exact', head: true })
-    const plantCode = (d.plant || '').replace('Plant ', '')
-    const dateStr = new Date().toLocaleDateString('en-GB').split('/').reverse().join('').slice(2)
-    const serial = String((count || 0) + 1).padStart(3, '0')
-    const bdId = `BD-${plantCode}-${dateStr}-${serial}`
-    const timeOfCall = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 
-    const { error } = await supabase.from('breakdowns').insert({
-      bd_id: bdId,
-      date: today,
-      shift: d.shift,
-      plant: d.plant,
-      machine: d.machine,
-      operator_name: d.operatorName,
-      problem: d.problem,
-      category: d.category,
-      mould_running: d.mouldRunning || '',
-      time_of_call: timeOfCall,
+  // Report new breakdown
+  if (d.type === 'report') {
+    const now = new Date().toISOString()
+    const { data: bd, error } = await supabase.from('breakdowns').insert({
+      date: d.date || today,
+      plant: d.plant || '',
+      machine: d.machine || '',
+      problem: d.problem || '',
+      category: d.category || 'Mechanical',
+      operator: d.operator || '',
+      reported_time: now,
       status: 'Pending',
-      reported_by: d.reportedBy
-    })
+      entered_by: d.enteredBy || '',
+      remarks: d.remarks || ''
+    }).select().single()
 
     if (error) return NextResponse.json({ success: false, msg: error.message })
-    return NextResponse.json({ success: true, bdId, timeOfCall, msg: `Breakdown reported! ID: ${bdId}` })
-  }
 
-  if (d.action === 'resolve') {
-    const { data: bd } = await supabase
-      .from('breakdowns')
-      .select('time_of_call')
-      .eq('bd_id', d.bdId)
-      .single()
-
-    let downtime = 0
-    if (bd?.time_of_call && d.workFinishTime) {
-      const [ch, cm] = bd.time_of_call.split(':').map(Number)
-      const [fh, fm] = d.workFinishTime.split(':').map(Number)
-      downtime = Math.round((fh * 60 + fm) - (ch * 60 + cm))
-      if (downtime < 0) downtime += 24 * 60
-    }
-
-    const { error } = await supabase
-      .from('breakdowns')
-      .update({
-        reporting_time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-        analysis: d.analysis,
-        action_taken: d.actionTaken,
-        spares_used: d.sparesUsed,
-        resolved_by: d.resolvedBy,
-        work_finish_time: d.workFinishTime,
-        downtime_min: downtime,
-        status: d.result || 'Resolved',
-        remarks: d.remarks
+    // Send alert email if configured
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'breakdown', breakdown: bd })
       })
-      .eq('bd_id', d.bdId)
+    } catch(e) {}
 
-    if (error) return NextResponse.json({ success: false, msg: error.message })
-    return NextResponse.json({ success: true, downtime, msg: `Resolved! Downtime: ${downtime} min` })
+    return NextResponse.json({ success: true, msg: 'Breakdown reported! Alert sent.' })
   }
 
-  return NextResponse.json({ success: false, msg: 'Unknown action' })
+  // Mark work started
+  if (d.type === 'start_work') {
+    const { error } = await supabase.from('breakdowns').update({
+      work_started_time: new Date().toISOString(),
+      status: 'In Progress'
+    }).eq('id', d.id)
+
+    if (error) return NextResponse.json({ success: false, msg: error.message })
+    return NextResponse.json({ success: true, msg: 'Work started — time stamp saved!' })
+  }
+
+  // Resolve breakdown
+  if (d.type === 'resolve') {
+    const resolvedTime = new Date().toISOString()
+
+    // Get reported time for downtime calculation
+    const { data: bd } = await supabase.from('breakdowns').select('reported_time, work_started_time').eq('id', d.id).single()
+    const reportedTime = bd?.reported_time || resolvedTime
+    const downtimeMins = Math.round((new Date(resolvedTime).getTime() - new Date(reportedTime).getTime()) / 60000)
+
+    const { error } = await supabase.from('breakdowns').update({
+      resolved_time: resolvedTime,
+      status: 'Resolved',
+      solution: d.solution || '',
+      downtime: downtimeMins,
+      resolved_by: d.enteredBy || '',
+      remarks: d.remarks || ''
+    }).eq('id', d.id)
+
+    if (error) return NextResponse.json({ success: false, msg: error.message })
+    return NextResponse.json({ success: true, msg: `Resolved! Downtime: ${downtimeMins} min` })
+  }
+
+  return NextResponse.json({ success: false, msg: 'Unknown type' })
 }
