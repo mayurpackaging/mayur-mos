@@ -18,8 +18,7 @@ export async function GET(req: Request) {
   if (benchmark && oldMould && newMould) {
     const { data } = await supabase
       .from('mould_changes')
-      .select('total_minutes, operator_name, entered_by, created_at')
-      .eq('old_mould', oldMould)
+      .select('total_minutes, operator_name, entered_by, created_at, old_mould')
       .eq('new_mould', newMould)
       .eq('status', 'complete')
       .gt('total_minutes', 0)
@@ -63,7 +62,6 @@ export async function GET(req: Request) {
         const { data: hist } = await supabase
           .from('mould_changes')
           .select('total_minutes')
-          .eq('old_mould', entry.old_mould)
           .eq('new_mould', entry.new_mould)
           .eq('status', 'complete')
           .gt('total_minutes', 0)
