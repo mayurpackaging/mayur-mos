@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   if (benchmark && oldMould && newMould) {
     const { data } = await supabase
       .from('mould_changes')
-      .select('total_minutes, operator_name, entered_by, created_at, old_mould')
+      .select('total_minutes, entered_by, created_at, old_mould')
       .eq('new_mould', newMould)
       .eq('status', 'complete')
       .gt('total_minutes', 0)
@@ -42,8 +42,8 @@ export async function GET(req: Request) {
         avg,
         last: lastEntry.total_minutes,
         count: data.length,
-        bestBy: bestEntry?.operator_name || bestEntry?.entered_by || '--',
-        lastBy: lastEntry?.operator_name || lastEntry?.entered_by || '--',
+        bestBy: bestEntry?.entered_by || '--',
+        lastBy: lastEntry?.entered_by || '--',
       }
     })
   }
