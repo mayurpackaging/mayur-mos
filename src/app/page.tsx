@@ -393,6 +393,200 @@ function RejectionComparison({from,to,plant}:{from:string,to:string,plant:string
   </div>
 }
 
+
+// ─── Production Status Report ─────────────────────────────────
+function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [selectedPlant,setSelectedPlant]=useState(plant||'Plant 477')
+  const [selectedDate,setSelectedDate]=useState(date||nd())
+  const [selectedShift,setSelectedShift]=useState('day')
+
+  const DAY_SLOTS=['8am-11am','11am-2pm','2pm-5pm','5pm-8pm']
+  const NIGHT_SLOTS=['8pm-11pm','11pm-2am','2am-5am','5am-8am']
+
+  const load=async()=>{
+    setLoading(true)
+    const res=await fetch(`/api/production?date=${selectedDate}&plant=${encodeURIComponent(selectedPlant)}`).then(r=>r.json())
+    setData(res.data||[])
+    setLoading(false)
+  }
+
+  useEffect(()=>{load()},[selectedPlant,selectedDate,selectedShift])
+
+  const slots=selectedShift==='day'?DAY_SLOTS:NIGHT_SLOTS
+  const shiftLabel=selectedShift==='day'?'Day (8am-8pm)':'Night (8pm-8am)'
+  const machines=MACH[selectedPlant]||[]
+
+  // Build slot matrix
+  const getEntry=(machine:string,slot:string)=>{
+    const entries=(data||[]).filter((e:any)=>
+      e.machine===machine&&
+      e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')&&
+      (e.production_slots||[]).some((s:any)=>s.slot_name===slot)
+    )
+    if(entries.length===0) return null
+    const slotData=entries[0].production_slots?.find((s:any)=>s.slot_name===slot)
+    return {good:slotData?.good_parts||0,rej:slotData?.rejection||0,product:entries[0].product,enteredBy:entries[0].entered_by}
+  }
+
+  const getMachineTotal=(machine:string)=>{
+    const entries=(data||[]).filter((e:any)=>
+      e.machine===machine&&
+      e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')
+    )
+    return entries.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+  }
+
+  const getMachinePendingSlots=(machine:string)=>{
+    return slots.filter(slot=>!getEntry(machine,slot))
+  }
+
+  const totalGood=(data||[]).filter((e:any)=>e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')).reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+  const pendingMachines=machines.filter(m=>getMachinePendingSlots(m).length===slots.length)
+  const partialMachines=machines.filter(m=>{const p=getMachinePendingSlots(m);return p.length>0&&p.length<slots.length})
+  const doneMachines=machines.filter(m=>getMachinePendingSlots(m).length===0)
+
+  return <div>
+    {/* Filters */}
+    <div style={S.card}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+        <div style={S.f}><label style={S.lbl}>Date</label>
+          <input type="date" style={S.fi} value={selectedDate} onChange={e=>{setSelectedDate(e.target.value)}}/>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={selectedPlant} onChange={e=>setSelectedPlant(e.target.value)}>
+            <option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Shift</label>
+          <select style={S.fi} value={selectedShift} onChange={e=>setSelectedShift(e.target.value)}>
+            <option value="day">☀️ Day (8am-8pm)</option>
+            <option value="night">🌙 Night (8pm-8am)</option>
+          </select>
+        </div>
+      </div>
+      <button style={{...S.sb,marginTop:8}} onClick={load} disabled={loading}>
+        {loading?'Loading...':'🔄 Refresh'}
+      </button>
+    </div>
+
+    {/* Summary Cards */}
+    {data&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:8}}>
+      <div style={{...S.met,background:'#E8F5E9',border:'1px solid #276221'}}>
+        <div style={{fontSize:10,color:'#276221',fontWeight:600}}>✅ All Slots Done</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#276221'}}>{doneMachines.length}</div>
+        <div style={{fontSize:10,color:'#666'}}>{doneMachines.join(', ')||'--'}</div>
+      </div>
+      <div style={{...S.met,background:'#FFF3E0',border:'1px solid #FF9800'}}>
+        <div style={{fontSize:10,color:'#E65100',fontWeight:600}}>⏳ Partial Entry</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#E65100'}}>{partialMachines.length}</div>
+        <div style={{fontSize:10,color:'#666'}}>{partialMachines.join(', ')||'--'}</div>
+      </div>
+      <div style={{...S.met,background:'#FFEBEE',border:'1px solid #C00000'}}>
+        <div style={{fontSize:10,color:'#C00000',fontWeight:600}}>❌ No Entry</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#C00000'}}>{pendingMachines.length}</div>
+        <div style={{fontSize:10,color:'#666'}}>{pendingMachines.join(', ')||'--'}</div>
+      </div>
+      <div style={{...S.met,background:'#E6F1FB',border:'1px solid #1F3864'}}>
+        <div style={{fontSize:10,color:'#1F3864',fontWeight:600}}>🏭 Total Good</div>
+        <div style={{fontSize:20,fontWeight:700,color:'#1F3864'}}>{totalGood.toLocaleString()}</div>
+      </div>
+    </div>}
+
+    {/* Slot Matrix Table */}
+    {data&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>
+        📊 {selectedPlant} — {selectedShift==='day'?'☀️ Day':'🌙 Night'} Shift — {selectedDate}
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>
+            <th style={{background:'#1F3864',color:'#fff',padding:'8px 10px',textAlign:'left',minWidth:140}}>Machine</th>
+            {slots.map(s=><th key={s} style={{background:'#1F3864',color:'#fff',padding:'8px 6px',textAlign:'center',minWidth:90}}>{s}</th>)}
+            <th style={{background:'#1F3864',color:'#fff',padding:'8px 6px',textAlign:'center'}}>Total Good</th>
+            <th style={{background:'#1F3864',color:'#fff',padding:'8px 6px',textAlign:'center'}}>Status</th>
+          </tr></thead>
+          <tbody>{machines.map((machine:string,mi:number)=>{
+            const pendingSlots=getMachinePendingSlots(machine)
+            const total=getMachineTotal(machine)
+            const allDone=pendingSlots.length===0
+            const noDone=pendingSlots.length===slots.length
+            const rowBg=allDone?'#F0FFF4':noDone?'#FFF5F5':'#FFFFF0'
+            return <tr key={mi} style={{background:rowBg}}>
+              <td style={{padding:'8px 10px',fontWeight:700,color:'#1F3864',borderBottom:'1px solid #E0E0E0'}}>{machine}</td>
+              {slots.map(slot=>{
+                const entry=getEntry(machine,slot)
+                return <td key={slot} style={{padding:'6px 4px',textAlign:'center',borderBottom:'1px solid #E0E0E0',borderLeft:'1px solid #F0F0F0'}}>
+                  {entry
+                    ? <div>
+                        <div style={{color:'#276221',fontWeight:700,fontSize:12}}>{entry.good.toLocaleString()}</div>
+                        {entry.rej>0&&<div style={{color:'#C00000',fontSize:10}}>Rej: {entry.rej}</div>}
+                        <div style={{color:'#666',fontSize:9,marginTop:2}}>{entry.product?.split(' ').slice(0,2).join(' ')}</div>
+                      </div>
+                    : <div style={{color:'#C00000',fontSize:18}}>⏳</div>
+                  }
+                </td>
+              })}
+              <td style={{padding:'8px 6px',textAlign:'center',fontWeight:700,color:'#1F3864',fontSize:13,borderBottom:'1px solid #E0E0E0'}}>
+                {total>0?total.toLocaleString():'--'}
+              </td>
+              <td style={{padding:'6px',textAlign:'center',borderBottom:'1px solid #E0E0E0'}}>
+                {allDone
+                  ? <span style={{background:'#276221',color:'#fff',padding:'3px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>✅ Done</span>
+                  : noDone
+                    ? <span style={{background:'#C00000',color:'#fff',padding:'3px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>❌ Pending</span>
+                    : <span style={{background:'#FF9800',color:'#fff',padding:'3px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>⏳ {slots.length-pendingSlots.length}/{slots.length}</span>
+                }
+              </td>
+            </tr>
+          })}</tbody>
+          {/* Total Row */}
+          <tfoot><tr style={{background:'#1F3864'}}>
+            <td style={{padding:'8px 10px',color:'#FFD966',fontWeight:700}}>TOTAL</td>
+            {slots.map(slot=>{
+              const slotTotal=(data||[]).filter((e:any)=>
+                e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')&&
+                (e.production_slots||[]).some((s:any)=>s.slot_name===slot)
+              ).reduce((a:number,e:any)=>{
+                const sd=e.production_slots?.find((s:any)=>s.slot_name===slot)
+                return a+(sd?.good_parts||0)
+              },0)
+              return <td key={slot} style={{padding:'8px 4px',textAlign:'center',color:'#4CAF50',fontWeight:700}}>
+                {slotTotal>0?slotTotal.toLocaleString():'--'}
+              </td>
+            })}
+            <td style={{padding:'8px 6px',textAlign:'center',color:'#FFD966',fontWeight:700,fontSize:14}}>{totalGood.toLocaleString()}</td>
+            <td style={{padding:'8px 6px',textAlign:'center',color:'#90A8C8',fontSize:11}}>
+              {doneMachines.length}/{machines.length} Done
+            </td>
+          </tr></tfoot>
+        </table>
+      </div>
+
+      {/* Pending Alert */}
+      {(pendingMachines.length>0||partialMachines.length>0)&&<div style={{marginTop:10,background:'#FFF3E0',border:'1px solid #FF9800',borderRadius:8,padding:'10px 14px'}}>
+        <div style={{fontWeight:700,color:'#E65100',marginBottom:6}}>⚠️ Entry Pending:</div>
+        {pendingMachines.length>0&&<div style={{fontSize:11,marginBottom:4}}>
+          <span style={{color:'#C00000',fontWeight:600}}>❌ No Entry: </span>
+          {pendingMachines.join(' | ')}
+        </div>}
+        {partialMachines.map(m=>{
+          const pending=getMachinePendingSlots(m)
+          return <div key={m} style={{fontSize:11,marginBottom:2}}>
+            <span style={{color:'#E65100',fontWeight:600}}>⏳ {m}: </span>
+            {pending.join(', ')} pending
+          </div>
+        })}
+      </div>}
+    </div>}
+
+    {!data&&!loading&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32}}>
+      Refresh click karo — data load hoga! 👆
+    </div>}
+  </div>
+}
+
 function MISTab() {
   const [data,setData]=useState<any>(null)
   const [loading,setLoading]=useState(true)
