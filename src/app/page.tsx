@@ -1960,115 +1960,261 @@ function MouldPMTab({user}:{user:User}) {
 }
 
 function BreakdownTab({user}:{user:User}) {
-  const [data,setData]=useState<any>(null)
-  const [loading,setLoading]=useState(true)
+  const [bds,setBds]=useState<any[]>([])
+  const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
-  const [form,setForm]=useState({plant:'',machine:'',shift:'Day',operator:user.name,problem:'',mouldRunning:'',category:'Mechanical'})
+  const [showForm,setShowForm]=useState(false)
+  const [form,setForm]=useState({date:nd(),plant:'',machine:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
   const [resolveId,setResolveId]=useState<string|null>(null)
-  const [resForm,setResForm]=useState({analysis:'',actionTaken:'',sparesUsed:'',resolvedBy:user.name,workFinishTime:'',result:'OK - Resolved',remarks:''})
-  const isMaintenance=user.role==='Maintenance'||user.username==='prince'||user.username==='rohit'
+  const [resolveForm,setResolveForm]=useState({solution:'',remarks:''})
 
-  const load=useCallback(()=>{fetch('/api/breakdown').then(r=>r.json()).then(d=>{setData(d);setLoading(false)})},[])
-  useEffect(()=>{load()},[load])
-
-  const showToast=(msg:string,ok:boolean)=>{setToast({msg,ok});setTimeout(()=>setToast(null),3500)}
-
-  const report=async()=>{
-    if(!form.plant||!form.machine){showToast('Plant aur Machine select karo!',false);return}
-    if(!form.problem){showToast('Problem describe karo!',false);return}
-    const res=await fetch('/api/breakdown',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'report',...form,reportedBy:user.name})}).then(r=>r.json())
-    showToast(res.msg,res.success);if(res.success){setForm({plant:'',machine:'',shift:'Day',operator:user.name,problem:'',mouldRunning:'',category:'Mechanical'});load()}
+  const load=async()=>{
+    const res=await fetch('/api/breakdown').then(r=>r.json())
+    setBds(res.data||[])
   }
 
-  const resolve=async()=>{
-    if(!resForm.workFinishTime){showToast('Finish time daalo!',false);return}
-    const res=await fetch('/api/breakdown',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve',bdId:resolveId,...resForm})}).then(r=>r.json())
-    showToast(res.msg,res.success);if(res.success){setResolveId(null);load()}
-  }
+  useEffect(()=>{load()},[])
+
+  // Auto refresh every 30s
+  useEffect(()=>{
+    const iv=setInterval(load,30000)
+    return ()=>clearInterval(iv)
+  },[])
 
   const machines=MACH[form.plant]||[]
-  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+
+  const fmt=(ts:string|null)=>ts?new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''
+  const fmtTime=(ts:string|null)=>ts?new Date(ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''
+
+  const calcDowntime=(reported:string,resolved:string|null)=>{
+    if(!resolved) return null
+    const mins=Math.round((new Date(resolved).getTime()-new Date(reported).getTime())/60000)
+    const h=Math.floor(mins/60),m=mins%60
+    return h>0?`${h}h ${m}m`:`${m}m`
+  }
+
+  const report=async()=>{
+    if(!form.plant||!form.machine||!form.problem){
+      setToast({msg:'Plant, Machine aur Problem bharo!',ok:false});return
+    }
+    setSaving(true)
+    const res=await fetch('/api/breakdown',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        type:'report',
+        ...form,
+        reportedTime:new Date().toISOString(),
+        enteredBy:user.name
+      })
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success){
+      setShowForm(false)
+      setForm({date:nd(),plant:'',machine:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
+      load()
+    }
+  }
+
+  const startWork=async(id:string)=>{
+    setSaving(true)
+    const res=await fetch('/api/breakdown',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'start_work',id,workStartedTime:new Date().toISOString(),enteredBy:user.name})
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success) load()
+  }
+
+  const resolve=async(id:string)=>{
+    if(!resolveForm.solution){setToast({msg:'Solution likho!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/breakdown',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        type:'resolve',id,
+        solution:resolveForm.solution,
+        remarks:resolveForm.remarks,
+        resolvedTime:new Date().toISOString(),
+        enteredBy:user.name
+      })
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success){setResolveId(null);setResolveForm({solution:'',remarks:''});load()}
+  }
+
+  const pending=bds.filter((b:any)=>b.status==='Pending'||b.status==='In Progress')
+  const resolved=bds.filter((b:any)=>b.status==='Resolved')
 
   return <div>
+    {/* Summary */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total</div><div style={{fontSize:20,fontWeight:700,color:'#C00000'}}>{data?.totalBreakdowns||0}</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Pending</div><div style={{fontSize:20,fontWeight:700,color:'#C00000'}}>{data?.pending?.length||0}</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Downtime</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{data?.totalDowntime||0}m</div></div>
-    </div>
-
-    {isMaintenance&&data?.pending?.length>0&&<div style={{...S.card,border:'2px solid #FF9800'}}>
-      <div style={{fontWeight:700,color:'#E65100',marginBottom:8}}>Pending ({data.pending.length})</div>
-      {data.pending.map((b:any)=><div key={b.bd_id} style={{background:'#FFF3E0',border:'1px solid #FF9800',borderRadius:8,padding:10,marginBottom:8}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:'#E65100'}}>{b.bd_id}</div>
-            <div style={{fontSize:11,color:'#666'}}>{b.plant} {b.machine} | {b.time_of_call}</div>
-            <div style={{fontSize:11,fontWeight:600}}>{b.problem}</div>
-          </div>
-          <button onClick={()=>setResolveId(b.bd_id)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,cursor:'pointer'}}>Resolve</button>
+      <div style={{...S.met,background:pending.length>0?'#FFEBEE':'#fff',border:pending.length>0?'2px solid #C00000':'1px solid #E0E0E0'}}>
+        <div style={{fontSize:10,color:'#C00000',fontWeight:600}}>🔴 Pending</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#C00000'}}>{pending.length}</div>
+      </div>
+      <div style={S.met}>
+        <div style={{fontSize:10,color:'#276221',fontWeight:600}}>✅ Resolved Today</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#276221'}}>{resolved.filter((b:any)=>b.date===nd()).length}</div>
+      </div>
+      <div style={S.met}>
+        <div style={{fontSize:10,color:'#854F0B',fontWeight:600}}>⏱️ Avg Downtime</div>
+        <div style={{fontSize:18,fontWeight:700,color:'#854F0B'}}>
+          {resolved.filter((b:any)=>b.resolved_time&&b.reported_time).length>0
+            ?`${Math.round(resolved.filter((b:any)=>b.resolved_time&&b.reported_time).reduce((a:number,b:any)=>a+Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000),0)/resolved.filter((b:any)=>b.resolved_time&&b.reported_time).length)}m`
+            :'--'}
         </div>
-      </div>)}
-    </div>}
-
-    {resolveId&&<div style={{...S.card,border:'2px solid #276221'}}>
-      <div style={{fontWeight:700,color:'#276221',marginBottom:8}}>Resolution — {resolveId}</div>
-      {[['Analysis','analysis','Root cause...'],['Action Taken','actionTaken','Kya kiya...'],['Spares Used','sparesUsed','Part name + qty']].map(([label,key,ph])=>(
-        <div key={key} style={S.f}><label style={S.lbl}>{label}</label><input style={S.fi} value={(resForm as any)[key]} onChange={e=>setResForm(p=>({...p,[key]:e.target.value}))} placeholder={ph}/></div>
-      ))}
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Finish Time</label><input type="time" style={S.fi} value={resForm.workFinishTime} onChange={e=>setResForm(p=>({...p,workFinishTime:e.target.value}))}/></div>
-        <div style={S.f}><label style={S.lbl}>Result</label><select style={S.fi} value={resForm.result} onChange={e=>setResForm(p=>({...p,result:e.target.value}))}><option>OK - Resolved</option><option>Under Observation</option><option>Pending - Part Ordered</option></select></div>
       </div>
-      <button style={{...S.sb,background:'#276221'}} onClick={resolve}>Save Resolution</button>
-      <button style={{...S.sb,background:'#666',marginTop:4}} onClick={()=>setResolveId(null)}>Cancel</button>
-    </div>}
-
-    <div style={{...S.card,border:'1px solid #C00000'}}>
-      <div style={{fontWeight:700,color:'#C00000',marginBottom:8}}>Report Breakdown</div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Plant</label><select style={S.fi} value={form.plant} onChange={e=>setForm(p=>({...p,plant:e.target.value,machine:''}))}>
-          <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
-        </select></div>
-        <div style={S.f}><label style={S.lbl}>Machine</label><select style={S.fi} value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}>
-          <option>Select plant</option>{machines.map(m=><option key={m}>{m}</option>)}
-        </select></div>
-      </div>
-      <div style={S.f}><label style={S.lbl}>Problem Description</label><input style={S.fi} value={form.problem} onChange={e=>setForm(p=>({...p,problem:e.target.value}))} placeholder="Machine band kyun hui..."/></div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Category</label><select style={S.fi} value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}>
-          {['Mechanical','Electrical','Hydraulic','Heating','Mould Issue','Material Issue','Operator Error','Other'].map(c=><option key={c}>{c}</option>)}
-        </select></div>
-        <div style={S.f}><label style={S.lbl}>Shift</label><select style={S.fi} value={form.shift} onChange={e=>setForm(p=>({...p,shift:e.target.value}))}><option>Day</option><option>Night</option></select></div>
-      </div>
-      <button style={{...S.sb,background:'#C00000'}} onClick={report}>Report Breakdown + Alert</button>
-      {toast&&<Toast {...toast}/>}
     </div>
 
-    <div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:8}}>Recent Breakdowns</div>
+    {/* Report Button */}
+    {!showForm&&<button onClick={()=>setShowForm(true)} style={{...S.sb,background:'#C00000',marginBottom:8}}>
+      🚨 Report New Breakdown
+    </button>}
+
+    {/* Report Form */}
+    {showForm&&<div style={{...S.card,border:'2px solid #C00000'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontWeight:700,color:'#C00000',fontSize:14}}>🚨 Report Breakdown</div>
+        <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:18,cursor:'pointer'}}>✕</button>
+      </div>
+      <div style={{background:'#FFEBEE',border:'1px solid #C00000',borderRadius:6,padding:'6px 10px',marginBottom:10,fontSize:11,color:'#C00000',fontWeight:600}}>
+        ⏰ Reported Time: {new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} — Automatically save hoga!
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
+        <div style={S.f}><label style={S.lbl}>Category</label>
+          <select style={S.fi} value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}>
+            <option>Mechanical</option><option>Electrical</option><option>Hydraulic</option>
+            <option>Mould</option><option>Pneumatic</option><option>Other</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={form.plant} onChange={e=>setForm(p=>({...p,plant:e.target.value,machine:''}))}>
+            <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Machine</label>
+          <select style={S.fi} value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}>
+            <option value="">Select</option>{machines.map(m=><option key={m}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Problem Description</label>
+        <textarea style={{...S.fi,height:70,resize:'none' as const}} value={form.problem} onChange={e=>setForm(p=>({...p,problem:e.target.value}))} placeholder="Kya problem hai? Detail mein likho..."/>
+      </div>
+      <button style={{...S.sb,background:'#C00000',marginTop:8}} onClick={report} disabled={saving}>
+        {saving?'Saving...':'🚨 Report Breakdown — Time Stamp Auto Save!'}
+      </button>
+      {toast&&<Toast {...toast}/>}
+    </div>}
+
+    {/* Pending Breakdowns */}
+    {pending.length>0&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#C00000',marginBottom:10,fontSize:13}}>🔴 Pending Breakdowns ({pending.length})</div>
+      {pending.map((b:any,i:number)=>{
+        const isResolving=resolveId===b.id
+        const elapsed=b.reported_time?Math.round((Date.now()-new Date(b.reported_time).getTime())/60000):0
+        const elH=Math.floor(elapsed/60),elM=elapsed%60
+        const elCol=elapsed<=60?'#276221':elapsed<=120?'#854F0B':'#C00000'
+
+        return <div key={i} style={{border:`2px solid ${b.status==='In Progress'?'#854F0B':'#C00000'}`,borderRadius:8,padding:'12px',marginBottom:8,background:b.status==='In Progress'?'#FFF9E6':'#FFF5F5'}}>
+          {/* Header */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:13,color:'#1F3864'}}>{b.machine} — {b.plant}</div>
+              <div style={{fontSize:11,color:'#666',marginTop:2}}>{b.category} | {b.bd_id||b.id?.slice(0,8)}</div>
+              <div style={{fontSize:12,color:'#333',marginTop:4,fontWeight:500}}>{b.problem}</div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:16,fontWeight:700,color:elCol}}>⏱️ {elH>0?`${elH}h ${elM}m`:`${elM}m`}</div>
+              <div style={{fontSize:10,color:'#666',marginTop:2}}>since report</div>
+            </div>
+          </div>
+
+          {/* Timestamps */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:8,fontSize:10}}>
+            <div style={{background:'#FFEBEE',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
+              <div style={{color:'#C00000',fontWeight:600}}>🔴 Reported</div>
+              <div style={{fontWeight:700,marginTop:2}}>{fmtTime(b.reported_time)||fmt(b.created_at)}</div>
+            </div>
+            <div style={{background:b.work_started_time?'#FFF3E0':'#F5F5F5',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
+              <div style={{color:b.work_started_time?'#854F0B':'#999',fontWeight:600}}>🔧 Work Started</div>
+              <div style={{fontWeight:700,marginTop:2,color:b.work_started_time?'#854F0B':'#ccc'}}>{b.work_started_time?fmtTime(b.work_started_time):'--:--'}</div>
+            </div>
+            <div style={{background:'#F5F5F5',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
+              <div style={{color:'#999',fontWeight:600}}>✅ Resolved</div>
+              <div style={{fontWeight:700,marginTop:2,color:'#ccc'}}>--:--</div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          {!isResolving&&<div style={{display:'flex',gap:6}}>
+            {!b.work_started_time&&<button onClick={()=>startWork(b.id)} style={{flex:1,background:'#854F0B',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+              🔧 Work Started — Mark Time
+            </button>}
+            <button onClick={()=>{setResolveId(b.id);setResolveForm({solution:'',remarks:''})}} style={{flex:1,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+              ✅ Mark Resolved
+            </button>
+          </div>}
+
+          {/* Resolve Form */}
+          {isResolving&&<div style={{background:'#E8F5E9',borderRadius:6,padding:'10px',marginTop:6}}>
+            <div style={{background:'#276221',color:'#fff',borderRadius:4,padding:'4px 8px',fontSize:10,fontWeight:600,marginBottom:8,display:'inline-block'}}>
+              ✅ Resolved Time: {new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})} — Auto Save!
+            </div>
+            <textarea style={{...S.fi,height:60,resize:'none' as const,marginBottom:6}} value={resolveForm.solution} onChange={e=>setResolveForm(p=>({...p,solution:e.target.value}))} placeholder="Kya solution kiya? Detail mein likho..."/>
+            <textarea style={{...S.fi,height:40,resize:'none' as const,marginBottom:8}} value={resolveForm.remarks} onChange={e=>setResolveForm(p=>({...p,remarks:e.target.value}))} placeholder="Remarks (optional)"/>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={()=>resolve(b.id)} style={{flex:2,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer'}} disabled={saving}>
+                {saving?'Saving...':'✅ Confirm Resolved'}
+              </button>
+              <button onClick={()=>setResolveId(null)} style={{flex:1,background:'#666',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,cursor:'pointer'}}>
+                Cancel
+              </button>
+            </div>
+          </div>}
+        </div>
+      })}
+    </div>}
+
+    {/* Resolved History */}
+    {resolved.length>0&&<div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:8,color:'#276221'}}>✅ Resolved Breakdowns</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['BD ID','Date','Plant','Machine','Problem','Downtime','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
-          <tbody>{(data?.recent||[]).map((r:any,i:number)=>(
-            <tr key={i}>
-              <td style={{padding:'6px 8px',fontSize:10,fontWeight:600}}>{r.bd_id}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.date}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.plant}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.machine}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.problem}</td>
-              <td style={{padding:'6px 8px',fontWeight:700,color:r.downtime_min>60?'#C00000':'#854F0B'}}>{r.downtime_min||0}m</td>
-              <td style={{padding:'6px 8px'}}><span style={{background:r.status==='Pending'?'#FFEBEE':'#E8F5E9',color:r.status==='Pending'?'#C00000':'#276221',padding:'2px 7px',borderRadius:999,fontSize:10}}>{r.status}</span></td>
+          <thead><tr>
+            {['BD ID','Machine','Problem','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
+              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{resolved.map((b:any,i:number)=>{
+            const downtime=b.reported_time&&b.resolved_time?calcDowntime(b.reported_time,b.resolved_time):b.downtime?`${b.downtime}m`:'--'
+            const dtMins=b.reported_time&&b.resolved_time?Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000):0
+            const dtCol=dtMins>0?(dtMins<=60?'#276221':dtMins<=180?'#854F0B':'#C00000'):'#666'
+            return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{b.bd_id||b.id?.slice(0,8)}</td>
+              <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{b.machine}</td>
+              <td style={{padding:'6px 8px',fontSize:10,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#C00000',fontWeight:600}}>{fmtTime(b.reported_time)||fmt(b.created_at)}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#854F0B',fontWeight:600}}>{b.work_started_time?fmtTime(b.work_started_time):'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#276221',fontWeight:600}}>{b.resolved_time?fmtTime(b.resolved_time):'--'}</td>
+              <td style={{padding:'6px 8px',fontWeight:700,color:dtCol}}>{downtime}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{b.resolved_by||b.entered_by}</td>
             </tr>
-          ))}
-          {!data?.recent?.length&&<tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>Koi breakdown nahi!</td></tr>}
-          </tbody>
+          })}</tbody>
         </table>
       </div>
-    </div>
+    </div>}
+
+    {toast&&<Toast {...toast}/>}
   </div>
 }
 
-// ─── Reports Tab ──────────────────────────────────────────────
 function ReportsTab() {
   const [module, setModule] = useState('production')
   const [from, setFrom] = useState(() => {
