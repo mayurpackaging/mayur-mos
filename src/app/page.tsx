@@ -1541,7 +1541,7 @@ function RejectionTab({user}:{user:User}) {
 }
 
 function MouldChangeTab({user}:{user:User}) {
-  const [form,setForm]=useState({date:nd(),shift:'Day',plant:'',machine:'',oldMould:'',newMould:'',operator:'',helper:'',remarks:''})
+  const [form,setForm]=useState({date:nd(),shift:'Day',plant:'',machine:'',oldMould:'',newMould:'',operator:'',helper:'',remarks:'',estimatedTime:''})
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [history,setHistory]=useState<any[]>([])
@@ -1601,7 +1601,7 @@ function MouldChangeTab({user}:{user:User}) {
     setSaving(true)
     const res=await fetch('/api/mouldchange',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:'start',...form,enteredBy:user.name})
+      body:JSON.stringify({type:'start',...form,estimatedTime:parseFloat(form.estimatedTime)||0,enteredBy:user.name})
     }).then(r=>r.json())
     setSaving(false)
     if(res.success){
@@ -1656,6 +1656,7 @@ function MouldChangeTab({user}:{user:User}) {
               <div style={{fontWeight:700,fontSize:13,color:'#1F3864'}}>{pe.machine}</div>
               <div style={{fontSize:11,color:'#666'}}>{pe.old_mould?.split(' - ')[0]} → <strong>{pe.new_mould?.split(' - ')[0]}</strong></div>
               <div style={{fontSize:11,color:'#666'}}>{pe.plant} | Started by: {pe.entered_by}</div>
+              {pe.estimated_time>0&&<div style={{fontSize:11,color:'#854F0B',fontWeight:600}}>Target: {pe.estimated_time} min</div>}
             </div>
             <div style={{textAlign:'right'}}>
               <div style={{fontSize:18,fontWeight:700,color:elCol}}>⏱️ {fmtElapsed(el)}</div>
@@ -1786,7 +1787,10 @@ function MouldChangeTab({user}:{user:User}) {
           </select>
         </div>
       </div>
-      <button style={{...S.sb,background:'#1F3864'}} onClick={startTimer} disabled={saving}>
+      <div style={S.f}><label style={S.lbl}>Estimated Time (min)</label>
+        <input type="number" style={S.fi} value={form.estimatedTime||''} onChange={e=>setForm(p=>({...p,estimatedTime:e.target.value}))} placeholder="e.g. 30"/>
+      </div>
+      <button style={{...S.sb,background:'#1F3864',marginTop:8}} onClick={startTimer} disabled={saving}>
         {saving?'Starting...':'▶ Start Timer'}
       </button>
       {toast&&<Toast {...toast}/>}
