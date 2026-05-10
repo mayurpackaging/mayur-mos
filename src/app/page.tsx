@@ -4713,13 +4713,8 @@ function BulkProductionTab({user}:{user:User}) {
 
     // Show warnings - ask confirm
     if(warnings.length>0){
-      const msg=warnings.join('
-')
-      const ok=window.confirm('⚠️ WARNING:
-
-'+msg+'
-
-Phir bhi save karo?')
+      const msg=warnings.join('\n')
+      const ok=window.confirm('⚠️ WARNING:\n\n'+msg+'\n\nPhir bhi save karo?')
       if(!ok){setSaving(false);return}
     }
     setSaving(true)
