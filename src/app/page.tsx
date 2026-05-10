@@ -1549,8 +1549,15 @@ function MouldChangeTab({user}:{user:User}) {
   const [activeEntry,setActiveEntry]=useState<any>(null) // Currently working on
   const [elapsed,setElapsed]=useState<Record<string,number>>({}) // per entry id
   const [showNewForm,setShowNewForm]=useState(false)
+  const [benchmark,setBenchmark]=useState<any>(null)
 
   const machines=MACH[form.plant]||[]
+
+  const loadBenchmark=async(oldMould:string,newMould:string)=>{
+    if(!oldMould||!newMould) return
+    const res=await fetch(`/api/mouldchange?benchmark=1&oldMould=${encodeURIComponent(oldMould)}&newMould=${encodeURIComponent(newMould)}`).then(r=>r.json())
+    setBenchmark(res.benchmark||null)
+  }
 
   const loadData=async()=>{
     const [histRes,pendRes]=await Promise.all([
@@ -1728,8 +1735,11 @@ function MouldChangeTab({user}:{user:User}) {
 
           {/* Complete */}
           {pe.run_time&&<div style={{background:'#E8F5E9',borderRadius:6,padding:'8px 10px',fontSize:11}}>
-            ✅ Complete! Total: <strong style={{color:pe.total_minutes<=30?'#276221':pe.total_minutes<=45?'#854F0B':'#C00000'}}>{pe.total_minutes}m</strong>
-            {pe.total_minutes<=30?' 🟢':pe.total_minutes<=45?' 🟠':' 🔴'}
+            <div style={{fontWeight:700,color:'#276221',marginBottom:4}}>✅ Complete! {pe.total_minutes}m</div>
+            {pe.benchmark_best>0&&pe.total_minutes>0&&<div style={{fontSize:12,fontWeight:700,color:pe.total_minutes<pe.benchmark_best?'#276221':pe.total_minutes===pe.benchmark_best?'#854F0B':'#C00000'}}>
+              {pe.total_minutes<pe.benchmark_best?`🏆 New Record! Pehle ${pe.benchmark_best}m tha!`:pe.total_minutes===pe.benchmark_best?`🟠 Same as best (${pe.benchmark_best}m)`:`🔴 ${pe.total_minutes-pe.benchmark_best}m slow — Best: ${pe.benchmark_best}m`}
+            </div>}
+            {!pe.benchmark_best&&<div style={{fontSize:11,color:'#276221'}}>🆕 Pehli baar! Yeh ab benchmark banega!</div>}
           </div>}
         </div>
       })}
@@ -1767,12 +1777,18 @@ function MouldChangeTab({user}:{user:User}) {
           </select>
         </div>
         <div style={S.f}><label style={S.lbl}>Old Mould</label>
-          <select style={S.fi} value={form.oldMould} onChange={e=>setForm(p=>({...p,oldMould:e.target.value}))}>
+          <select style={S.fi} value={form.oldMould} onChange={e=>{
+            setForm(p=>({...p,oldMould:e.target.value}))
+            loadBenchmark(e.target.value,form.newMould)
+          }}>
             <option value="">Select</option>{MOULDS.map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
           </select>
         </div>
         <div style={S.f}><label style={S.lbl}>New Mould</label>
-          <select style={S.fi} value={form.newMould} onChange={e=>setForm(p=>({...p,newMould:e.target.value}))}>
+          <select style={S.fi} value={form.newMould} onChange={e=>{
+            setForm(p=>({...p,newMould:e.target.value}))
+            loadBenchmark(form.oldMould,e.target.value)
+          }}>
             <option value="">Select</option>{MOULDS.map(m=><option key={m.code} value={m.code+' - '+m.name}>{m.code} - {m.name}</option>)}
           </select>
         </div>
@@ -1790,6 +1806,34 @@ function MouldChangeTab({user}:{user:User}) {
       <div style={S.f}><label style={S.lbl}>Estimated Time (min)</label>
         <input type="number" style={S.fi} value={form.estimatedTime||''} onChange={e=>setForm(p=>({...p,estimatedTime:e.target.value}))} placeholder="e.g. 30"/>
       </div>
+      {/* Benchmark Info */}
+      {benchmark&&<div style={{background:'#E6F1FB',border:'1px solid #1F3864',borderRadius:8,padding:'10px 12px',marginTop:8}}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:6,fontSize:12}}>📊 Is Mould Change Ka History</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,fontSize:11}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{color:'#666',fontSize:10}}>Best Time</div>
+            <div style={{fontWeight:700,color:'#276221',fontSize:16}}>{benchmark.best}m</div>
+            <div style={{fontSize:9,color:'#666'}}>{benchmark.bestBy}</div>
+          </div>
+          <div style={{textAlign:'center'}}>
+            <div style={{color:'#666',fontSize:10}}>Avg Time</div>
+            <div style={{fontWeight:700,color:'#854F0B',fontSize:16}}>{benchmark.avg}m</div>
+            <div style={{fontSize:9,color:'#666'}}>{benchmark.count} baar hua</div>
+          </div>
+          <div style={{textAlign:'center'}}>
+            <div style={{color:'#666',fontSize:10}}>Last Time</div>
+            <div style={{fontWeight:700,color:'#1F3864',fontSize:16}}>{benchmark.last}m</div>
+            <div style={{fontSize:9,color:'#666'}}>{benchmark.lastBy}</div>
+          </div>
+        </div>
+        <div style={{marginTop:8,background:'#1F3864',color:'#FFD966',borderRadius:6,padding:'6px 10px',fontSize:11,fontWeight:600,textAlign:'center'}}>
+          🎯 Target: {benchmark.best}m se kam karo! Beat karo record!
+        </div>
+      </div>}
+      {benchmark===null&&form.oldMould&&form.newMould&&<div style={{background:'#F5F5F5',borderRadius:6,padding:'8px 10px',fontSize:11,color:'#666',marginTop:8,textAlign:'center'}}>
+        🆕 Pehli baar yeh mould change ho raha hai — record set karo!
+      </div>}
+
       <button style={{...S.sb,background:'#1F3864',marginTop:8}} onClick={startTimer} disabled={saving}>
         {saving?'Starting...':'▶ Start Timer'}
       </button>
