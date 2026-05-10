@@ -5732,7 +5732,7 @@ function MISDashboard() {
     const nightEff=nightGood+nightRej>0?Math.round(nightGood/(nightGood+nightRej)*100*100)/100:0
 
     // Machine wise
-    const allMachines=[...new Set(prod.map((e:any)=>e.machine))]
+    const allMachines=prod.map((e:any)=>e.machine).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
     const machineData=allMachines.map((machine:string)=>{
       const mp=prod.filter((e:any)=>e.machine===machine)
       const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
@@ -5748,7 +5748,7 @@ function MISDashboard() {
     }).sort((a:any,b:any)=>b.good-a.good)
 
     // Operator wise
-    const allOps=[...new Set(prod.map((e:any)=>e.entered_by||e.operator).filter(Boolean))]
+    const allOps=prod.map((e:any)=>e.entered_by||e.operator).filter(Boolean).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
     const operatorData=allOps.map((op:string)=>{
       const dayP=prod.filter((e:any)=>(e.entered_by===op||e.operator===op)&&e.shift?.toLowerCase().includes('day'))
       const nightP=prod.filter((e:any)=>(e.entered_by===op||e.operator===op)&&e.shift?.toLowerCase().includes('night'))
@@ -5766,7 +5766,7 @@ function MISDashboard() {
     }).sort((a:any,b:any)=>b.good-a.good)
 
     // Date wise
-    const dates:[...Set<string>]=[...new Set(prod.map((e:any)=>e.date))].sort()
+    const dates:string[]=prod.map((e:any)=>e.date).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i).sort()
     const dateData=dates.map((date:string)=>{
       const dp=prod.filter((e:any)=>e.date===date&&e.shift?.toLowerCase().includes('day'))
       const np=prod.filter((e:any)=>e.date===date&&e.shift?.toLowerCase().includes('night'))
