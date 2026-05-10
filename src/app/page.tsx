@@ -17,7 +17,7 @@ const MACH: Record<string, string[]> = {
   "Plant 433": ["M1-Milacron N200T","M2-Milacron N200T"]
 }
 
-const OPS = ["Dayanand","Alok Kumar","Satyanand","Uday","Sudarshan","Rahul","Pintoo","Parveen","Rahul Singh","Deepak","Karan","Ankush"]
+const OPS = ["Dayanand","Alok Kumar","Satyanand","Uday","Sudarshan","Rahul","Pintoo","Parveen","Rahul Singh","Deepak","Karan","Ankush","Sandeep"]
 
 const MOULDS = [
   // Tub Moulds
