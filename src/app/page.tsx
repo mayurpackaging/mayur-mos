@@ -3688,12 +3688,19 @@ const PERF_EMP = [
 
 function PerformanceTab({user}:{user:User}) {
   const [activePerf,setActivePerf]=useState('weekly')
-  const PTABS=[{id:'weekly',label:'Weekly'},{id:'increment',label:'Increment Calc'}]
+  const PTABS=[
+    {id:'mis',label:'📊 MIS Dashboard'},
+    {id:'kra',label:'👤 KRA Report'},
+    {id:'weekly',label:'Weekly Score'},
+    {id:'increment',label:'Increment Calc'}
+  ]
 
   return <div>
-    <div style={{display:'flex',gap:6,marginBottom:12}}>
+    <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap' as const}}>
       {PTABS.map(t=><button key={t.id} style={activePerf===t.id?S.nbA:S.nb} onClick={()=>setActivePerf(t.id)}>{t.label}</button>)}
     </div>
+    {activePerf==='mis'&&<MISDashboard/>}
+    {activePerf==='kra'&&<KRAReport user={user}/>}
     {activePerf==='weekly'&&<WeeklyScoreForm user={user}/>}
     {activePerf==='increment'&&<IncrementCalc/>}
   </div>
@@ -5372,6 +5379,626 @@ function BulkProductionTab({user}:{user:User}) {
 
     {!plant&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32}}>
       Plant select karo upar se! 👆
+    </div>}
+  </div>
+}
+
+// ─── KRA Report Component ─────────────────────────────────────
+function KRAReport({user}:{user:User}) {
+  const [selectedUser,setSelectedUser]=useState(user.name)
+  const [weekOffset,setWeekOffset]=useState(0)
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [allUsers,setAllUsers]=useState<any[]>([])
+
+  // Get week dates
+  const getWeekDates=(offset:number)=>{
+    const today=new Date()
+    const day=today.getDay()
+    const monday=new Date(today)
+    monday.setDate(today.getDate()-(day===0?6:day-1)+(offset*7))
+    const sunday=new Date(monday)
+    sunday.setDate(monday.getDate()+6)
+    return {
+      from:monday.toISOString().split('T')[0],
+      to:sunday.toISOString().split('T')[0],
+      label:`${monday.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})} – ${sunday.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}`
+    }
+  }
+
+  const week=getWeekDates(weekOffset)
+
+  useEffect(()=>{
+    fetch('/api/performance').then(r=>r.json()).then(d=>{
+      setAllUsers(d.users||[])
+    })
+  },[])
+
+  useEffect(()=>{loadReport()},[selectedUser,weekOffset])
+
+  const loadReport=async()=>{
+    if(!selectedUser) return
+    setLoading(true)
+    const [prodRes,rejRes,bdRes,mcRes]=await Promise.all([
+      fetch(`/api/production?from=${week.from}&to=${week.to}`).then(r=>r.json()),
+      fetch(`/api/reports?module=rejection&from=${week.from}&to=${week.to}`).then(r=>r.json()),
+      fetch(`/api/breakdown?from=${week.from}&to=${week.to}`).then(r=>r.json()),
+      fetch(`/api/mouldchange?from=${week.from}&to=${week.to}`).then(r=>r.json()),
+    ])
+
+    // Production stats for this person
+    const myProd=(prodRes.data||[]).filter((e:any)=>
+      e.entered_by===selectedUser||e.operator===selectedUser||e.operator2===selectedUser
+    )
+    const totalGood=myProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+    const totalRej=myProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+    const totalDown=myProd.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+    const shifts=myProd.length
+    const eff=totalGood+totalRej>0?Math.round(totalGood/(totalGood+totalRej)*100):0
+
+    // Previous week for comparison
+    const prevWeek=getWeekDates(weekOffset-1)
+    const prevProdRes=await fetch(`/api/production?from=${prevWeek.from}&to=${prevWeek.to}`).then(r=>r.json())
+    const prevProd=(prevProdRes.data||[]).filter((e:any)=>
+      e.entered_by===selectedUser||e.operator===selectedUser||e.operator2===selectedUser
+    )
+    const prevGood=prevProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+    const prevRej=prevProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+    const prevEff=prevGood+prevRej>0?Math.round(prevGood/(prevGood+prevRej)*100):0
+
+    // Rejection stats
+    const myRej=(rejRes.data||[]).filter((e:any)=>e.operator===selectedUser||e.entered_by===selectedUser)
+    const rejQty=myRej.reduce((a:number,e:any)=>a+(e.rejection_qty||0),0)
+
+    // Breakdown stats
+    const myBd=(bdRes.data||[]).filter((e:any)=>e.entered_by===selectedUser||e.operator_name===selectedUser)
+    const bdResolved=myBd.filter((e:any)=>e.status==='Resolved').length
+    const avgBdTime=myBd.filter((e:any)=>e.total_minutes>0).length>0
+      ?Math.round(myBd.filter((e:any)=>e.total_minutes>0).reduce((a:number,e:any)=>a+(e.downtime_min||0),0)/myBd.filter((e:any)=>e.total_minutes>0).length):0
+
+    // Mould change stats
+    const myMC=(mcRes.data||[]).filter((e:any)=>e.entered_by===selectedUser)
+    const mcCount=myMC.filter((e:any)=>e.status==='complete').length
+    const avgMCTime=myMC.filter((e:any)=>e.total_minutes>0).length>0
+      ?Math.round(myMC.filter((e:any)=>e.total_minutes>0).reduce((a:number,e:any)=>a+(e.total_minutes||0),0)/myMC.filter((e:any)=>e.total_minutes>0).length):0
+    const bestMCTime=myMC.filter((e:any)=>e.total_minutes>0).length>0
+      ?Math.min(...myMC.filter((e:any)=>e.total_minutes>0).map((e:any)=>e.total_minutes)):0
+
+    setData({
+      totalGood,totalRej,totalDown,shifts,eff,
+      prevGood,prevRej,prevEff,
+      rejQty,myRej,
+      bdResolved,avgBdTime,myBd,
+      mcCount,avgMCTime,bestMCTime,myMC,
+      prodByDay:myProd.reduce((acc:any,e:any)=>{
+        if(!acc[e.date]) acc[e.date]={good:0,rej:0}
+        acc[e.date].good+=e.good_parts||0
+        acc[e.date].rej+=e.rejection||0
+        return acc
+      },{})
+    })
+    setLoading(false)
+  }
+
+  const trend=(curr:number,prev:number)=>{
+    if(prev===0) return {icon:'🆕',color:'#666',text:'Pehla hafta'}
+    const diff=curr-prev
+    const pct=Math.round(Math.abs(diff)/prev*100)
+    if(diff>0) return {icon:'📈',color:'#276221',text:`+${pct}% pichle hafte se`}
+    if(diff<0) return {icon:'📉',color:'#C00000',text:`-${pct}% pichle hafte se`}
+    return {icon:'➡️',color:'#666',text:'Same as last week'}
+  }
+
+  const getGrade=(eff:number)=>{
+    if(eff>=95) return {grade:'A+',color:'#276221',msg:'Excellent! Bahut acha kaam!'}
+    if(eff>=90) return {grade:'A',color:'#276221',msg:'Bahut acha performance!'}
+    if(eff>=80) return {grade:'B',color:'#2E75B6',msg:'Acha hai — aur improve kar sakte ho!'}
+    if(eff>=70) return {grade:'C',color:'#854F0B',msg:'Average — dhyan do efficiency par!'}
+    return {grade:'D',color:'#C00000',msg:'Improvement chahiye — supervisor se baat karo!'}
+  }
+
+  const generateAnalysis=(d:any)=>{
+    const points:string[]=[]
+    const improvements:string[]=[]
+
+    if(d.eff>=90) points.push(`✅ Efficiency ${d.eff}% rahi — bahut badhiya!`)
+    else improvements.push(`⚠️ Efficiency ${d.eff}% hai — target 90%+ karo. Cycle time aur downtime kam karo.`)
+
+    if(d.totalRej<100) points.push(`✅ Rejection bahut kam rahi sirf ${d.totalRej} pcs — quality control acha hai!`)
+    else improvements.push(`⚠️ Rejection ${d.totalRej.toLocaleString()} pcs thi — reasons check karo aur material quality par dhyan do.`)
+
+    if(d.totalDown<120) points.push(`✅ Downtime kam raha ${d.totalDown} min — machine theek chalti rahi!`)
+    else improvements.push(`⚠️ Downtime ${d.totalDown} min tha — zyada hai. Preventive maintenance time par karo.`)
+
+    const prodTrend=trend(d.totalGood,d.prevGood)
+    if(d.totalGood>d.prevGood) points.push(`✅ Production ${prodTrend.text} — improvement dikh rahi hai!`)
+    else if(d.totalGood<d.prevGood) improvements.push(`⚠️ Production ${prodTrend.text} — dhyan do, consistency maintain karo.`)
+
+    if(d.mcCount>0&&d.avgMCTime>0){
+      if(d.avgMCTime<=35) points.push(`✅ Mould change avg ${d.avgMCTime}m — fast hai!`)
+      else improvements.push(`⚠️ Mould change avg ${d.avgMCTime}m — 35 min se kam karne ki koshish karo.`)
+    }
+
+    if(d.bdResolved>0) points.push(`✅ ${d.bdResolved} breakdown resolve kiye — acha kaam!`)
+
+    return {points,improvements}
+  }
+
+  const grade=data?getGrade(data.eff):null
+  const analysis=data?generateAnalysis(data):null
+  const prodTrend=data?trend(data.totalGood,data.prevGood):null
+
+  return <div>
+    {/* Controls */}
+    <div style={S.card}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={S.f}><label style={S.lbl}>Staff Member</label>
+          <select style={S.fi} value={selectedUser} onChange={e=>setSelectedUser(e.target.value)}>
+            {user.role==='Admin'||user.role==='Plant Head'
+              ? allUsers.map((u:any)=><option key={u.username} value={u.name}>{u.name} ({u.role})</option>)
+              : <option value={user.name}>{user.name}</option>
+            }
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Week</label>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <button onClick={()=>setWeekOffset(p=>p-1)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',cursor:'pointer'}}>◀</button>
+            <span style={{fontSize:11,fontWeight:600,color:'#1F3864',flex:1,textAlign:'center'}}>{week.label}</span>
+            <button onClick={()=>setWeekOffset(p=>Math.min(0,p+1))} disabled={weekOffset===0} style={{background:weekOffset===0?'#ccc':'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',cursor:weekOffset===0?'not-allowed':'pointer'}}>▶</button>
+          </div>
+        </div>
+      </div>
+      {weekOffset===0&&<div style={{background:'#E8F5E9',borderRadius:6,padding:'4px 10px',fontSize:11,color:'#276221',fontWeight:600}}>📅 This Week</div>}
+      {weekOffset<0&&<div style={{background:'#FFF3E0',borderRadius:6,padding:'4px 10px',fontSize:11,color:'#854F0B',fontWeight:600}}>📅 {Math.abs(weekOffset)} week{Math.abs(weekOffset)>1?'s':''} ago</div>}
+    </div>
+
+    {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading report... ⏳</div>}
+
+    {data&&!loading&&<div>
+      {/* Grade Card */}
+      <div style={{background:`linear-gradient(135deg, #1F3864, #2E75B6)`,borderRadius:12,padding:'20px',marginBottom:8,color:'#fff'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontSize:13,opacity:0.8}}>{selectedUser}</div>
+            <div style={{fontSize:11,opacity:0.6}}>{week.label}</div>
+            <div style={{fontSize:28,fontWeight:700,marginTop:8,color:'#FFD966'}}>{grade?.grade}</div>
+            <div style={{fontSize:12,marginTop:4}}>{grade?.msg}</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:40,fontWeight:700,color:'#FFD966'}}>{data.eff}%</div>
+            <div style={{fontSize:11,opacity:0.8}}>Overall Efficiency</div>
+            {prodTrend&&<div style={{fontSize:11,marginTop:4,color:prodTrend.color==='#276221'?'#90EE90':prodTrend.color==='#C00000'?'#FF9090':'#ccc'}}>{prodTrend.icon} {prodTrend.text}</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={{...S.met,border:'1px solid #276221',background:'#E8F5E9'}}>
+          <div style={{fontSize:10,color:'#276221',fontWeight:600}}>🏭 Total Production</div>
+          <div style={{fontSize:22,fontWeight:700,color:'#276221'}}>{data.totalGood.toLocaleString()}</div>
+          <div style={{fontSize:10,color:'#666'}}>{data.shifts} shifts | Prev: {data.prevGood.toLocaleString()}</div>
+        </div>
+        <div style={{...S.met,border:'1px solid #C00000',background:'#FFEBEE'}}>
+          <div style={{fontSize:10,color:'#C00000',fontWeight:600}}>❌ Total Rejection</div>
+          <div style={{fontSize:22,fontWeight:700,color:'#C00000'}}>{data.totalRej.toLocaleString()}</div>
+          <div style={{fontSize:10,color:'#666'}}>Rej %: {data.totalGood+data.totalRej>0?Math.round(data.totalRej/(data.totalGood+data.totalRej)*100*10)/10:0}%</div>
+        </div>
+        <div style={{...S.met,border:'1px solid #854F0B',background:'#FFF3E0'}}>
+          <div style={{fontSize:10,color:'#854F0B',fontWeight:600}}>⏱️ Total Downtime</div>
+          <div style={{fontSize:22,fontWeight:700,color:'#854F0B'}}>{data.totalDown}m</div>
+          <div style={{fontSize:10,color:'#666'}}>{Math.floor(data.totalDown/60)}h {data.totalDown%60}m total</div>
+        </div>
+        {data.mcCount>0&&<div style={{...S.met,border:'1px solid #5B2C8D',background:'#F3E5F5'}}>
+          <div style={{fontSize:10,color:'#5B2C8D',fontWeight:600}}>🔄 Mould Changes</div>
+          <div style={{fontSize:22,fontWeight:700,color:'#5B2C8D'}}>{data.mcCount}</div>
+          <div style={{fontSize:10,color:'#666'}}>Avg: {data.avgMCTime}m | Best: {data.bestMCTime}m</div>
+        </div>}
+      </div>
+
+      {/* Day-wise Production */}
+      {Object.keys(data.prodByDay).length>0&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:8,fontSize:12}}>📅 Din-wise Production</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Date','Good Parts','Rejection','Rej %','Efficiency'].map(h=>
+                <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{Object.entries(data.prodByDay).sort().map(([date,d]:any,i:number)=>{
+              const eff=d.good+d.rej>0?Math.round(d.good/(d.good+d.rej)*100):0
+              const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
+              return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                <td style={{padding:'6px 8px',textAlign:'center',fontWeight:600}}>{date}</td>
+                <td style={{padding:'6px 8px',textAlign:'center',color:'#276221',fontWeight:700}}>{d.good.toLocaleString()}</td>
+                <td style={{padding:'6px 8px',textAlign:'center',color:'#C00000',fontWeight:700}}>{d.rej}</td>
+                <td style={{padding:'6px 8px',textAlign:'center',color:d.rej>100?'#C00000':'#666'}}>{d.good+d.rej>0?Math.round(d.rej/(d.good+d.rej)*100*10)/10:0}%</td>
+                <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:effCol,background:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':'#FFEBEE'}}>{eff>0?eff+'%':'--'}</td>
+              </tr>
+            })}</tbody>
+          </table>
+        </div>
+      </div>}
+
+      {/* Analysis & Improvement */}
+      {analysis&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:13}}>🔍 Analysis & Improvement Tips</div>
+
+        {analysis.points.length>0&&<div style={{marginBottom:10}}>
+          <div style={{fontWeight:600,color:'#276221',marginBottom:6,fontSize:12}}>✅ Acha Kiya:</div>
+          {analysis.points.map((p:string,i:number)=><div key={i} style={{background:'#E8F5E9',borderRadius:6,padding:'8px 10px',marginBottom:4,fontSize:11}}>{p}</div>)}
+        </div>}
+
+        {analysis.improvements.length>0&&<div>
+          <div style={{fontWeight:600,color:'#C00000',marginBottom:6,fontSize:12}}>💡 Improvement Chahiye:</div>
+          {analysis.improvements.map((p:string,i:number)=><div key={i} style={{background:'#FFF3E0',border:'1px solid #FF9800',borderRadius:6,padding:'8px 10px',marginBottom:4,fontSize:11}}>{p}</div>)}
+        </div>}
+
+        {analysis.points.length>0&&analysis.improvements.length===0&&<div style={{background:'#E8F5E9',borderRadius:8,padding:'12px',textAlign:'center',marginTop:8}}>
+          <div style={{fontSize:20}}>🏆</div>
+          <div style={{fontWeight:700,color:'#276221',fontSize:13}}>Perfect Week! Koi improvement nahi chahiye!</div>
+          <div style={{fontSize:11,color:'#666',marginTop:4}}>Aise hi chalate raho — bahut acha kaam!</div>
+        </div>}
+      </div>}
+
+      {/* Mould Change Details */}
+      {data.myMC.length>0&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#5B2C8D',marginBottom:8,fontSize:12}}>🔄 Mould Change Performance</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Date','Machine','Old→New','Time','vs Best','Result'].map(h=>
+                <th key={h} style={{background:'#5B2C8D',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.myMC.filter((m:any)=>m.status==='complete').map((m:any,i:number)=>{
+              const isBest=m.total_minutes===data.bestMCTime
+              const isOver=m.total_minutes>data.avgMCTime
+              return <tr key={i} style={{background:i%2===0?'#F8F5FF':'#fff'}}>
+                <td style={{padding:'6px 8px',fontSize:10}}>{m.date}</td>
+                <td style={{padding:'6px 8px',fontWeight:600}}>{m.machine}</td>
+                <td style={{padding:'6px 8px',fontSize:10}}>{m.old_mould?.split(' - ')[0]} → {m.new_mould?.split(' - ')[0]}</td>
+                <td style={{padding:'6px 8px',fontWeight:700,color:isOver?'#C00000':'#276221'}}>{m.total_minutes}m</td>
+                <td style={{padding:'6px 8px',fontSize:10,color:isBest?'#276221':'#666'}}>{isBest?'🏆 Best!':m.total_minutes>data.bestMCTime?`+${m.total_minutes-data.bestMCTime}m`:'-'}</td>
+                <td style={{padding:'6px 8px'}}>
+                  <span style={{background:m.total_minutes<=35?'#276221':m.total_minutes<=45?'#854F0B':'#C00000',color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>
+                    {m.total_minutes<=35?'🟢 Fast':m.total_minutes<=45?'🟠 OK':'🔴 Slow'}
+                  </span>
+                </td>
+              </tr>
+            })}</tbody>
+          </table>
+        </div>
+      </div>}
+
+    </div>}
+
+    {!data&&!loading&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32}}>
+      Staff member select karo — weekly report load hoga! 👆
+    </div>}
+  </div>
+}
+
+// ─── MIS Dashboard Component ──────────────────────────────────
+function MISDashboard() {
+  const [period,setPeriod]=useState('week')
+  const [from,setFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-d.getDay()+1);return d.toISOString().split('T')[0]})
+  const [to,setTo]=useState(nd())
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [activeTab,setActiveTab]=useState('summary')
+
+  const setPeriodDates=(p:string)=>{
+    const today=new Date()
+    let f=new Date(),t=new Date()
+    if(p==='week'){f=new Date(today);f.setDate(today.getDate()-today.getDay()+1)}
+    else if(p==='month'){f=new Date(today.getFullYear(),today.getMonth(),1)}
+    else if(p==='15days'){f=new Date(today);f.setDate(today.getDate()-14)}
+    else if(p==='7days'){f=new Date(today);f.setDate(today.getDate()-6)}
+    setFrom(f.toISOString().split('T')[0])
+    setTo(t.toISOString().split('T')[0])
+    setPeriod(p)
+  }
+
+  const load=async()=>{
+    setLoading(true)
+    const [prodRes,bdRes,mcRes]=await Promise.all([
+      fetch(`/api/production?from=${from}&to=${to}`).then(r=>r.json()),
+      fetch(`/api/breakdown?from=${from}&to=${to}`).then(r=>r.json()),
+      fetch(`/api/mouldchange?from=${from}&to=${to}`).then(r=>r.json()),
+    ])
+
+    const prod=prodRes.data||[]
+    const bd=bdRes.data||[]
+    const mc=mcRes.data||[]
+
+    // Overall KPIs
+    const totalGood=prod.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+    const totalRej=prod.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+    const totalDown=prod.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+    const overallEff=totalGood+totalRej>0?Math.round(totalGood/(totalGood+totalRej)*100*100)/100:0
+
+    // Day vs Night
+    const dayProd=prod.filter((e:any)=>e.shift?.toLowerCase().includes('day'))
+    const nightProd=prod.filter((e:any)=>e.shift?.toLowerCase().includes('night'))
+    const dayGood=dayProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+    const dayRej=dayProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+    const dayDown=dayProd.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+    const nightGood=nightProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+    const nightRej=nightProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+    const nightDown=nightProd.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+    const dayRejRate=dayGood+dayRej>0?Math.round(dayRej/(dayGood+dayRej)*100*100)/100:0
+    const nightRejRate=nightGood+nightRej>0?Math.round(nightRej/(nightGood+nightRej)*100*100)/100:0
+    const dayEff=dayGood+dayRej>0?Math.round(dayGood/(dayGood+dayRej)*100*100)/100:0
+    const nightEff=nightGood+nightRej>0?Math.round(nightGood/(nightGood+nightRej)*100*100)/100:0
+
+    // Machine wise
+    const allMachines=[...new Set(prod.map((e:any)=>e.machine))]
+    const machineData=allMachines.map((machine:string)=>{
+      const mp=prod.filter((e:any)=>e.machine===machine)
+      const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+      const rej=mp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+      const down=mp.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+      const eff=good+rej>0?Math.round(good/(good+rej)*100*100)/100:0
+      const rejRate=good+rej>0?Math.round(rej/(good+rej)*100*100)/100:0
+      const plant=mp[0]?.plant||''
+      const product=mp[mp.length-1]?.product||''
+      const shifts=mp.length
+      const status=rejRate<=0.5?'✅ Excellent':rejRate<=1?'⚠️ Monitor':'❌ Action'
+      return {machine,plant,product,good,rej,down,eff,rejRate,shifts,status}
+    }).sort((a:any,b:any)=>b.good-a.good)
+
+    // Operator wise
+    const allOps=[...new Set(prod.map((e:any)=>e.entered_by||e.operator).filter(Boolean))]
+    const operatorData=allOps.map((op:string)=>{
+      const dayP=prod.filter((e:any)=>(e.entered_by===op||e.operator===op)&&e.shift?.toLowerCase().includes('day'))
+      const nightP=prod.filter((e:any)=>(e.entered_by===op||e.operator===op)&&e.shift?.toLowerCase().includes('night'))
+      const allP=prod.filter((e:any)=>e.entered_by===op||e.operator===op)
+      const good=allP.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+      const rej=allP.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+      const down=allP.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+      const eff=good+rej>0?Math.round(good/(good+rej)*100*100)/100:0
+      const rejRate=good+rej>0?Math.round(rej/(good+rej)*100*100)/100:0
+      const shifts=allP.length
+      const volGrade=good>=500000?'A+':good>=200000?'A':good>=100000?'B':'C'
+      const qualGrade=rejRate<=0.1?'A+':rejRate<=0.3?'A':rejRate<=0.5?'B':'C'
+      const overall=volGrade==='A+'&&qualGrade==='A+'?'A+':volGrade>='A'&&qualGrade>='A'?'A':volGrade>='B'&&qualGrade>='B'?'B':'C'
+      return {op,good,rej,down,eff,rejRate,shifts,volGrade,qualGrade,overall,dayShifts:dayP.length,nightShifts:nightP.length}
+    }).sort((a:any,b:any)=>b.good-a.good)
+
+    // Date wise
+    const dates:[...Set<string>]=[...new Set(prod.map((e:any)=>e.date))].sort()
+    const dateData=dates.map((date:string)=>{
+      const dp=prod.filter((e:any)=>e.date===date&&e.shift?.toLowerCase().includes('day'))
+      const np=prod.filter((e:any)=>e.date===date&&e.shift?.toLowerCase().includes('night'))
+      const dg=dp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+      const dr=dp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+      const dd=dp.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+      const ng=np.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+      const nr=np.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+      const nd_=np.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+      return {date,dg,dr,dd,ng,nr,nd_,
+        dayEff:dg+dr>0?Math.round(dg/(dg+dr)*100*10)/10:0,
+        nightEff:ng+nr>0?Math.round(ng/(ng+nr)*100*10)/10:0,
+        winner:dg>ng?'☀️ Day':'🌙 Night'}
+    })
+
+    // KRA
+    const kras=[
+      {kra:'KRA 1: Production Volume',value:`${(totalGood/1000).toFixed(1)}K parts`,target:'≥ 5,00,000/week',status:totalGood>=500000?'achieved':totalGood>=300000?'monitor':'action'},
+      {kra:'KRA 2: Overall Efficiency',value:`${overallEff}%`,target:'≥ 95%',status:overallEff>=95?'achieved':overallEff>=90?'monitor':'action'},
+      {kra:'KRA 3: Rejection Control',value:`${(totalRej/(totalGood+totalRej)*100).toFixed(2)}%`,target:'≤ 1%',status:totalRej/(totalGood+totalRej||1)<=0.01?'achieved':totalRej/(totalGood+totalRej||1)<=0.02?'monitor':'action'},
+      {kra:'KRA 4: Downtime Control',value:`${totalDown} min`,target:'≤ 500 min/week',status:totalDown<=500?'achieved':totalDown<=1000?'monitor':'action'},
+      {kra:'KRA 5: Day Shift Quality',value:`${dayRejRate}%`,target:'≤ 0.3%',status:dayRejRate<=0.3?'achieved':dayRejRate<=0.5?'monitor':'action'},
+      {kra:'KRA 6: Night Shift Quality',value:`${nightRejRate}%`,target:'≤ 0.3%',status:nightRejRate<=0.3?'achieved':nightRejRate<=0.5?'monitor':'action'},
+      {kra:'KRA 7: Breakdown Resolved',value:`${bd.filter((b:any)=>b.status==='Resolved').length}/${bd.length}`,target:'100% resolved',status:bd.length===0||bd.every((b:any)=>b.status==='Resolved')?'achieved':bd.filter((b:any)=>b.status==='Resolved').length/bd.length>=0.8?'monitor':'action'},
+    ]
+
+    setData({totalGood,totalRej,totalDown,overallEff,dayGood,dayRej,dayDown,dayRejRate,dayEff,nightGood,nightRej,nightDown,nightRejRate,nightEff,machineData,operatorData,dateData,kras,bd,mc})
+    setLoading(false)
+  }
+
+  useEffect(()=>{load()},[from,to])
+
+  const TABS=[{id:'summary',label:'📊 Summary'},{id:'machines',label:'🏭 Machines'},{id:'operators',label:'👷 Operators'},{id:'daily',label:'🌗 Day vs Night'},{id:'kra',label:'🎯 KRA'}]
+
+  const statusBg=(s:string)=>s==='achieved'?'#E8F5E9':s==='monitor'?'#FFF3E0':'#FFEBEE'
+  const statusCol=(s:string)=>s==='achieved'?'#276221':s==='monitor'?'#E65100':'#C00000'
+  const statusIcon=(s:string)=>s==='achieved'?'✅ ACHIEVED':s==='monitor'?'⚠️ MONITOR':'❌ ACTION'
+
+  return <div>
+    {/* Period Selector */}
+    <div style={S.card}>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,marginBottom:8}}>
+        {[{id:'7days',label:'7 Din'},{id:'week',label:'Is Hafte'},{id:'15days',label:'15 Din'},{id:'month',label:'Is Mahine'},{id:'custom',label:'Custom'}].map(p=>
+          <button key={p.id} onClick={()=>setPeriodDates(p.id)} style={{padding:'5px 12px',border:`1px solid ${period===p.id?'#1F3864':'#E0E0E0'}`,borderRadius:6,background:period===p.id?'#1F3864':'#fff',color:period===p.id?'#fff':'#666',fontSize:11,fontWeight:600,cursor:'pointer'}}>{p.label}</button>
+        )}
+      </div>
+      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+        <input type="date" style={{...S.fi,flex:1}} value={from} onChange={e=>{setFrom(e.target.value);setPeriod('custom')}}/>
+        <span style={{color:'#666',fontSize:12}}>to</span>
+        <input type="date" style={{...S.fi,flex:1}} value={to} onChange={e=>{setTo(e.target.value);setPeriod('custom')}}/>
+        <button onClick={load} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'8px 16px',fontSize:12,fontWeight:600,cursor:'pointer'}}>🔍 Load</button>
+      </div>
+    </div>
+
+    {loading&&<div style={{textAlign:'center',padding:32,color:'#666',fontSize:14}}>Loading MIS Dashboard... ⏳</div>}
+
+    {data&&!loading&&<div>
+      {/* Tab Navigation */}
+      <div style={{display:'flex',gap:4,marginBottom:8,overflowX:'auto' as const,flexWrap:'wrap' as const}}>
+        {TABS.map(t=><button key={t.id} onClick={()=>setActiveTab(t.id)} style={{padding:'7px 12px',border:`2px solid ${activeTab===t.id?'#1F3864':'#E0E0E0'}`,borderRadius:8,background:activeTab===t.id?'#1F3864':'#fff',color:activeTab===t.id?'#fff':'#666',fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap' as const}}>{t.label}</button>)}
+      </div>
+
+      {/* SUMMARY TAB */}
+      {activeTab==='summary'&&<div>
+        {/* Top KPI Row */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:8}}>
+          {[
+            {label:'Total Good Parts',val:data.totalGood.toLocaleString(),col:'#276221',bg:'#E8F5E9',icon:'🏭'},
+            {label:'Total Rejection',val:data.totalRej.toLocaleString(),col:'#C00000',bg:'#FFEBEE',icon:'❌'},
+            {label:'Overall Efficiency',val:data.overallEff+'%',col:data.overallEff>=95?'#276221':data.overallEff>=90?'#854F0B':'#C00000',bg:data.overallEff>=95?'#E8F5E9':data.overallEff>=90?'#FFF3E0':'#FFEBEE',icon:'⚡'},
+            {label:'Total Downtime',val:data.totalDown+'m',col:'#854F0B',bg:'#FFF3E0',icon:'⏱️'},
+          ].map((k,i)=><div key={i} style={{background:k.bg,borderRadius:10,padding:'12px',border:`1px solid ${k.col}33`}}>
+            <div style={{fontSize:10,color:k.col,fontWeight:600}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:22,fontWeight:700,color:k.col,marginTop:4}}>{k.val}</div>
+          </div>)}
+        </div>
+
+        {/* Shift Comparison */}
+        <div style={S.card}>
+          <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:13}}>🌗 Shift Comparison</div>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Metric','☀️ Day Shift','🌙 Night Shift','Winner'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'8px',textAlign:'center'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{[
+              {metric:'Good Parts',day:data.dayGood.toLocaleString(),night:data.nightGood.toLocaleString(),winner:data.dayGood>data.nightGood?'☀️ Day':'🌙 Night'},
+              {metric:'Rejection',day:data.dayRej.toLocaleString(),night:data.nightRej.toLocaleString(),winner:data.dayRej<data.nightRej?'☀️ Day ✓':'🌙 Night ✓'},
+              {metric:'Rej Rate %',day:data.dayRejRate+'%',night:data.nightRejRate+'%',winner:data.dayRejRate<data.nightRejRate?'☀️ Day ✓':'🌙 Night ✓'},
+              {metric:'Efficiency',day:data.dayEff+'%',night:data.nightEff+'%',winner:data.dayEff>data.nightEff?'☀️ Day':'🌙 Night'},
+              {metric:'Downtime (min)',day:data.dayDown+'m',night:data.nightDown+'m',winner:data.dayDown<data.nightDown?'☀️ Day ✓':'🌙 Night ✓'},
+            ].map((r:any,i:number)=><tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'8px',fontWeight:600,color:'#1F3864'}}>{r.metric}</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#E65100',fontWeight:700,background:'#FFF8F0'}}>{r.day}</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#5B2C8D',fontWeight:700,background:'#F8F5FF'}}>{r.night}</td>
+              <td style={{padding:'8px',textAlign:'center',fontWeight:700,color:'#276221'}}>{r.winner}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </div>}
+
+      {/* MACHINES TAB */}
+      {activeTab==='machines'&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:13}}>🏭 Machine-wise KPI Report</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Machine','Plant','Product','Good Parts','Rejection','Rej %','Downtime','Efficiency','Shifts','Status'].map(h=>
+                <th key={h} style={{background:'#1F3864',color:'#fff',padding:'7px 8px',textAlign:'center',whiteSpace:'nowrap' as const}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.machineData.map((m:any,i:number)=>{
+              const rejCol=m.rejRate<=0.5?'#276221':m.rejRate<=1?'#854F0B':'#C00000'
+              const effCol=m.eff>=95?'#276221':m.eff>=90?'#854F0B':'#C00000'
+              return <tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
+                <td style={{padding:'7px 8px',fontWeight:700,color:'#1F3864'}}>{m.machine}</td>
+                <td style={{padding:'7px 8px',fontSize:10,color:'#666'}}>{m.plant}</td>
+                <td style={{padding:'7px 8px',fontSize:10,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{m.product}</td>
+                <td style={{padding:'7px 8px',textAlign:'center',fontWeight:700,color:'#276221'}}>{m.good.toLocaleString()}</td>
+                <td style={{padding:'7px 8px',textAlign:'center',fontWeight:700,color:'#C00000'}}>{m.rej.toLocaleString()}</td>
+                <td style={{padding:'7px 8px',textAlign:'center',fontWeight:700,color:rejCol,background:m.rejRate<=0.5?'#E8F5E9':m.rejRate<=1?'#FFF3E0':'#FFEBEE'}}>{m.rejRate}%</td>
+                <td style={{padding:'7px 8px',textAlign:'center',color:'#854F0B'}}>{m.down}m</td>
+                <td style={{padding:'7px 8px',textAlign:'center',fontWeight:700,color:effCol}}>{m.eff}%</td>
+                <td style={{padding:'7px 8px',textAlign:'center',color:'#666'}}>{m.shifts}</td>
+                <td style={{padding:'7px 8px',textAlign:'center'}}>
+                  <span style={{background:m.rejRate<=0.5?'#276221':m.rejRate<=1?'#854F0B':'#C00000',color:'#fff',padding:'3px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>{m.status}</span>
+                </td>
+              </tr>
+            })}</tbody>
+            <tfoot><tr style={{background:'#1F3864'}}>
+              <td colSpan={3} style={{padding:'8px',color:'#FFD966',fontWeight:700}}>TOTAL</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#4CAF50',fontWeight:700,fontSize:13}}>{data.totalGood.toLocaleString()}</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FF5252',fontWeight:700,fontSize:13}}>{data.totalRej.toLocaleString()}</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FFD966',fontWeight:700}}>{data.overallEff}%</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FF9800',fontWeight:700}}>{data.totalDown}m</td>
+              <td colSpan={3} style={{padding:'8px',color:'#90A8C8',textAlign:'center'}}>{data.machineData.length} machines</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>}
+
+      {/* OPERATORS TAB */}
+      {activeTab==='operators'&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:13}}>👷 Operator-wise KPI Report</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Operator','Good Parts','Rejection','Rej %','Downtime','Shifts','Efficiency','Vol Grade','Quality Grade','Overall KRA'].map(h=>
+                <th key={h} style={{background:'#1F3864',color:'#fff',padding:'7px 8px',textAlign:'center',whiteSpace:'nowrap' as const}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.operatorData.map((op:any,i:number)=>{
+              const gradeCol=(g:string)=>g==='A+'?'#276221':g==='A'?'#2E75B6':g==='B'?'#854F0B':'#C00000'
+              const gradeBg=(g:string)=>g==='A+'?'#E8F5E9':g==='A'?'#E6F1FB':g==='B'?'#FFF3E0':'#FFEBEE'
+              return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                <td style={{padding:'7px 8px',fontWeight:700,color:'#1F3864'}}>{op.op}</td>
+                <td style={{padding:'7px 8px',textAlign:'center',color:'#276221',fontWeight:700}}>{op.good.toLocaleString()}</td>
+                <td style={{padding:'7px 8px',textAlign:'center',color:'#C00000',fontWeight:700}}>{op.rej.toLocaleString()}</td>
+                <td style={{padding:'7px 8px',textAlign:'center',fontWeight:700,color:op.rejRate<=0.3?'#276221':op.rejRate<=0.5?'#854F0B':'#C00000'}}>{op.rejRate}%</td>
+                <td style={{padding:'7px 8px',textAlign:'center',color:'#854F0B'}}>{op.down}m</td>
+                <td style={{padding:'7px 8px',textAlign:'center',color:'#666'}}>{op.shifts}</td>
+                <td style={{padding:'7px 8px',textAlign:'center',fontWeight:700,color:op.eff>=95?'#276221':op.eff>=90?'#854F0B':'#C00000'}}>{op.eff}%</td>
+                {['volGrade','qualGrade','overall'].map(g=><td key={g} style={{padding:'5px'}}>
+                  <div style={{background:gradeBg(op[g]),color:gradeCol(op[g]),fontWeight:700,fontSize:14,textAlign:'center',borderRadius:6,padding:'4px'}}>{op[g]}</div>
+                </td>)}
+              </tr>
+            })}</tbody>
+          </table>
+        </div>
+        <div style={{marginTop:8,fontSize:10,color:'#666',background:'#F5F5F5',padding:'6px 10px',borderRadius:6}}>
+          A+ = Excellent | A = Good | B = Average | C = Needs Improvement
+        </div>
+      </div>}
+
+      {/* DAILY TAB */}
+      {activeTab==='daily'&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:13}}>🌗 Day vs Night — Daily Data</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead>
+              <tr>
+                <th rowSpan={2} style={{background:'#1F3864',color:'#fff',padding:'7px 8px'}}>Date</th>
+                <th colSpan={4} style={{background:'#E65100',color:'#fff',padding:'7px 8px',textAlign:'center'}}>☀️ Day Shift</th>
+                <th colSpan={4} style={{background:'#5B2C8D',color:'#fff',padding:'7px 8px',textAlign:'center'}}>🌙 Night Shift</th>
+                <th rowSpan={2} style={{background:'#276221',color:'#fff',padding:'7px 8px'}}>Winner</th>
+              </tr>
+              <tr>
+                {['Good','Rej','Rej%','Eff%','Good','Rej','Rej%','Eff%'].map((h,i)=>
+                  <th key={i} style={{background:i<4?'#FFF3E0':'#F3E5F5',color:i<4?'#E65100':'#5B2C8D',padding:'5px 6px',textAlign:'center',fontSize:10}}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>{data.dateData.map((d:any,i:number)=><tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+              <td style={{padding:'7px 8px',fontWeight:600,fontSize:11}}>{d.date}</td>
+              <td style={{padding:'6px',textAlign:'center',color:'#276221',fontWeight:600}}>{d.dg.toLocaleString()}</td>
+              <td style={{padding:'6px',textAlign:'center',color:'#C00000'}}>{d.dr}</td>
+              <td style={{padding:'6px',textAlign:'center',color:d.dg+d.dr>0&&d.dr/(d.dg+d.dr)*100>1?'#C00000':'#276221',fontWeight:600}}>{d.dg+d.dr>0?Math.round(d.dr/(d.dg+d.dr)*100*100)/100:0}%</td>
+              <td style={{padding:'6px',textAlign:'center',fontWeight:700,color:d.dayEff>=95?'#276221':d.dayEff>=90?'#854F0B':'#C00000'}}>{d.dayEff}%</td>
+              <td style={{padding:'6px',textAlign:'center',color:'#5B2C8D',fontWeight:600}}>{d.ng.toLocaleString()}</td>
+              <td style={{padding:'6px',textAlign:'center',color:'#C00000'}}>{d.nr}</td>
+              <td style={{padding:'6px',textAlign:'center',color:d.ng+d.nr>0&&d.nr/(d.ng+d.nr)*100>1?'#C00000':'#276221',fontWeight:600}}>{d.ng+d.nr>0?Math.round(d.nr/(d.ng+d.nr)*100*100)/100:0}%</td>
+              <td style={{padding:'6px',textAlign:'center',fontWeight:700,color:d.nightEff>=95?'#276221':d.nightEff>=90?'#854F0B':'#C00000'}}>{d.nightEff}%</td>
+              <td style={{padding:'6px',textAlign:'center',fontWeight:600,fontSize:11}}>{d.winner}</td>
+            </tr>)}</tbody>
+            <tfoot><tr style={{background:'#1F3864'}}>
+              <td style={{padding:'8px',color:'#FFD966',fontWeight:700}}>TOTAL</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#4CAF50',fontWeight:700}}>{data.dayGood.toLocaleString()}</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FF5252',fontWeight:700}}>{data.dayRej}</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FFD966',fontWeight:700}}>{data.dayRejRate}%</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FFD966',fontWeight:700}}>{data.dayEff}%</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#CE93D8',fontWeight:700}}>{data.nightGood.toLocaleString()}</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FF5252',fontWeight:700}}>{data.nightRej}</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FFD966',fontWeight:700}}>{data.nightRejRate}%</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#FFD966',fontWeight:700}}>{data.nightEff}%</td>
+              <td style={{padding:'8px',textAlign:'center',color:'#90A8C8'}}>—</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>}
+
+      {/* KRA TAB */}
+      {activeTab==='kra'&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:13}}>🎯 Key Result Areas (KRA) — Plant Level</div>
+        {data.kras.map((k:any,i:number)=><div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',marginBottom:6,background:statusBg(k.status),border:`1px solid ${statusCol(k.status)}33`,borderRadius:8}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:12,color:'#1F3864'}}>{k.kra}</div>
+            <div style={{fontSize:11,color:'#666',marginTop:2}}>Target: {k.target}</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:16,fontWeight:700,color:statusCol(k.status)}}>{k.value}</div>
+            <div style={{marginTop:4}}>
+              <span style={{background:statusCol(k.status),color:'#fff',padding:'3px 10px',borderRadius:999,fontSize:10,fontWeight:600}}>{statusIcon(k.status)}</span>
+            </div>
+          </div>
+        </div>)}
+      </div>}
     </div>}
   </div>
 }
