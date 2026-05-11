@@ -2602,6 +2602,8 @@ function ReportsTab() {
           )}
         </div>
       )}
+      {module==='productionstatus'&&<ProductionStatusReport date={to} plant={plant}/>}
+      {module==='rej_comparison'&&<RejectionComparison from={from} to={to} plant={plant}/>}
     </div>
   )
 }
