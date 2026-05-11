@@ -2238,7 +2238,7 @@ function BreakdownTab({user}:{user:User}) {
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['BD ID','Machine','Problem','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
+            {['BD ID','Machine','Category','Problem','Analysis','Solution','Parts Used','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
           </tr></thead>
           <tbody>{resolved.map((b:any,i:number)=>{
@@ -2246,14 +2246,18 @@ function BreakdownTab({user}:{user:User}) {
             const dtMins=b.reported_time&&b.resolved_time?Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000):0
             const dtCol=dtMins>0?(dtMins<=60?'#276221':dtMins<=180?'#854F0B':'#C00000'):'#666'
             return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{b.bd_id||b.id?.slice(0,8)}</td>
-              <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{b.machine}</td>
-              <td style={{padding:'6px 8px',fontSize:10,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#C00000',fontWeight:600}}>{fmtTime(b.reported_time)||fmt(b.created_at)}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#854F0B',fontWeight:600}}>{b.work_started_time?fmtTime(b.work_started_time):'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#276221',fontWeight:600}}>{b.resolved_time?fmtTime(b.resolved_time):'--'}</td>
-              <td style={{padding:'6px 8px',fontWeight:700,color:dtCol}}>{downtime}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{b.resolved_by||b.reported_by}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#666',whiteSpace:'nowrap' as const}}>{b.bd_id||b.id?.slice(0,8)}</td>
+              <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864',whiteSpace:'nowrap' as const}}>{b.machine}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}><span style={{background:'#E6F1FB',color:'#1F3864',padding:'2px 6px',borderRadius:4,fontSize:9}}>{b.category}</span></td>
+              <td style={{padding:'6px 8px',fontSize:10,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
+              <td style={{padding:'6px 8px',fontSize:10,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const,color:'#854F0B'}} title={b.analysis||'--'}>{b.analysis||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const,color:'#276221'}} title={b.solution||'--'}>{b.solution||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const,color:'#5B2C8D'}} title={b.spares_used||'--'}>{b.spares_used||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#C00000',fontWeight:600,whiteSpace:'nowrap' as const}}>{fmtTime(b.reported_time)||fmt(b.created_at)}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#854F0B',fontWeight:600,whiteSpace:'nowrap' as const}}>{b.work_started_time?fmtTime(b.work_started_time):'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#276221',fontWeight:600,whiteSpace:'nowrap' as const}}>{b.resolved_time?fmtTime(b.resolved_time):'--'}</td>
+              <td style={{padding:'6px 8px',fontWeight:700,color:dtCol,whiteSpace:'nowrap' as const}}>{downtime}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#666',whiteSpace:'nowrap' as const}}>{b.resolved_by||b.reported_by}</td>
             </tr>
           })}</tbody>
         </table>
