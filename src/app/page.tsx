@@ -2213,8 +2213,10 @@ function BreakdownTab({user}:{user:User}) {
             <div style={{background:'#276221',color:'#fff',borderRadius:4,padding:'4px 8px',fontSize:10,fontWeight:600,marginBottom:8,display:'inline-block'}}>
               ✅ Resolved Time: {new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})} — Auto Save!
             </div>
-            <textarea style={{...S.fi,height:60,resize:'none' as const,marginBottom:6}} value={resolveForm.solution} onChange={e=>setResolveForm(p=>({...p,solution:e.target.value}))} placeholder="Kya solution kiya? Detail mein likho..."/>
-            <textarea style={{...S.fi,height:40,resize:'none' as const,marginBottom:8}} value={resolveForm.remarks} onChange={e=>setResolveForm(p=>({...p,remarks:e.target.value}))} placeholder="Remarks (optional)"/>
+            <textarea style={{...S.fi,height:50,resize:'none' as const,marginBottom:6}} value={resolveForm.analysis||''} onChange={e=>setResolveForm(p=>({...p,analysis:e.target.value}))} placeholder="Analysis — kya problem thi exactly?"/>
+            <textarea style={{...S.fi,height:50,resize:'none' as const,marginBottom:6}} value={resolveForm.solution} onChange={e=>setResolveForm(p=>({...p,solution:e.target.value}))} placeholder="Solution — kya kiya resolve karne ke liye?"/>
+            <input style={{...S.fi,marginBottom:6}} value={resolveForm.sparesUsed||''} onChange={e=>setResolveForm(p=>({...p,sparesUsed:e.target.value}))} placeholder="Parts/Spares used (e.g. Heater Band, O-Ring, Sensor)"/>
+            <textarea style={{...S.fi,height:35,resize:'none' as const,marginBottom:8}} value={resolveForm.remarks} onChange={e=>setResolveForm(p=>({...p,remarks:e.target.value}))} placeholder="Remarks (optional)"/>
             <div style={{display:'flex',gap:6}}>
               <button onClick={()=>resolve(b.id)} style={{flex:2,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer'}} disabled={saving}>
                 {saving?'Saving...':'✅ Confirm Resolved'}
