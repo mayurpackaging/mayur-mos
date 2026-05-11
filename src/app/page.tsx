@@ -2011,7 +2011,7 @@ function BreakdownTab({user}:{user:User}) {
   const [showForm,setShowForm]=useState(false)
   const [form,setForm]=useState({date:nd(),plant:'',machine:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
   const [resolveId,setResolveId]=useState<string|null>(null)
-  const [resolveForm,setResolveForm]=useState({solution:'',remarks:''})
+  const [resolveForm,setResolveForm]=useState({solution:'',analysis:'',sparesUsed:'',remarks:''})
 
   const load=async()=>{
     const res=await fetch('/api/breakdown').then(r=>r.json())
@@ -2083,6 +2083,8 @@ function BreakdownTab({user}:{user:User}) {
       body:JSON.stringify({
         type:'resolve',id,
         solution:resolveForm.solution,
+        analysis:resolveForm.analysis,
+        sparesUsed:resolveForm.sparesUsed,
         remarks:resolveForm.remarks,
         resolvedTime:new Date().toISOString(),
         enteredBy:user.name
@@ -2090,7 +2092,7 @@ function BreakdownTab({user}:{user:User}) {
     }).then(r=>r.json())
     setSaving(false)
     setToast({msg:res.msg,ok:res.success})
-    if(res.success){setResolveId(null);setResolveForm({solution:'',remarks:''});load()}
+    if(res.success){setResolveId(null);setResolveForm({solution:'',analysis:'',sparesUsed:'',remarks:''});load()}
   }
 
   const pending=bds.filter((b:any)=>b.status==='Pending'||b.status==='In Progress')
