@@ -2288,6 +2288,8 @@ function ReportsTab() {
     { id: 'mouldchange', label: 'Mould Change' },
     { id: 'rejection', label: 'Rejection' },
     { id: 'mouldpm', label: 'Mould PM' },
+    { id: 'productionstatus', label: '📊 Production Status' },
+    { id: 'rej_comparison', label: '🔍 Rejection Cross-Check' },
   ]
 
   return (
