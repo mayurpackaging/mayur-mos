@@ -245,6 +245,7 @@ export default function MOS() {
       <div style={S.nav}>
         {modules.map((m:string)=><button key={m} style={tab===m?S.nbA:S.nb} onClick={()=>setTab(m)}>{ML[m]||m}</button>)}
       </div>
+      <TodaysPlanBanner/>
       <div style={{padding:12}}>
         {tab==='mis'&&<MISTab/>}
         {tab==='ims'&&<IMSTab user={user}/>}
@@ -5706,6 +5707,57 @@ function KRAReport({user}:{user:User}) {
 }
 
 // ─── MIS Dashboard Component ──────────────────────────────────
+
+// ─── Today's Plan Banner ─────────────────────────────────────
+function TodaysPlanBanner() {
+  const [plans,setPlans]=useState<any[]>([])
+  const [show,setShow]=useState(true)
+
+  useEffect(()=>{
+    fetch(`/api/planning?date=${nd()}`).then(r=>r.json()).then(d=>{
+      setPlans(d.data||[])
+    })
+  },[])
+
+  if(!plans.length||!show) return null
+
+  const priorityCol=(p:string)=>p==='High'?'#C00000':p==='Medium'?'#854F0B':'#276221'
+  const priorityBg=(p:string)=>p==='High'?'#FFEBEE':p==='Medium'?'#FFF3E0':'#E8F5E9'
+  const priorityIcon=(p:string)=>p==='High'?'🔴':p==='Medium'?'🟡':'🟢'
+
+  return <div style={{margin:'0 8px 8px 8px',background:'#1F3864',borderRadius:10,padding:'10px 14px'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+      <div style={{color:'#FFD966',fontWeight:700,fontSize:13}}>📋 Aaj Ka Production Plan — {nd()}</div>
+      <button onClick={()=>setShow(false)} style={{background:'none',border:'none',color:'#FFD966',fontSize:16,cursor:'pointer'}}>✕</button>
+    </div>
+    <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:4}}>
+      {plans.map((p:any,i:number)=><div key={i} style={{
+        background:priorityBg(p.priority),
+        borderRadius:8,
+        padding:'8px 12px',
+        minWidth:160,
+        flexShrink:0,
+        border:`2px solid ${priorityCol(p.priority)}`
+      }}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+          <span style={{fontSize:10,fontWeight:700,color:priorityCol(p.priority)}}>{priorityIcon(p.priority)} {p.priority}</span>
+          <span style={{fontSize:10,color:'#666'}}>{p.shift==='Day'?'☀️':'🌙'} {p.shift}</span>
+        </div>
+        <div style={{fontWeight:700,fontSize:12,color:'#1F3864',marginBottom:2}}>{p.machine||'Any Machine'}</div>
+        <div style={{fontSize:11,color:'#333',marginBottom:4}}>{p.product}</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{background:'#1F3864',color:'#FFD966',borderRadius:4,padding:'2px 8px',fontSize:11,fontWeight:700}}>{p.planned_qty} Ctn</span>
+          <span style={{fontSize:9,color:'#666'}}>{p.plant}</span>
+        </div>
+        {p.notes&&<div style={{fontSize:10,color:'#666',marginTop:4,fontStyle:'italic'}}>{p.notes}</div>}
+      </div>)}
+    </div>
+    <div style={{fontSize:10,color:'#90A8C8',marginTop:6,textAlign:'right'}}>
+      {plans.length} plan{plans.length>1?'s':''} aaj ke liye | Planning tab mein details dekho
+    </div>
+  </div>
+}
+
 function MISDashboard() {
   const [period,setPeriod]=useState('week')
   const [from,setFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-d.getDay()+1);return d.toISOString().split('T')[0]})
