@@ -3467,13 +3467,10 @@ function PlanningTab({user}:{user:User}) {
   const save=async()=>{
     if(!form.plant||!form.product||!form.plannedQty){setToast({msg:'Plant, Product aur Qty daalo!',ok:false});return}
     setSaving(true)
-    // Store as a production entry with future date
-    const res=await fetch('/api/production',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      date:form.plannedDate,shift:form.shift==='Day'?'Day (8am-8pm)':'Night (8pm-8am)',
-      plant:form.plant,machine:form.machine,operator:'TBD',product:form.product,
-      mould:'',cavities:'',cycleTime:'',material:'',machineStatus:'running',stopReason:'',
-      remarks:`PLAN | Qty: ${form.plannedQty} Ctn | Priority: ${form.priority} | ${form.notes}`,
-      slots:[{slot:'Planned',good:'0',rejection:'0',down:'0',remarks:`Planned: ${form.plannedQty} Ctn`}],
+    const res=await fetch('/api/planning',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      date:form.plannedDate,shift:form.shift,
+      plant:form.plant,machine:form.machine,product:form.product,
+      plannedQty:form.plannedQty,priority:form.priority,notes:form.notes,
       enteredBy:user.name
     })}).then(r=>r.json())
     setSaving(false);setToast({msg:res.success?'Production plan saved!':res.msg,ok:res.success})
