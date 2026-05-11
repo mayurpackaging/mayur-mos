@@ -2205,7 +2205,7 @@ function BreakdownTab({user}:{user:User}) {
             {!b.work_started_time&&<button onClick={()=>startWork(b.id)} style={{flex:1,background:'#854F0B',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
               🔧 Work Started — Mark Time
             </button>}
-            <button onClick={()=>{setResolveId(b.id);setResolveForm({solution:'',remarks:''})}} style={{flex:1,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+            <button onClick={()=>{setResolveId(b.id);setResolveForm({solution:'',analysis:'',sparesUsed:'',remarks:''})}} style={{flex:1,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
               ✅ Mark Resolved
             </button>
           </div>}
