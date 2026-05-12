@@ -5060,14 +5060,19 @@ function BulkProductionTab({user}:{user:User}) {
     }
 
     // Check duplicate slot
-    const alreadySaved=history.some((h:any)=>
-      h.plant===plant&&
-      h.shift?.toLowerCase().includes(shift==='night'?'night':'day')&&
-      (h.production_slots||[]).some((s:any)=>s.slot_name===slot)&&
-      filledEntries.some(e=>e.machine===h.machine&&!e.editId)
+    // Check duplicate - but allow MC entries (isMC=true)
+    const nonMCEntries=filledEntries.filter(e=>!e.isMC)
+    const alreadySaved=nonMCEntries.some(e=>
+      history.some((h:any)=>
+        h.plant===plant&&
+        h.machine===e.machine&&
+        h.shift?.toLowerCase().includes(shift==='night'?'night':'day')&&
+        (h.production_slots||[]).some((s:any)=>s.slot_name===slot)&&
+        !e.editId
+      )
     )
     if(alreadySaved){
-      errors.push(`${slot} mein kuch machines ki entry already save hai!`)
+      errors.push(`Kuch machines ka ${slot} already saved hai! Sirf MC (Mould Change) entry karo.`)
     }
 
     // Show errors - block save
@@ -5314,6 +5319,7 @@ function BulkProductionTab({user}:{user:User}) {
                       <option value="powercut">Power Cut</option>
                     </select>
                     {isFirstRow&&<button onClick={()=>addMouldChange(e.machine)} style={{background:'#854F0B',color:'#fff',border:'none',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer',fontWeight:700}}>+ MC</button>}
+              {isFirstRow&&history.some((h:any)=>h.machine===e.machine&&(h.production_slots||[]).some((s:any)=>s.slot_name===slot))&&<div style={{fontSize:8,color:'#854F0B',marginTop:2}}>Slot saved — MC se new entry</div>}
                     {e.isMC&&<button onClick={()=>removeMCRow(e.machine,machineRowIdx)} style={{background:'#FFEBEE',color:'#C00000',border:'1px solid #C00000',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer'}}>✕ Remove</button>}
                   </div>
                 </td>
