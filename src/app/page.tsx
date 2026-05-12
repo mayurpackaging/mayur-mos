@@ -2486,9 +2486,18 @@ function ReportsTab() {
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.machine}</td>
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.old_mould}</td>
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.new_mould}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center' }}>{r.estimated_time} min</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700, color: col }}>{r.actual_time} min</td>
-                          <td style={{ padding: '6px 8px' }}><span style={{ background: r.on_time === 'Yes' ? '#E8F5E9' : '#FFEBEE', color: col, padding: '2px 7px', borderRadius: 999, fontSize: 10 }}>{r.on_time === 'Yes' ? 'On Time' : 'Delayed'}</span></td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', color: '#854F0B', fontWeight: 600 }}>{r.estimated_min>0?r.estimated_min+' min':'--'}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700, color: col }}>{r.total_minutes>0?r.total_minutes+' min':r.actual_time>0?r.actual_time+' min':'--'}</td>
+                          <td style={{ padding: '6px 8px' }}>{(()=>{
+                            const actual=r.total_minutes||r.actual_time||0
+                            const target=r.estimated_min||r.estimated_time||0
+                            const isOnTime=target>0&&actual>0&&actual<=target
+                            const isComplete=actual>0
+                            const statusBg=!isComplete?'#F5F5F5':isOnTime?'#E8F5E9':'#FFEBEE'
+                            const statusCol=!isComplete?'#666':isOnTime?'#276221':'#C00000'
+                            const statusText=!isComplete?'In Progress':isOnTime?'✅ On Time':'⚠️ Delayed'
+                            return <span style={{background:statusBg,color:statusCol,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{statusText}</span>
+                          })()}</td>
                         </tr>
                       })}
                       {!data.data?.length && <tr><td colSpan={8} style={{ textAlign: 'center', color: '#666', padding: 16 }}>Koi data nahi!</td></tr>}
