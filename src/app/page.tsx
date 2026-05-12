@@ -6165,7 +6165,7 @@ function DailyReportTab({user}:{user:User}) {
   const sparesOut=data?.spares?.filter((s:any)=>s.action!=='Stock In')||[]
 
   // Machine wise production
-  const machines=[...new Set((data?.prod||[]).map((e:any)=>e.machine))].filter(Boolean)
+  const machines=(data?.prod||[]).map((e:any)=>e.machine).filter(Boolean).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
   const machineStats=machines.map((m:string)=>{
     const mp=(data?.prod||[]).filter((e:any)=>e.machine===m)
     const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
