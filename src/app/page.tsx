@@ -8,7 +8,8 @@ const ML: Record<string, string> = {
   quality:"Quality", rejection:"Rejection", mouldchange:"Mould Change",
   dispatch:"Dispatch", batch:"Batch", sales:"Sales", spares:"Spares",
   mouldpm:"Mould PM", breakdown:"Breakdown", maintenance:"Maintenance",
-  bulkproduction:"Bulk Production", reports:"Reports", users:"Users", performance:"Performance"
+  bulkproduction:"Bulk Production", dailyreport:"Daily Report",
+  reports:"Reports", users:"Users", performance:"Performance"
 }
 
 const MACH: Record<string, string[]> = {
@@ -264,8 +265,9 @@ export default function MOS() {
         {tab==='users'&&<UsersTab user={user}/>}
         {tab==='performance'&&<PerformanceTab user={user}/>}
         {tab==='maintenance'&&<MaintenanceTab user={user}/>}
+        {tab==='dailyreport'&&<DailyReportTab user={user}/>}
         {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction'].includes(tab)&&(
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -6105,6 +6107,339 @@ function MISDashboard() {
           </div>
         </div>)}
       </div>}
+    </div>}
+  </div>
+}
+
+// ─── Daily Activity Report ────────────────────────────────────
+function DailyReportTab({user}:{user:User}) {
+  const [date,setDate]=useState(nd())
+  const [plant,setPlant]=useState('All')
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+
+  const load=async()=>{
+    setLoading(true)
+    const plantParam=plant==='All'?'':encodeURIComponent(plant)
+    const [prodRes,bdRes,mcRes,pmRes,sparesRes]=await Promise.all([
+      fetch(`/api/production?date=${date}${plantParam?`&plant=${plantParam}`:''}`).then(r=>r.json()),
+      fetch(`/api/breakdown?date=${date}`).then(r=>r.json()),
+      fetch(`/api/mouldchange?date=${date}`).then(r=>r.json()),
+      fetch(`/api/mouldpm?date=${date}`).then(r=>r.json()),
+      fetch(`/api/spares?date=${date}`).then(r=>r.json()),
+    ])
+    setData({
+      prod:prodRes.data||[],
+      bd:bdRes.data||[],
+      mc:mcRes.data||[],
+      pm:pmRes.data||[],
+      spares:sparesRes.data||[]
+    })
+    setLoading(false)
+  }
+
+  useEffect(()=>{load()},[date,plant])
+
+  const goDate=(days:number)=>{
+    const d=new Date(date)
+    d.setDate(d.getDate()+days)
+    setDate(d.toISOString().split('T')[0])
+  }
+
+  if(!data&&!loading) return <div style={{textAlign:'center',padding:32}}>Loading...</div>
+
+  // Calculations
+  const totalGood=data?.prod?.reduce((a:number,e:any)=>a+(e.good_parts||0),0)||0
+  const totalRej=data?.prod?.reduce((a:number,e:any)=>a+(e.rejection||0),0)||0
+  const totalDown=data?.prod?.reduce((a:number,e:any)=>a+(e.downtime||0),0)||0
+  const eff=totalGood+totalRej>0?Math.round(totalGood/(totalGood+totalRej)*100*10)/10:0
+  const dayProd=data?.prod?.filter((e:any)=>e.shift?.toLowerCase().includes('day'))||[]
+  const nightProd=data?.prod?.filter((e:any)=>e.shift?.toLowerCase().includes('night'))||[]
+  const dayGood=dayProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+  const nightGood=nightProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+  const pendingBd=data?.bd?.filter((b:any)=>b.status!=='Resolved')||[]
+  const resolvedBd=data?.bd?.filter((b:any)=>b.status==='Resolved')||[]
+  const mcDone=data?.mc?.filter((m:any)=>m.status==='complete')||[]
+  const mcInProgress=data?.mc?.filter((m:any)=>m.status==='in_progress')||[]
+  const sparesIn=data?.spares?.filter((s:any)=>s.action==='Stock In')||[]
+  const sparesOut=data?.spares?.filter((s:any)=>s.action!=='Stock In')||[]
+
+  // Machine wise production
+  const machines=[...new Set((data?.prod||[]).map((e:any)=>e.machine))].filter(Boolean)
+  const machineStats=machines.map((m:string)=>{
+    const mp=(data?.prod||[]).filter((e:any)=>e.machine===m)
+    const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+    const rej=mp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+    const eff=good+rej>0?Math.round(good/(good+rej)*100):0
+    return {machine:m,good,rej,eff,product:mp[mp.length-1]?.product||''}
+  }).sort((a:any,b:any)=>b.good-a.good)
+
+  // Simple SVG pie chart
+  const PieChart=({good,rej}:{good:number,rej:number})=>{
+    const total=good+rej
+    if(total===0) return <div style={{textAlign:'center',color:'#ccc',fontSize:12}}>No data</div>
+    const goodPct=good/total
+    const rejPct=rej/total
+    const r=60,cx=70,cy=70
+    const goodAngle=goodPct*360
+    const toRad=(deg:number)=>deg*Math.PI/180
+    const x1=cx+r*Math.sin(toRad(0))
+    const y1=cy-r*Math.cos(toRad(0))
+    const x2=cx+r*Math.sin(toRad(goodAngle))
+    const y2=cy-r*Math.cos(toRad(goodAngle))
+    const largeArc=goodAngle>180?1:0
+    return <svg width="140" height="140">
+      {goodPct<1&&<path d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`} fill="#276221"/>}
+      {goodPct===1&&<circle cx={cx} cy={cy} r={r} fill="#276221"/>}
+      {rejPct>0&&goodPct<1&&<path d={`M ${cx} ${cy} L ${x2} ${y2} A ${r} ${r} 0 ${1-largeArc} 1 ${x1} ${y1} Z`} fill="#C00000"/>}
+      <circle cx={cx} cy={cy} r={40} fill="white"/>
+      <text x={cx} y={cy-8} textAnchor="middle" fontSize="14" fontWeight="bold" fill="#1F3864">{goodPct>0?Math.round(goodPct*100):0}%</text>
+      <text x={cx} y={cy+10} textAnchor="middle" fontSize="9" fill="#666">efficiency</text>
+    </svg>
+  }
+
+  // Bar chart for machines
+  const BarChart=({stats}:{stats:any[]})=>{
+    if(!stats.length) return null
+    const maxGood=Math.max(...stats.map((s:any)=>s.good),1)
+    const barW=Math.min(40,Math.floor(320/stats.length)-4)
+    return <svg width="100%" height="120" viewBox={`0 0 ${stats.length*50+20} 120`}>
+      {stats.map((s:any,i:number)=>{
+        const h=Math.round((s.good/maxGood)*80)
+        const x=i*50+10
+        const effCol=s.eff>=90?'#276221':s.eff>=75?'#854F0B':'#C00000'
+        return <g key={i}>
+          <rect x={x} y={100-h} width={barW} height={h} fill={effCol} rx="3"/>
+          <text x={x+barW/2} y={115} textAnchor="middle" fontSize="7" fill="#666">{s.machine.split('-')[0]}</text>
+          <text x={x+barW/2} y={97-h} textAnchor="middle" fontSize="8" fontWeight="bold" fill={effCol}>{s.eff}%</text>
+        </g>
+      })}
+    </svg>
+  }
+
+  return <div>
+    {/* Header */}
+    <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:'14px 16px',marginBottom:8,color:'#fff'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontWeight:700,fontSize:16}}>📅 Daily Activity Report</div>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <select value={plant} onChange={e=>setPlant(e.target.value)} style={{padding:'5px 8px',borderRadius:6,border:'none',fontSize:11,fontWeight:600}}>
+            <option value="All">All Plants</option>
+            <option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,justifyContent:'center'}}>
+        <button onClick={()=>goDate(-1)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:6,padding:'6px 14px',cursor:'pointer',fontSize:16}}>◀</button>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{padding:'6px 12px',borderRadius:8,border:'none',fontSize:13,fontWeight:700,color:'#1F3864',textAlign:'center'}}/>
+        <button onClick={()=>goDate(1)} disabled={date>=nd()} style={{background:date>=nd()?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:6,padding:'6px 14px',cursor:date>=nd()?'not-allowed':'pointer',fontSize:16}}>▶</button>
+      </div>
+      {date===nd()&&<div style={{textAlign:'center',marginTop:6,fontSize:11,color:'#90CAF9'}}>📌 Aaj Ka Report</div>}
+    </div>
+
+    {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading... ⏳</div>}
+
+    {data&&!loading&&<div>
+      {/* KPI Summary */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:8}}>
+        {[
+          {icon:'🏭',label:'Good Parts',val:totalGood.toLocaleString(),col:'#276221',bg:'#E8F5E9'},
+          {icon:'❌',label:'Rejection',val:totalRej.toLocaleString(),col:'#C00000',bg:'#FFEBEE'},
+          {icon:'⚡',label:'Efficiency',val:eff+'%',col:eff>=90?'#276221':eff>=75?'#854F0B':'#C00000',bg:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':'#FFEBEE'},
+          {icon:'⏱️',label:'Downtime',val:totalDown+'m',col:'#854F0B',bg:'#FFF3E0'},
+        ].map((k,i)=><div key={i} style={{background:k.bg,borderRadius:8,padding:'10px 8px',textAlign:'center',border:`1px solid ${k.col}33`}}>
+          <div style={{fontSize:16}}>{k.icon}</div>
+          <div style={{fontSize:18,fontWeight:700,color:k.col}}>{k.val}</div>
+          <div style={{fontSize:9,color:'#666',marginTop:2}}>{k.label}</div>
+        </div>)}
+      </div>
+
+      {/* Charts Row */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        {/* Pie Chart */}
+        <div style={S.card}>
+          <div style={{fontWeight:700,color:'#1F3864',marginBottom:8,fontSize:12}}>📊 Good vs Rejection</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:12}}>
+            <PieChart good={totalGood} rej={totalRej}/>
+            <div>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                <div style={{width:12,height:12,borderRadius:2,background:'#276221'}}/>
+                <span style={{fontSize:11}}>Good: {totalGood.toLocaleString()}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                <div style={{width:12,height:12,borderRadius:2,background:'#C00000'}}/>
+                <span style={{fontSize:11}}>Rej: {totalRej.toLocaleString()}</span>
+              </div>
+              <div style={{marginTop:8,fontSize:11}}>
+                <div style={{color:'#E65100',fontWeight:600}}>☀️ Day: {dayGood.toLocaleString()}</div>
+                <div style={{color:'#5B2C8D',fontWeight:600}}>🌙 Night: {nightGood.toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bar Chart */}
+        <div style={S.card}>
+          <div style={{fontWeight:700,color:'#1F3864',marginBottom:8,fontSize:12}}>🏭 Machine Efficiency</div>
+          {machineStats.length>0?<BarChart stats={machineStats}/>:<div style={{textAlign:'center',color:'#ccc',padding:20,fontSize:12}}>No data</div>}
+        </div>
+      </div>
+
+      {/* Production Summary */}
+      {data.prod.length>0&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#276221',marginBottom:8,fontSize:12}}>🏭 Production Summary</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Machine','Product','Shift','Good','Rej','Down','Eff%'].map(h=><th key={h} style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{(()=>{
+              const byMachine:(typeof machineStats[0]&{shift:string,product:string})[]=[]
+              data.prod.forEach((e:any)=>{
+                const eff=e.good_parts+e.rejection>0?Math.round(e.good_parts/(e.good_parts+e.rejection)*100):0
+                byMachine.push({machine:e.machine,good:e.good_parts,rej:e.rejection,eff,shift:e.shift,product:e.product})
+              })
+              return byMachine.map((m:any,i:number)=>{
+                const effCol=m.eff>=90?'#276221':m.eff>=75?'#854F0B':'#C00000'
+                return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
+                  <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{m.machine}</td>
+                  <td style={{padding:'6px 8px',fontSize:10}}>{m.product}</td>
+                  <td style={{padding:'6px 8px',textAlign:'center',fontSize:10}}>{m.shift?.includes('Day')?'☀️':'🌙'}</td>
+                  <td style={{padding:'6px 8px',textAlign:'center',color:'#276221',fontWeight:700}}>{m.good.toLocaleString()}</td>
+                  <td style={{padding:'6px 8px',textAlign:'center',color:'#C00000'}}>{m.rej}</td>
+                  <td style={{padding:'6px 8px',textAlign:'center',color:'#854F0B'}}>{m.down||0}m</td>
+                  <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:effCol,background:m.eff>=90?'#E8F5E9':m.eff>=75?'#FFF3E0':m.eff>0?'#FFEBEE':'transparent'}}>{m.eff>0?m.eff+'%':'--'}</td>
+                </tr>
+              })
+            })()}</tbody>
+          </table>
+        </div>
+      </div>}
+
+      {/* Breakdown */}
+      <div style={S.card}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#C00000',fontSize:12}}>🔧 Breakdown Activity</div>
+          <div style={{display:'flex',gap:6}}>
+            {pendingBd.length>0&&<span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>🔴 {pendingBd.length} Pending</span>}
+            {resolvedBd.length>0&&<span style={{background:'#E8F5E9',color:'#276221',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>✅ {resolvedBd.length} Resolved</span>}
+          </div>
+        </div>
+        {data.bd.length===0?<div style={{textAlign:'center',color:'#276221',padding:12,fontSize:12}}>✅ Aaj koi breakdown nahi!</div>:
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Machine','Problem','Category','Reported','Resolved','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.bd.map((b:any,i:number)=>{
+              const dtMins=b.reported_time&&b.resolved_time?Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000):0
+              return <tr key={i} style={{background:i%2===0?'#FFF5F5':'#fff'}}>
+                <td style={{padding:'5px 8px',fontWeight:600}}>{b.machine}</td>
+                <td style={{padding:'5px 8px',fontSize:10,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
+                <td style={{padding:'5px 8px',fontSize:10}}>{b.category}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#C00000'}}>{b.reported_time?new Date(b.reported_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#276221'}}>{b.resolved_time?new Date(b.resolved_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
+                <td style={{padding:'5px 8px',fontWeight:600,color:dtMins>120?'#C00000':dtMins>60?'#854F0B':'#276221'}}>{dtMins>0?dtMins+'m':'--'}</td>
+                <td style={{padding:'5px 8px'}}>
+                  <span style={{background:b.status==='Resolved'?'#E8F5E9':'#FFEBEE',color:b.status==='Resolved'?'#276221':'#C00000',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>
+                    {b.status==='Resolved'?'✅ Resolved':'🔴 Pending'}
+                  </span>
+                </td>
+              </tr>
+            })}</tbody>
+          </table>
+        </div>}
+      </div>
+
+      {/* Mould Change */}
+      <div style={S.card}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#854F0B',fontSize:12}}>🔄 Mould Change Activity</div>
+          <div style={{display:'flex',gap:6}}>
+            {mcDone.length>0&&<span style={{background:'#E8F5E9',color:'#276221',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>✅ {mcDone.length} Done</span>}
+            {mcInProgress.length>0&&<span style={{background:'#FFF3E0',color:'#E65100',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>⏳ {mcInProgress.length} In Progress</span>}
+          </div>
+        </div>
+        {data.mc.length===0?<div style={{textAlign:'center',color:'#276221',padding:12,fontSize:12}}>✅ Aaj koi mould change nahi!</div>:
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Machine','Old Mould','New Mould','Start','Run','Total','Target','Result'].map(h=><th key={h} style={{background:'#854F0B',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.mc.map((m:any,i:number)=>{
+              const onTime=m.estimated_min>0&&m.total_minutes>0&&m.total_minutes<=m.estimated_min
+              return <tr key={i} style={{background:i%2===0?'#FFF9E6':'#fff'}}>
+                <td style={{padding:'5px 8px',fontWeight:600}}>{m.machine}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>{m.old_mould?.split(' - ')[0]}</td>
+                <td style={{padding:'5px 8px',fontSize:10,fontWeight:600,color:'#1F3864'}}>{m.new_mould?.split(' - ')[0]}</td>
+                <td style={{padding:'5px 8px',fontSize:10}}>{m.start_time?new Date(m.start_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
+                <td style={{padding:'5px 8px',fontSize:10}}>{m.run_time?new Date(m.run_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
+                <td style={{padding:'5px 8px',fontWeight:700,color:m.total_minutes>0?(onTime?'#276221':'#C00000'):'#666'}}>{m.total_minutes>0?m.total_minutes+'m':'--'}</td>
+                <td style={{padding:'5px 8px',color:'#854F0B'}}>{m.estimated_min>0?m.estimated_min+'m':'--'}</td>
+                <td style={{padding:'5px 8px'}}>
+                  <span style={{background:m.status==='complete'?(onTime?'#E8F5E9':'#FFEBEE'):'#FFF3E0',color:m.status==='complete'?(onTime?'#276221':'#C00000'):'#E65100',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>
+                    {m.status==='complete'?(onTime?'✅ On Time':'⚠️ Delayed'):'⏳ In Progress'}
+                  </span>
+                </td>
+              </tr>
+            })}</tbody>
+          </table>
+        </div>}
+      </div>
+
+      {/* Mould PM */}
+      {data.pm.length>0&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#5B2C8D',marginBottom:8,fontSize:12}}>⚙️ Mould PM Done</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Mould','Done By','Result','Shots'].map(h=><th key={h} style={{background:'#5B2C8D',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.pm.map((p:any,i:number)=><tr key={i} style={{background:i%2===0?'#F3E5F5':'#fff'}}>
+              <td style={{padding:'5px 8px',fontWeight:600}}>{p.mould_code||p.mould}</td>
+              <td style={{padding:'5px 8px',fontSize:10}}>{p.done_by}</td>
+              <td style={{padding:'5px 8px'}}><span style={{background:p.overall_result==='OK'?'#E8F5E9':'#FFEBEE',color:p.overall_result==='OK'?'#276221':'#C00000',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>{p.overall_result}</span></td>
+              <td style={{padding:'5px 8px',fontSize:10,color:'#5B2C8D'}}>{p.current_shots?.toLocaleString()}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </div>}
+
+      {/* Spares */}
+      {(sparesIn.length>0||sparesOut.length>0)&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:8,fontSize:12}}>🔩 Spares Activity</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {sparesIn.length>0&&<div>
+            <div style={{fontWeight:600,color:'#276221',marginBottom:6,fontSize:11}}>📦 Stock In ({sparesIn.length})</div>
+            {sparesIn.slice(0,5).map((s:any,i:number)=><div key={i} style={{background:'#E8F5E9',borderRadius:6,padding:'5px 8px',marginBottom:4,fontSize:11}}>
+              <div style={{fontWeight:600}}>{s.part_name||s.item_name}</div>
+              <div style={{color:'#666',fontSize:10}}>Qty: {s.quantity||s.qty} | {s.vendor_name||s.vendor}</div>
+            </div>)}
+          </div>}
+          {sparesOut.length>0&&<div>
+            <div style={{fontWeight:600,color:'#C00000',marginBottom:6,fontSize:11}}>🔧 Used ({sparesOut.length})</div>
+            {sparesOut.slice(0,5).map((s:any,i:number)=><div key={i} style={{background:'#FFEBEE',borderRadius:6,padding:'5px 8px',marginBottom:4,fontSize:11}}>
+              <div style={{fontWeight:600}}>{s.part_name||s.item_name}</div>
+              <div style={{color:'#666',fontSize:10}}>Qty: {s.quantity||s.qty} | {s.machine}</div>
+            </div>)}
+          </div>}
+        </div>
+      </div>}
+
+      {/* Day Summary */}
+      <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:10,padding:'14px',color:'#fff',marginBottom:8}}>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>📋 Day Summary — {date}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:11}}>
+          <div>✅ Production: {data.prod.length} entries</div>
+          <div>{eff>=90?'🟢 ':eff>=75?'🟠 ':'🔴 '}Efficiency: {eff}%</div>
+          <div>{data.bd.length>0?`🔴 Breakdowns: ${data.bd.length}`:'✅ No Breakdowns'}</div>
+          <div>{mcDone.length>0?`🔄 Mould Changes: ${mcDone.length}`:'—'}</div>
+          <div>{data.pm.length>0?`⚙️ PM Done: ${data.pm.length}`:'—'}</div>
+          <div>{sparesIn.length>0?`📦 Spares In: ${sparesIn.length}`:'—'}</div>
+          <div style={{color:'#FF5252'}}>❌ Total Rejection: {totalRej.toLocaleString()}</div>
+          <div style={{color:'#FF9800'}}>⏱️ Total Downtime: {totalDown}m</div>
+        </div>
+      </div>
     </div>}
   </div>
 }
