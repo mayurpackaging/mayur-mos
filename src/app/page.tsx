@@ -6375,15 +6375,25 @@ function DailyReportTab({user}:{user:User}) {
               const onTime=m.estimated_min>0&&m.total_minutes>0&&m.total_minutes<=m.estimated_min
               return <tr key={i} style={{background:i%2===0?'#FFF9E6':'#fff'}}>
                 <td style={{padding:'5px 8px',fontWeight:600}}>{m.machine}</td>
-                <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>{m.old_mould?.split(' - ')[0]}</td>
-                <td style={{padding:'5px 8px',fontSize:10,fontWeight:600,color:'#1F3864'}}>{m.new_mould?.split(' - ')[0]}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>
+                  <div style={{fontWeight:600}}>{m.old_mould?.split(' - ')[0]}</div>
+                  <div style={{fontSize:9,color:'#999'}}>{m.old_mould?.split(' - ')[1]||''}</div>
+                </td>
+                <td style={{padding:'5px 8px',fontSize:10,fontWeight:600,color:'#1F3864'}}>
+                  <div>{m.new_mould?.split(' - ')[0]}</div>
+                  <div style={{fontSize:9,color:'#2E75B6'}}>{m.new_mould?.split(' - ')[1]||''}</div>
+                </td>
                 <td style={{padding:'5px 8px',fontSize:10}}>{m.start_time?new Date(m.start_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
                 <td style={{padding:'5px 8px',fontSize:10}}>{m.run_time?new Date(m.run_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
                 <td style={{padding:'5px 8px',fontWeight:700,color:m.total_minutes>0?(onTime?'#276221':'#C00000'):'#666'}}>{m.total_minutes>0?m.total_minutes+'m':'--'}</td>
                 <td style={{padding:'5px 8px',color:'#854F0B'}}>{m.estimated_min>0?m.estimated_min+'m':'--'}</td>
                 <td style={{padding:'5px 8px'}}>
                   <span style={{background:m.status==='complete'?(onTime?'#E8F5E9':'#FFEBEE'):'#FFF3E0',color:m.status==='complete'?(onTime?'#276221':'#C00000'):'#E65100',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>
-                    {m.status==='complete'?(onTime?'✅ On Time':'⚠️ Delayed'):'⏳ In Progress'}
+                    {m.status==='complete'
+                    ? (m.estimated_min>0
+                        ? (onTime?'✅ On Time':'⚠️ Delayed')
+                        : '✅ Done')
+                    : '⏳ In Progress'}
                   </span>
                 </td>
               </tr>
