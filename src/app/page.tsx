@@ -6201,20 +6201,23 @@ function DailyReportTab({user}:{user:User}) {
   // Bar chart for machines
   const BarChart=({stats}:{stats:any[]})=>{
     if(!stats.length) return null
-    const maxGood=Math.max(...stats.map((s:any)=>s.good),1)
-    const barW=Math.min(40,Math.floor(320/stats.length)-4)
-    return <svg width="100%" height="120" viewBox={`0 0 ${stats.length*50+20} 120`}>
-      {stats.map((s:any,i:number)=>{
-        const h=Math.round((s.good/maxGood)*80)
-        const x=i*50+10
-        const effCol=s.eff>=90?'#276221':s.eff>=75?'#854F0B':'#C00000'
-        return <g key={i}>
-          <rect x={x} y={100-h} width={barW} height={h} fill={effCol} rx="3"/>
-          <text x={x+barW/2} y={115} textAnchor="middle" fontSize="7" fill="#666">{s.machine.split('-')[0]}</text>
-          <text x={x+barW/2} y={97-h} textAnchor="middle" fontSize="8" fontWeight="bold" fill={effCol}>{s.eff}%</text>
-        </g>
-      })}
-    </svg>
+    return <div style={{overflowX:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
+        <thead><tr>
+          {['Machine','Product','Good','Eff%'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'4px 6px',textAlign:'center'}}>{h}</th>)}
+        </tr></thead>
+        <tbody>{stats.map((s:any,i:number)=>{
+          const effCol=s.eff>=90?'#276221':s.eff>=75?'#854F0B':'#C00000'
+          const effBg=s.eff>=90?'#E8F5E9':s.eff>=75?'#FFF3E0':s.eff>0?'#FFEBEE':'transparent'
+          return <tr key={i} style={{background:i%2===0?'#F8F9FF':'#fff'}}>
+            <td style={{padding:'4px 6px',fontWeight:700,color:'#1F3864',whiteSpace:'nowrap' as const}}>{s.machine}</td>
+            <td style={{padding:'4px 6px',fontSize:9,color:'#666',maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{s.product}</td>
+            <td style={{padding:'4px 6px',textAlign:'center',color:'#276221',fontWeight:600}}>{s.good.toLocaleString()}</td>
+            <td style={{padding:'4px 6px',textAlign:'center',fontWeight:700,color:effCol,background:effBg}}>{s.eff>0?s.eff+'%':'--'}</td>
+          </tr>
+        })}</tbody>
+      </table>
+    </div>
   }
 
   return <div>
@@ -6329,13 +6332,15 @@ function DailyReportTab({user}:{user:User}) {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
             <thead><tr>
-              {['Machine','Problem','Category','Reported','Resolved','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}
+              {['Machine','Plant','Product','Problem','Category','Reported','Resolved','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
             </tr></thead>
             <tbody>{data.bd.map((b:any,i:number)=>{
               const dtMins=b.reported_time&&b.resolved_time?Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000):0
               return <tr key={i} style={{background:i%2===0?'#FFF5F5':'#fff'}}>
-                <td style={{padding:'5px 8px',fontWeight:600}}>{b.machine}</td>
-                <td style={{padding:'5px 8px',fontSize:10,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
+                <td style={{padding:'5px 8px',fontWeight:600,whiteSpace:'nowrap' as const}}>{b.machine}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>{b.plant}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#854F0B',maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{(()=>{const mp=(data?.prod||[]).find((p:any)=>p.machine===b.machine);return mp?.product?.split(' ').slice(0,2).join(' ')||'--'})()}</td>
+                <td style={{padding:'5px 8px',fontSize:10,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
                 <td style={{padding:'5px 8px',fontSize:10}}>{b.category}</td>
                 <td style={{padding:'5px 8px',fontSize:10,color:'#C00000'}}>{b.reported_time?new Date(b.reported_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''}</td>
                 <td style={{padding:'5px 8px',fontSize:10,color:'#276221'}}>{b.resolved_time?new Date(b.resolved_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
