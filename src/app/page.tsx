@@ -4898,7 +4898,8 @@ function BulkProductionTab({user}:{user:User}) {
       machine,product:'',mould:'',cavities:existing?.cavities||'',
       cycleTime:existing?.cycleTime||'',operator:existing?.operator||'',
       operator2:existing?.operator2||'',good:'',rejection:'',down:'',
-      remarks:'',status:'running',stopReason:'',editId:null,isMC:true
+      remarks:'',status:'running',stopReason:'',editId:null,isMC:true,
+      oldMould:existing?.mould||''
     }])
   }
   
@@ -5103,7 +5104,17 @@ function BulkProductionTab({user}:{user:User}) {
     setSaving(false)
     setToast({msg:res.msg,ok:res.success})
     if(res.success){
-      // Clear entries
+      // Auto save mould change for MC entries
+      const mcEntries=filledEntries.filter((e:any)=>e.isMC&&e.oldMould&&e.mould)
+      for(const mc of mcEntries){
+        const mcRes=await fetch('/api/mouldchange',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({type:'start',date,shift:shift==='day'?'Day':'Night',plant,machine:mc.machine,oldMould:mc.oldMould||'',newMould:mc.mould||'',operator:mc.operator||'',enteredBy:user.name,estimatedTime:0})
+        }).then(r=>r.json())
+        if(mcRes.success&&mcRes.id){
+          await fetch('/api/mouldchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'update_step',id:mcRes.id,step:'run'})})
+        }
+      }
       setEntries(prev=>prev.map(e=>({...e,good:'',rejection:'',down:'',remarks:'',editId:null})))
       loadHistory()
     }
