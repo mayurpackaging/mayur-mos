@@ -6170,8 +6170,10 @@ function DailyReportTab({user}:{user:User}) {
     const mp=(data?.prod||[]).filter((e:any)=>e.machine===m)
     const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
     const rej=mp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+    const down=mp.reduce((a:number,e:any)=>a+(e.downtime||0),0)
     const eff=good+rej>0?Math.round(good/(good+rej)*100):0
-    return {machine:m,good,rej,eff,product:mp[mp.length-1]?.product||''}
+    const remarks=mp.map((e:any)=>e.remarks).filter(Boolean).join(' | ')
+    return {machine:m,good,rej,down,eff,product:mp[mp.length-1]?.product||'',shift:mp[0]?.shift||'',remarks}
   }).sort((a:any,b:any)=>b.good-a.good)
 
   // Simple SVG pie chart
@@ -6294,7 +6296,7 @@ function DailyReportTab({user}:{user:User}) {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
             <thead><tr>
-              {['Machine','Product','Shift','Good','Rej','Down','Eff%'].map(h=><th key={h} style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{h}</th>)}
+              {['Machine','Product','Shift','Good','Rej','Down','Eff%','Remarks'].map(h=><th key={h} style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'center'}}>{h}</th>)}
             </tr></thead>
             <tbody>{(()=>{
               const byMachine:(typeof machineStats[0]&{shift:string,product:string})[]=[]
@@ -6312,6 +6314,7 @@ function DailyReportTab({user}:{user:User}) {
                   <td style={{padding:'6px 8px',textAlign:'center',color:'#C00000'}}>{m.rej}</td>
                   <td style={{padding:'6px 8px',textAlign:'center',color:'#854F0B'}}>{m.down||0}m</td>
                   <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:effCol,background:m.eff>=90?'#E8F5E9':m.eff>=75?'#FFF3E0':m.eff>0?'#FFEBEE':'transparent'}}>{m.eff>0?m.eff+'%':'--'}</td>
+                  <td style={{padding:'6px 8px',fontSize:10,color:'#666',fontStyle:'italic'}}>{m.remarks||'--'}</td>
                 </tr>
               })
             })()}</tbody>
@@ -6332,7 +6335,7 @@ function DailyReportTab({user}:{user:User}) {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
             <thead><tr>
-              {['Machine','Plant','Product','Problem','Category','Reported','Resolved','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
+              {['Machine','Plant','Product','Problem','Analysis','Solution','Parts Used','Category','Reported','Resolved','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
             </tr></thead>
             <tbody>{data.bd.map((b:any,i:number)=>{
               const dtMins=b.reported_time&&b.resolved_time?Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000):0
@@ -6341,7 +6344,10 @@ function DailyReportTab({user}:{user:User}) {
                 <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>{b.plant}</td>
                 <td style={{padding:'5px 8px',fontSize:10,color:'#854F0B',maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{(()=>{const mp=(data?.prod||[]).find((p:any)=>p.machine===b.machine);return mp?.product?.split(' ').slice(0,2).join(' ')||'--'})()}</td>
                 <td style={{padding:'5px 8px',fontSize:10,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
-                <td style={{padding:'5px 8px',fontSize:10}}>{b.category}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#854F0B',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.analysis||'--'}>{b.analysis||'--'}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#276221',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.solution||'--'}>{b.solution||'--'}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#5B2C8D',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.spares_used||'--'}>{b.spares_used||'--'}</td>
+                <td style={{padding:'5px 8px',fontSize:10}}><span style={{background:'#E6F1FB',color:'#1F3864',padding:'2px 5px',borderRadius:4,fontSize:9}}>{b.category}</span></td>
                 <td style={{padding:'5px 8px',fontSize:10,color:'#C00000'}}>{b.reported_time?new Date(b.reported_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''}</td>
                 <td style={{padding:'5px 8px',fontSize:10,color:'#276221'}}>{b.resolved_time?new Date(b.resolved_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
                 <td style={{padding:'5px 8px',fontWeight:600,color:dtMins>120?'#C00000':dtMins>60?'#854F0B':'#276221'}}>{dtMins>0?dtMins+'m':'--'}</td>
