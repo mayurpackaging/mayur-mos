@@ -6600,7 +6600,14 @@ function MouldHistoryTab() {
     {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading mould history... ⏳</div>}
 
     {data&&!loading&&<div>
-      {/* Mould Header */}
+      {/* Upload Old Records Button */}
+      <div style={{...S.card,border:'2px dashed #1F3864',marginBottom:8}}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:8,fontSize:13}}>📷 Purane Records Upload Karo</div>
+        <div style={{fontSize:11,color:'#666',marginBottom:10}}>Photo ya PDF upload karo — AI automatically read karke entries banayega!</div>
+        <UploadOldRecords/>
+      </div>
+
+    {/* Mould Header */}
       <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:'16px',marginBottom:8,color:'#fff'}}>
         <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>⚙️ {data.mouldCode} — {data.mouldName}</div>
         <div style={{fontSize:12,opacity:0.8}}>Complete Mould History</div>
@@ -6733,5 +6740,216 @@ function MouldHistoryTab() {
     {!data&&!loading&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32,fontSize:13}}>
       👆 Upar se mould select karo — poora history dikhega!
     </div>}
+  </div>
+}
+
+// ─── Upload Old Records (AI powered) ─────────────────────────
+function UploadOldRecords() {
+  const [uploading,setUploading]=useState(false)
+  const [extracting,setExtracting]=useState(false)
+  const [preview,setPreview]=useState<string|null>(null)
+  const [extracted,setExtracted]=useState<any[]>([])
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [imageData,setImageData]=useState<string|null>(null)
+
+  const handleFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{
+    const file=e.target.files?.[0]
+    if(!file) return
+
+    setUploading(true)
+    setExtracted([])
+    setPreview(null)
+
+    // Convert to base64
+    const reader=new FileReader()
+    reader.onload=async(ev)=>{
+      const base64=ev.target?.result as string
+      setPreview(base64)
+      setImageData(base64)
+      setUploading(false)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const extractData=async()=>{
+    if(!imageData) return
+    setExtracting(true)
+
+    try {
+      // Send to Claude API to extract data
+      const base64Data=imageData.split(',')[1]
+      const mimeType=imageData.split(';')[0].split(':')[1]
+
+      const response=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:4000,
+          messages:[{
+            role:'user',
+            content:[
+              {
+                type:'image',
+                source:{type:'base64',media_type:mimeType,data:base64Data}
+              },
+              {
+                type:'text',
+                text:`This is a mould maintenance record from a plastic injection moulding factory. 
+Extract ALL entries and return ONLY a JSON array (no markdown, no explanation) with this format:
+[
+  {
+    "date": "YYYY-MM-DD",
+    "mould_name": "e.g. Common Lid 2nd or 500ml Tub",
+    "machine": "e.g. M/C No-1 or M1",
+    "type": "PM" or "Breakdown" or "Loading",
+    "problem": "what problem was found (empty if PM/loading)",
+    "work_done": "detailed description of what was done",
+    "result": "OK or NG",
+    "parts_used": "any parts or spares used (empty if none)"
+  }
+]
+Dates are in DD-MM-YY or DD/MM/YY format - convert to YYYY-MM-DD.
+Extract every single entry you can see. Return ONLY the JSON array.`
+              }
+            ]
+          }]
+        })
+      })
+
+      const data=await response.json()
+      const text=data.content?.[0]?.text||'[]'
+      
+      // Clean and parse JSON
+      const clean=text.replace(/```json|```/g,'').trim()
+      const entries=JSON.parse(clean)
+      setExtracted(entries)
+    } catch(err) {
+      setToast({msg:'Error reading image — try again!',ok:false})
+    }
+    setExtracting(false)
+  }
+
+  const saveAll=async()=>{
+    setSaving(true)
+    let saved=0
+
+    for(const entry of extracted){
+      if(!entry.date||!entry.mould_name) continue
+
+      // Find mould code
+      const mouldMatch=MOULDS.find(m=>
+        entry.mould_name.toLowerCase().includes(m.name.toLowerCase().slice(0,8))||
+        entry.mould_name.toLowerCase().includes(m.code)
+      )
+      const mouldCode=mouldMatch?.code||''
+
+      if(entry.type==='Breakdown'||entry.type==='breakdown'){
+        await fetch('/api/breakdown',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            type:'report',
+            date:entry.date,
+            plant:'Plant 477',
+            machine:entry.machine||'Unknown',
+            problem:entry.problem||entry.work_done,
+            category:'Mould',
+            operator:'Historical',
+            reportedTime:new Date(entry.date).toISOString(),
+            enteredBy:'Historical Upload'
+          })
+        }).then(r=>r.json()).then(async(res)=>{
+          if(res.success){
+            // Auto resolve it
+            await fetch('/api/breakdown',{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({
+                type:'resolve',
+                id:res.id,
+                solution:entry.work_done,
+                analysis:entry.problem,
+                sparesUsed:entry.parts_used||'',
+                resolvedTime:new Date(entry.date).toISOString(),
+                enteredBy:'Historical Upload'
+              })
+            })
+          }
+        })
+      } else {
+        // PM or Loading
+        await fetch('/api/mouldpm',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            date:entry.date,
+            mouldCode,
+            mould:entry.mould_name,
+            currentShots:0,
+            doneBy:'Historical Upload',
+            overallResult:entry.result||'OK',
+            remarks:entry.work_done,
+            checklistItems:[]
+          })
+        })
+      }
+      saved++
+    }
+
+    setSaving(false)
+    setToast({msg:`✅ ${saved} entries saved!`,ok:true})
+    setExtracted([])
+    setPreview(null)
+    setImageData(null)
+  }
+
+  return <div>
+    {/* Upload Area */}
+    {!preview&&<label style={{display:'block',border:'2px dashed #1F3864',borderRadius:10,padding:'20px',textAlign:'center',cursor:'pointer',background:'#F8F9FF'}}>
+      <input type="file" accept="image/*,.pdf" onChange={handleFile} style={{display:'none'}}/>
+      <div style={{fontSize:32,marginBottom:8}}>📷</div>
+      <div style={{fontWeight:600,color:'#1F3864',marginBottom:4}}>Photo ya PDF upload karo</div>
+      <div style={{fontSize:11,color:'#666'}}>Mould PM ya Breakdown ki photo khicho aur yahan upload karo</div>
+    </label>}
+
+    {uploading&&<div style={{textAlign:'center',padding:16,color:'#666'}}>⏳ Loading...</div>}
+
+    {/* Preview */}
+    {preview&&!uploading&&<div>
+      <div style={{marginBottom:8,borderRadius:8,overflow:'hidden',maxHeight:300,position:'relative' as const}}>
+        <img src={preview} style={{width:'100%',objectFit:'cover' as const}}/>
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:8}}>
+        <button onClick={extractData} disabled={extracting} style={{flex:2,background:'#1F3864',color:'#fff',border:'none',borderRadius:8,padding:'10px',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+          {extracting?'🤖 AI Read kar raha hai...':'🤖 AI se Data Extract Karo'}
+        </button>
+        <button onClick={()=>{setPreview(null);setExtracted([]);setImageData(null)}} style={{flex:1,background:'#666',color:'#fff',border:'none',borderRadius:8,padding:'10px',fontSize:12,cursor:'pointer'}}>
+          ✕ Cancel
+        </button>
+      </div>
+    </div>}
+
+    {/* Extracted Data Preview */}
+    {extracted.length>0&&<div>
+      <div style={{fontWeight:700,color:'#276221',marginBottom:8,fontSize:13}}>✅ {extracted.length} entries mili! Review karo:</div>
+      <div style={{maxHeight:300,overflowY:'auto',marginBottom:8}}>
+        {extracted.map((e:any,i:number)=><div key={i} style={{background:e.type==='Breakdown'?'#FFEBEE':'#E8F5E9',border:`1px solid ${e.type==='Breakdown'?'#C00000':'#276221'}`,borderRadius:8,padding:'8px 12px',marginBottom:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+            <span style={{fontWeight:700,fontSize:12}}>{e.type==='Breakdown'?'🔴':'⚙️'} {e.date} — {e.mould_name}</span>
+            <span style={{fontSize:10,color:'#666'}}>{e.machine}</span>
+          </div>
+          {e.problem&&<div style={{fontSize:11,color:'#C00000',marginBottom:2}}>Problem: {e.problem}</div>}
+          <div style={{fontSize:11,color:'#444'}}>{e.work_done}</div>
+          {e.parts_used&&<div style={{fontSize:10,color:'#5B2C8D',marginTop:2}}>Parts: {e.parts_used}</div>}
+        </div>)}
+      </div>
+      <button onClick={saveAll} disabled={saving} style={{width:'100%',background:'#276221',color:'#fff',border:'none',borderRadius:8,padding:'12px',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+        {saving?'Saving...':'💾 Save All Entries to System'}
+      </button>
+    </div>}
+
+    {toast&&<Toast {...toast}/>}
   </div>
 }
