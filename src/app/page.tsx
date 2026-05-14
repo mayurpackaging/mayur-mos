@@ -9,6 +9,7 @@ const ML: Record<string, string> = {
   dispatch:"Dispatch", batch:"Batch", sales:"Sales", spares:"Spares",
   mouldpm:"Mould PM", breakdown:"Breakdown", maintenance:"Maintenance",
   bulkproduction:"Bulk Production", dailyreport:"Daily Report",
+  mouldhistory:"Mould History",
   reports:"Reports", users:"Users", performance:"Performance"
 }
 
@@ -54,8 +55,8 @@ const MOULDS = [
   {code:"6710",name:"Sipper Lid Old"},{code:"6906",name:"Sipper Lid New"},
   {code:"6620",name:"175 ml Lid"},{code:"6503",name:"Big Common Lid"},
   {code:"6809",name:"500 ml Tamper Lock Rectangle"},{code:"6870",name:"650 ml Tamper Lock Rectangle"},
-  {code:"6871",name:"750 ml Tamper Lock Rectangle"},{code:"6872",name:"1000 ml Tamper Lock Rectangle"},
-  {code:"6873",name:"Lid Tamper Lock Rectangle"},
+  {code:"6871",name:"750 ml Tamper Lock Rectangle"},{code:"6872B",name:"1000 ml Tamper Lock Rectangle"},
+  {code:"6873T",name:"Lid Tamper Lock Rectangle"},
 ]
 
 const PRODUCT_MOULD_MAP: Record<string, string> = {
@@ -266,8 +267,9 @@ export default function MOS() {
         {tab==='performance'&&<PerformanceTab user={user}/>}
         {tab==='maintenance'&&<MaintenanceTab user={user}/>}
         {tab==='dailyreport'&&<DailyReportTab user={user}/>}
+        {tab==='mouldhistory'&&<MouldHistoryTab/>}
         {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport'].includes(tab)&&(
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -6472,6 +6474,264 @@ function DailyReportTab({user}:{user:User}) {
           <div style={{color:'#FF9800'}}>⏱️ Total Downtime: {totalDown}m</div>
         </div>
       </div>
+    </div>}
+  </div>
+}
+
+// ─── Mould History Tab ────────────────────────────────────────
+function MouldHistoryTab() {
+  const [selectedMould,setSelectedMould]=useState('')
+  const [moulds,setMoulds]=useState<any[]>([])
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [search,setSearch]=useState('')
+
+  useEffect(()=>{
+    fetch('/api/mouldpm').then(r=>r.json()).then(d=>{
+      // Get unique moulds from mould_master via production data
+      fetch('/api/production?from=2026-01-01&to=2026-12-31').then(r=>r.json()).then(pd=>{
+        const allMoulds=MOULDS.map(m=>({code:m.code,name:m.name,full:`${m.code} - ${m.name}`}))
+        setMoulds(allMoulds)
+      })
+    })
+  },[])
+
+  const load=async(mouldCode:string)=>{
+    if(!mouldCode) return
+    setLoading(true)
+    const mould=MOULDS.find(m=>m.code===mouldCode.split(' - ')[0])
+    const code=mould?.code||mouldCode.split(' - ')[0]
+    const name=mould?.name||mouldCode
+
+    const [prodRes,mcRes,pmRes,bdRes]=await Promise.all([
+      fetch(`/api/reports?module=production&from=2026-01-01&to=2026-12-31`).then(r=>r.json()),
+      fetch(`/api/mouldchange?from=2026-01-01&to=2026-12-31`).then(r=>r.json()),
+      fetch(`/api/mouldpm`).then(r=>r.json()),
+      fetch(`/api/breakdown`).then(r=>r.json()),
+    ])
+
+    // Filter by mould code
+    const mouldProd=(prodRes.data||[]).filter((e:any)=>
+      e.mould&&(e.mould.includes(code)||e.mould.toLowerCase().includes(name.toLowerCase().slice(0,10)))
+    )
+    const mouldMC=(mcRes.data||[]).filter((e:any)=>
+      (e.old_mould&&e.old_mould.includes(code))||(e.new_mould&&e.new_mould.includes(code))
+    )
+    const mouldPM=(pmRes.data||[]).filter((e:any)=>
+      e.mould_code===code||e.mould?.includes(code)
+    )
+    const mouldBd=(bdRes.data||[]).filter((e:any)=>
+      e.problem?.toLowerCase().includes(name.toLowerCase().slice(0,8))||
+      e.analysis?.toLowerCase().includes(name.toLowerCase().slice(0,8))
+    )
+
+    // Total shots from production
+    const totalShots=mouldProd.reduce((a:number,e:any)=>{
+      const shots=e.cavities>0?Math.round((e.good_parts+e.rejection)/e.cavities):0
+      return a+shots
+    },0)
+
+    // Timeline - merge all events
+    const timeline:any[]=[]
+    mouldProd.forEach((e:any)=>{
+      timeline.push({date:e.date,type:'production',icon:'🏭',
+        title:`Production — ${e.machine}`,
+        desc:`Good: ${e.good_parts?.toLocaleString()} | Rej: ${e.rejection} | ${e.product}`,
+        color:'#276221',bg:'#E8F5E9'
+      })
+    })
+    mouldMC.forEach((e:any)=>{
+      const isIn=e.new_mould?.includes(code)
+      timeline.push({date:e.date,type:'mouldchange',icon:'🔄',
+        title:`Mould Change — ${e.machine} — ${isIn?'IN (New Mould)':'OUT (Old Mould)'}`,
+        desc:`${e.old_mould?.split(' - ')[0]} → ${e.new_mould?.split(' - ')[0]} | Time: ${e.total_minutes||'--'}m | By: ${e.entered_by}`,
+        color:isIn?'#2E75B6':'#854F0B',bg:isIn?'#E6F1FB':'#FFF9E6'
+      })
+    })
+    mouldPM.forEach((e:any)=>{
+      timeline.push({date:e.date||e.pm_date,type:'pm',icon:'⚙️',
+        title:`Mould PM Done`,
+        desc:`By: ${e.done_by} | Result: ${e.overall_result} | Shots at PM: ${e.current_shots?.toLocaleString()}`,
+        color:'#5B2C8D',bg:'#F3E5F5'
+      })
+    })
+    mouldBd.forEach((e:any)=>{
+      timeline.push({date:e.date,type:'breakdown',icon:'🔴',
+        title:`Breakdown — ${e.machine}`,
+        desc:`${e.problem} | Analysis: ${e.analysis||'--'} | Solution: ${e.solution||'--'}`,
+        color:'#C00000',bg:'#FFEBEE'
+      })
+    })
+
+    // Sort by date
+    timeline.sort((a,b)=>new Date(b.date).getTime()-new Date(a.date).getTime())
+
+    setData({
+      mouldCode:code,mouldName:name,
+      totalShots,
+      totalProduction:mouldProd.length,
+      totalMC:mouldMC.length,
+      totalPM:mouldPM.length,
+      totalBd:mouldBd.length,
+      lastPM:mouldPM[mouldPM.length-1],
+      timeline,
+      mouldProd,mouldMC,mouldPM,mouldBd
+    })
+    setLoading(false)
+  }
+
+  const filteredMoulds=MOULDS.filter(m=>
+    !search||m.code.includes(search)||m.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return <div>
+    {/* Search & Select */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:14}}>🔍 Mould History</div>
+      <input style={{...S.fi,marginBottom:8}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Mould search karo — code ya naam..."/>
+      <div style={{maxHeight:200,overflowY:'auto',border:'1px solid #E0E0E0',borderRadius:8}}>
+        {filteredMoulds.map(m=><div key={m.code} onClick={()=>{setSelectedMould(m.code+' - '+m.name);load(m.code+' - '+m.name);setSearch('')}}
+          style={{padding:'8px 12px',cursor:'pointer',background:selectedMould.includes(m.code)?'#1F3864':'#fff',color:selectedMould.includes(m.code)?'#fff':'#333',borderBottom:'1px solid #F0F0F0',fontSize:12}}>
+          <span style={{fontWeight:600,color:selectedMould.includes(m.code)?'#FFD966':'#1F3864'}}>{m.code}</span> — {m.name}
+        </div>)}
+      </div>
+    </div>
+
+    {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading mould history... ⏳</div>}
+
+    {data&&!loading&&<div>
+      {/* Mould Header */}
+      <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:'16px',marginBottom:8,color:'#fff'}}>
+        <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>⚙️ {data.mouldCode} — {data.mouldName}</div>
+        <div style={{fontSize:12,opacity:0.8}}>Complete Mould History</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr',gap:8,marginTop:12}}>
+          {[
+            {icon:'🔢',label:'Total Shots',val:data.totalShots.toLocaleString()},
+            {icon:'🏭',label:'Production Entries',val:data.totalProduction},
+            {icon:'🔄',label:'Mould Changes',val:data.totalMC},
+            {icon:'⚙️',label:'PM Done',val:data.totalPM},
+            {icon:'🔴',label:'Breakdowns',val:data.totalBd},
+          ].map((k,i)=><div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px',textAlign:'center'}}>
+            <div style={{fontSize:16}}>{k.icon}</div>
+            <div style={{fontSize:16,fontWeight:700}}>{k.val}</div>
+            <div style={{fontSize:9,opacity:0.8}}>{k.label}</div>
+          </div>)}
+        </div>
+      </div>
+
+      {/* PM Status */}
+      {data.lastPM&&<div style={{...S.card,border:'2px solid #5B2C8D',background:'#F3E5F5',marginBottom:8}}>
+        <div style={{fontWeight:700,color:'#5B2C8D',marginBottom:6}}>⚙️ Last PM Done</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,fontSize:11}}>
+          <div><span style={{color:'#666'}}>Date:</span> <strong>{data.lastPM.date||data.lastPM.pm_date}</strong></div>
+          <div><span style={{color:'#666'}}>By:</span> <strong>{data.lastPM.done_by}</strong></div>
+          <div><span style={{color:'#666'}}>Result:</span> <strong style={{color:data.lastPM.overall_result==='OK'?'#276221':'#C00000'}}>{data.lastPM.overall_result}</strong></div>
+          <div><span style={{color:'#666'}}>Shots at PM:</span> <strong>{data.lastPM.current_shots?.toLocaleString()}</strong></div>
+        </div>
+      </div>}
+
+      {/* Timeline */}
+      <div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:12,fontSize:13}}>📋 Complete Timeline ({data.timeline.length} events)</div>
+        {data.timeline.length===0
+          ? <div style={{textAlign:'center',color:'#666',padding:24}}>Is mould ka koi history nahi mila!</div>
+          : <div style={{position:'relative' as const}}>
+              {/* Timeline line */}
+              <div style={{position:'absolute' as const,left:20,top:0,bottom:0,width:2,background:'#E0E0E0'}}/>
+              {data.timeline.map((event:any,i:number)=><div key={i} style={{display:'flex',gap:12,marginBottom:12,position:'relative' as const}}>
+                {/* Icon */}
+                <div style={{width:40,height:40,borderRadius:'50%',background:event.bg,border:`2px solid ${event.color}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,position:'relative' as const,zIndex:1}}>
+                  {event.icon}
+                </div>
+                {/* Content */}
+                <div style={{flex:1,background:event.bg,border:`1px solid ${event.color}33`,borderRadius:8,padding:'8px 12px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                    <div style={{fontWeight:700,fontSize:12,color:event.color}}>{event.title}</div>
+                    <div style={{fontSize:10,color:'#666',whiteSpace:'nowrap' as const}}>{event.date}</div>
+                  </div>
+                  <div style={{fontSize:11,color:'#444'}}>{event.desc}</div>
+                </div>
+              </div>)}
+            </div>
+        }
+      </div>
+
+      {/* Mould Change Details */}
+      {data.mouldMC.length>0&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#854F0B',marginBottom:8,fontSize:13}}>🔄 Mould Change History ({data.mouldMC.length})</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Date','Machine','Old→New','Time','Target','Result','By'].map(h=>
+                <th key={h} style={{background:'#854F0B',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.mouldMC.map((m:any,i:number)=>{
+              const onTime=m.estimated_min>0&&m.total_minutes>0&&m.total_minutes<=m.estimated_min
+              return <tr key={i} style={{background:i%2===0?'#FFF9E6':'#fff'}}>
+                <td style={{padding:'6px 8px',fontSize:10}}>{m.date}</td>
+                <td style={{padding:'6px 8px',fontWeight:600}}>{m.machine}</td>
+                <td style={{padding:'6px 8px',fontSize:10}}>{m.old_mould?.split(' - ')[0]} → {m.new_mould?.split(' - ')[0]}</td>
+                <td style={{padding:'6px 8px',fontWeight:700,color:m.total_minutes>0?(onTime?'#276221':'#C00000'):'#666'}}>{m.total_minutes>0?m.total_minutes+'m':'--'}</td>
+                <td style={{padding:'6px 8px',color:'#854F0B'}}>{m.estimated_min>0?m.estimated_min+'m':'--'}</td>
+                <td style={{padding:'6px 8px'}}>
+                  <span style={{background:onTime?'#E8F5E9':'#FFEBEE',color:onTime?'#276221':'#C00000',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>
+                    {m.total_minutes>0?(onTime?'✅ On Time':'⚠️ Delayed'):'--'}
+                  </span>
+                </td>
+                <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{m.entered_by}</td>
+              </tr>
+            })}</tbody>
+          </table>
+        </div>
+      </div>}
+
+      {/* Breakdown Details */}
+      {data.mouldBd.length>0&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#C00000',marginBottom:8,fontSize:13}}>🔴 Related Breakdowns ({data.mouldBd.length})</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Date','Machine','Problem','Analysis','Solution','Parts','Downtime'].map(h=>
+                <th key={h} style={{background:'#C00000',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.mouldBd.map((b:any,i:number)=><tr key={i} style={{background:i%2===0?'#FFF5F5':'#fff'}}>
+              <td style={{padding:'6px 8px',fontSize:10}}>{b.date}</td>
+              <td style={{padding:'6px 8px',fontWeight:600}}>{b.machine}</td>
+              <td style={{padding:'6px 8px',fontSize:10,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#854F0B',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.analysis}>{b.analysis||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#276221',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.solution}>{b.solution||'--'}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#5B2C8D',maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{b.spares_used||'--'}</td>
+              <td style={{padding:'6px 8px',fontWeight:700,color:'#C00000'}}>{b.downtime_min?b.downtime_min+'m':'--'}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </div>}
+
+      {/* PM History */}
+      {data.mouldPM.length>0&&<div style={S.card}>
+        <div style={{fontWeight:700,color:'#5B2C8D',marginBottom:8,fontSize:13}}>⚙️ PM History ({data.mouldPM.length})</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>
+              {['Date','Done By','Shots at PM','Result','Remarks'].map(h=>
+                <th key={h} style={{background:'#5B2C8D',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{data.mouldPM.map((p:any,i:number)=><tr key={i} style={{background:i%2===0?'#F3E5F5':'#fff'}}>
+              <td style={{padding:'6px 8px',fontSize:10}}>{p.date||p.pm_date}</td>
+              <td style={{padding:'6px 8px',fontWeight:600}}>{p.done_by}</td>
+              <td style={{padding:'6px 8px',color:'#5B2C8D',fontWeight:600}}>{p.current_shots?.toLocaleString()}</td>
+              <td style={{padding:'6px 8px'}}>
+                <span style={{background:p.overall_result==='OK'?'#E8F5E9':'#FFEBEE',color:p.overall_result==='OK'?'#276221':'#C00000',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>{p.overall_result}</span>
+              </td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{p.remarks||'--'}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </div>}
+    </div>}
+
+    {!data&&!loading&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32,fontSize:13}}>
+      👆 Upar se mould select karo — poora history dikhega!
     </div>}
   </div>
 }
