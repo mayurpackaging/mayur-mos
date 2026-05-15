@@ -6600,14 +6600,7 @@ function MouldHistoryTab() {
     {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading mould history... ⏳</div>}
 
     {data&&!loading&&<div>
-      {/* Upload Old Records Button */}
-      <div style={{...S.card,border:'2px dashed #1F3864',marginBottom:8}}>
-        <div style={{fontWeight:700,color:'#1F3864',marginBottom:8,fontSize:13}}>📷 Purane Records Upload Karo</div>
-        <div style={{fontSize:11,color:'#666',marginBottom:10}}>Photo ya PDF upload karo — AI automatically read karke entries banayega!</div>
-        <UploadOldRecords/>
-      </div>
-
-    {/* Mould Header */}
+      {/* Mould Header */}
       <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:'16px',marginBottom:8,color:'#fff'}}>
         <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>⚙️ {data.mouldCode} — {data.mouldName}</div>
         <div style={{fontSize:12,opacity:0.8}}>Complete Mould History</div>
