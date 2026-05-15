@@ -6639,13 +6639,13 @@ function MouldHistoryTab() {
 
       {/* Timeline */}
       <div style={S.card}>
-        <div style={{fontWeight:700,color:'#1F3864',marginBottom:12,fontSize:13}}>📋 Complete Timeline ({data.timeline.length} events)</div>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:12,fontSize:13}}>📋 PM & Breakdown Timeline ({data.timeline.filter((e:any)=>e.type!=='production').length} events)</div>
         {data.timeline.length===0
           ? <div style={{textAlign:'center',color:'#666',padding:24}}>Is mould ka koi history nahi mila!</div>
           : <div style={{position:'relative' as const}}>
               {/* Timeline line */}
               <div style={{position:'absolute' as const,left:20,top:0,bottom:0,width:2,background:'#E0E0E0'}}/>
-              {data.timeline.map((event:any,i:number)=><div key={i} style={{display:'flex',gap:12,marginBottom:12,position:'relative' as const}}>
+              {data.timeline.filter((e:any)=>e.type!=='production').map((event:any,i:number)=><div key={i} style={{display:'flex',gap:12,marginBottom:12,position:'relative' as const}}>
                 {/* Icon */}
                 <div style={{width:40,height:40,borderRadius:'50%',background:event.bg,border:`2px solid ${event.color}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,position:'relative' as const,zIndex:1}}>
                   {event.icon}
@@ -6717,23 +6717,46 @@ function MouldHistoryTab() {
       {/* PM History */}
       {data.mouldPM.length>0&&<div style={S.card}>
         <div style={{fontWeight:700,color:'#5B2C8D',marginBottom:8,fontSize:13}}>⚙️ PM History ({data.mouldPM.length})</div>
-        <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-            <thead><tr>
-              {['Date','Done By','Shots at PM','Result','Remarks'].map(h=>
-                <th key={h} style={{background:'#5B2C8D',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
-            </tr></thead>
-            <tbody>{data.mouldPM.map((p:any,i:number)=><tr key={i} style={{background:i%2===0?'#F3E5F5':'#fff'}}>
-              <td style={{padding:'6px 8px',fontSize:10}}>{p.date||p.pm_date}</td>
-              <td style={{padding:'6px 8px',fontWeight:600}}>{p.done_by}</td>
-              <td style={{padding:'6px 8px',color:'#5B2C8D',fontWeight:600}}>{p.current_shots?.toLocaleString()}</td>
-              <td style={{padding:'6px 8px'}}>
-                <span style={{background:p.overall_result==='OK'?'#E8F5E9':'#FFEBEE',color:p.overall_result==='OK'?'#276221':'#C00000',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>{p.overall_result}</span>
-              </td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{p.remarks||'--'}</td>
-            </tr>)}</tbody>
-          </table>
-        </div>
+        {data.mouldPM.map((p:any,i:number)=>{
+          // Parse checklist items to find NG points
+          const checks=p.checklist_items||p.checklistItems||[]
+          const ngPoints=checks.filter((c:any)=>c.result==='NG'||c.status==='NG'||c.value==='NG')
+          const hasNG=ngPoints.length>0||p.overall_result==='NG'
+
+          return <div key={i} style={{border:`2px solid ${hasNG?'#C00000':'#5B2C8D'}`,borderRadius:8,padding:'10px 12px',marginBottom:8,background:hasNG?'#FFF5F5':'#F8F5FF'}}>
+            {/* Header */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:12,color:'#1F3864'}}>{p.date||p.pm_date}</div>
+                <div style={{fontSize:11,color:'#666'}}>By: {p.done_by} | Shots: {p.current_shots?.toLocaleString()||'--'}</div>
+              </div>
+              <span style={{background:p.overall_result==='OK'?'#276221':'#C00000',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>
+                {p.overall_result==='OK'?'✅ OK':'❌ NG'}
+              </span>
+            </div>
+
+            {/* NG Points */}
+            {ngPoints.length>0&&<div style={{marginBottom:8}}>
+              <div style={{fontWeight:600,color:'#C00000',marginBottom:4,fontSize:11}}>❌ Error Points ({ngPoints.length}):</div>
+              {ngPoints.map((ng:any,j:number)=><div key={j} style={{background:'#FFEBEE',borderRadius:4,padding:'4px 8px',marginBottom:3,fontSize:11,color:'#C00000'}}>
+                • {ng.name||ng.point||ng.label||ng.description||JSON.stringify(ng)}
+              </div>)}
+            </div>}
+
+            {/* No NG points */}
+            {ngPoints.length===0&&p.overall_result==='OK'&&<div style={{background:'#E8F5E9',borderRadius:4,padding:'4px 8px',marginBottom:8,fontSize:11,color:'#276221'}}>
+              ✅ Koi error nahi — sab checkpoints pass!
+            </div>}
+
+            {/* Changes Done / Remarks */}
+            {p.remarks&&p.remarks!=='--'&&<div>
+              <div style={{fontWeight:600,color:'#5B2C8D',marginBottom:4,fontSize:11}}>🔧 Changes Done / Remarks:</div>
+              <div style={{background:'#F3E5F5',borderRadius:4,padding:'6px 8px',fontSize:11,color:'#444'}}>
+                {p.remarks}
+              </div>
+            </div>}
+          </div>
+        })}
       </div>}
     </div>}
 
