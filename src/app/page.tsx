@@ -6388,7 +6388,7 @@ function DailyReportTab({user}:{user:User}) {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
             <thead><tr>
-              {['Machine','Old Mould','New Mould','Start','Run','Total','Target','Result'].map(h=><th key={h} style={{background:'#854F0B',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}
+              {['Plant','Machine','Old Mould','New Mould','Start','Run','Total','Target','Result'].map(h=><th key={h} style={{background:'#854F0B',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
             </tr></thead>
             <tbody>{data.mc.map((m:any,i:number)=>{
               const onTime=m.estimated_min>0&&m.total_minutes>0&&m.total_minutes<=m.estimated_min
