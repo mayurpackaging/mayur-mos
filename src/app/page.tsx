@@ -6480,286 +6480,284 @@ function DailyReportTab({user}:{user:User}) {
 
 // ─── Mould History Tab ────────────────────────────────────────
 function MouldHistoryTab() {
-  const [selectedMould,setSelectedMould]=useState('')
   const [moulds,setMoulds]=useState<any[]>([])
-  const [data,setData]=useState<any>(null)
-  const [loading,setLoading]=useState(false)
   const [search,setSearch]=useState('')
+  const [selected,setSelected]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [history,setHistory]=useState<any[]>([])
+  const [activeTab,setActiveTab]=useState<'all'|'PM'|'BD'|'RM'|'MC'>('all')
+  const [stats,setStats]=useState<any>(null)
+  const SB='https://wqstclmbzsskqopkbndi.supabase.co'
+  const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxc3RjbG1ienNza3FvcGtibmRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NjI1MzQsImV4cCI6MjA5MjEzODUzNH0.xyKjmazLr4y9ISxIVB79QwEFgimDh09VThveb1CL3E0'
 
+  // Load mould list from Supabase moulds table
   useEffect(()=>{
-    fetch('/api/mouldpm').then(r=>r.json()).then(d=>{
-      // Get unique moulds from mould_master via production data
-      fetch('/api/production?from=2026-01-01&to=2026-12-31').then(r=>r.json()).then(pd=>{
-        const allMoulds=MOULDS.map(m=>({code:m.code,name:m.name,full:`${m.code} - ${m.name}`}))
-        setMoulds(allMoulds)
-      })
+    fetch(`${SB}/rest/v1/moulds?select=id,name,job_no&order=name.asc`,{
+      headers:{'apikey':KEY,'Authorization':`Bearer ${KEY}`}
+    }).then(r=>r.json()).then(d=>{
+      if(Array.isArray(d)) setMoulds(d)
+    }).catch(()=>{
+      // fallback to MOULDS constant
+      setMoulds(MOULDS.map(m=>({id:m.code,name:m.name,job_no:m.code})))
     })
   },[])
 
-  const load=async(mouldCode:string)=>{
-    if(!mouldCode) return
+  const loadHistory=async(mould:any)=>{
+    setSelected(mould)
     setLoading(true)
-    const mould=MOULDS.find(m=>m.code===mouldCode.split(' - ')[0])
-    const code=mould?.code||mouldCode.split(' - ')[0]
-    const name=mould?.name||mouldCode
+    setHistory([])
+    setStats(null)
+    setActiveTab('all')
 
-    const [prodRes,mcRes,pmRes,bdRes]=await Promise.all([
-      fetch(`/api/reports?module=production&from=2026-01-01&to=2026-12-31`).then(r=>r.json()),
-      fetch(`/api/mouldchange?from=2026-01-01&to=2026-12-31`).then(r=>r.json()),
-      fetch(`/api/mouldpm`).then(r=>r.json()),
-      fetch(`/api/breakdown`).then(r=>r.json()),
+    const jobNo = mould.job_no || mould.id
+    const res = await fetch(
+      `${SB}/rest/v1/mould_history?job_no=eq.${jobNo}&order=record_date.asc&limit=1000`,
+      {headers:{'apikey':KEY,'Authorization':`Bearer ${KEY}`}}
+    )
+    const data = await res.json()
+    const rows = Array.isArray(data) ? data : []
+
+    // Also fetch from live tables - mouldpm, breakdown
+    const [pmRes, bdRes] = await Promise.all([
+      fetch(`/api/mouldpm`).then(r=>r.json()).catch(()=>({data:[]})),
+      fetch(`/api/breakdown`).then(r=>r.json()).catch(()=>({data:[]})),
     ])
 
-    // Filter by mould code
-    const mouldProd=(prodRes.data||[]).filter((e:any)=>
-      e.mould&&(e.mould.includes(code)||e.mould.toLowerCase().includes(name.toLowerCase().slice(0,10)))
-    )
-    const mouldMC=(mcRes.data||[]).filter((e:any)=>
-      (e.old_mould&&e.old_mould.includes(code))||(e.new_mould&&e.new_mould.includes(code))
-    )
-    const mouldPM=(pmRes.data||[]).filter((e:any)=>
-      e.mould_code===code||e.mould?.includes(code)
-    )
-    const mouldBd=(bdRes.data||[]).filter((e:any)=>
-      e.problem?.toLowerCase().includes(name.toLowerCase().slice(0,8))||
-      e.analysis?.toLowerCase().includes(name.toLowerCase().slice(0,8))
-    )
+    // Filter live PM records
+    const livePM = (pmRes.data||[]).filter((p:any)=>
+      p.mould_code===String(jobNo)||p.mould?.includes(String(jobNo))
+    ).map((p:any)=>({
+      id:`pm_${p.id}`,
+      record_date: p.date||p.pm_date,
+      record_type:'PM',
+      issue:'Preventive Maintenance (Live)',
+      work_done:`Shots at PM: ${p.current_shots?.toLocaleString()||'--'} | By: ${p.done_by}`,
+      result: p.overall_result||'--',
+      machine_no:'--',
+      parts_changed:'--',
+      remarks: p.remarks||'',
+      _source:'live'
+    }))
 
-    // Total shots from production
-    const totalShots=mouldProd.reduce((a:number,e:any)=>{
-      const shots=e.cavities>0?Math.round((e.good_parts+e.rejection)/e.cavities):0
-      return a+shots
-    },0)
+    // Filter live Breakdown records
+    const liveBD = (bdRes.data||[]).filter((b:any)=>
+      b.problem?.toLowerCase().includes(mould.name?.toLowerCase().slice(0,8))
+    ).map((b:any)=>({
+      id:`bd_${b.id}`,
+      record_date: b.date,
+      record_type:'BD',
+      issue: b.problem,
+      work_done: b.solution||b.analysis||'--',
+      result:'Fixed',
+      machine_no: b.machine||'--',
+      parts_changed: b.spares_used||'--',
+      remarks:`Downtime: ${b.downtime_min||'--'}min`,
+      _source:'live'
+    }))
 
-    // Timeline - merge all events
-    const timeline:any[]=[]
-    mouldProd.forEach((e:any)=>{
-      timeline.push({date:e.date,type:'production',icon:'🏭',
-        title:`Production — ${e.machine}`,
-        desc:`Good: ${e.good_parts?.toLocaleString()} | Rej: ${e.rejection} | ${e.product}`,
-        color:'#276221',bg:'#E8F5E9'
-      })
-    })
-    mouldMC.forEach((e:any)=>{
-      const isIn=e.new_mould?.includes(code)
-      timeline.push({date:e.date,type:'mouldchange',icon:'🔄',
-        title:`Mould Change — ${e.machine} — ${isIn?'IN (New Mould)':'OUT (Old Mould)'}`,
-        desc:`${e.old_mould?.split(' - ')[0]} → ${e.new_mould?.split(' - ')[0]} | Time: ${e.total_minutes||'--'}m | By: ${e.entered_by}`,
-        color:isIn?'#2E75B6':'#854F0B',bg:isIn?'#E6F1FB':'#FFF9E6'
-      })
-    })
-    mouldPM.forEach((e:any)=>{
-      timeline.push({date:e.date||e.pm_date,type:'pm',icon:'⚙️',
-        title:`Mould PM Done`,
-        desc:`By: ${e.done_by} | Result: ${e.overall_result} | Shots at PM: ${e.current_shots?.toLocaleString()}`,
-        color:'#5B2C8D',bg:'#F3E5F5'
-      })
-    })
-    mouldBd.forEach((e:any)=>{
-      timeline.push({date:e.date,type:'breakdown',icon:'🔴',
-        title:`Breakdown — ${e.machine}`,
-        desc:`${e.problem} | Analysis: ${e.analysis||'--'} | Solution: ${e.solution||'--'}`,
-        color:'#C00000',bg:'#FFEBEE'
-      })
-    })
+    const allRows = [...rows, ...livePM, ...liveBD]
+      .sort((a,b)=>new Date(a.record_date||'').getTime()-new Date(b.record_date||'').getTime())
 
-    // Sort by date
-    timeline.sort((a,b)=>new Date(b.date).getTime()-new Date(a.date).getTime())
+    // Stats
+    const pmCount  = allRows.filter(r=>r.record_type==='PM').length
+    const bdCount  = allRows.filter(r=>r.record_type==='BD').length
+    const rmCount  = allRows.filter(r=>r.record_type==='RM').length
+    const mcCount  = allRows.filter(r=>r.record_type==='MC').length
+    const lastPM   = [...allRows].filter(r=>r.record_type==='PM').pop()
+    const lastBD   = [...allRows].filter(r=>r.record_type==='BD').pop()
+    const firstDate= allRows[0]?.record_date
+    const lastDate = allRows[allRows.length-1]?.record_date
 
-    setData({
-      mouldCode:code,mouldName:name,
-      totalShots,
-      totalProduction:mouldProd.length,
-      totalMC:mouldMC.length,
-      totalPM:mouldPM.length,
-      totalBd:mouldBd.length,
-      lastPM:mouldPM[mouldPM.length-1],
-      timeline,
-      mouldProd,mouldMC,mouldPM,mouldBd
-    })
+    setStats({pmCount,bdCount,rmCount,mcCount,total:allRows.length,lastPM,lastBD,firstDate,lastDate})
+    setHistory(allRows)
     setLoading(false)
   }
 
-  const filteredMoulds=MOULDS.filter(m=>
-    !search||m.code.includes(search)||m.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = search
+    ? moulds.filter(m=>
+        m.name?.toLowerCase().includes(search.toLowerCase())||
+        String(m.job_no||'').includes(search)
+      )
+    : moulds
+
+  const typeConfig:Record<string,{color:string,bg:string,icon:string,label:string}> = {
+    'PM': {color:'#276221',bg:'#E8F5E9',icon:'🟢',label:'Preventive Maintenance'},
+    'BD': {color:'#C00000',bg:'#FFEBEE',icon:'🔴',label:'Breakdown'},
+    'RM': {color:'#555',   bg:'#F5F5F5',icon:'⚪',label:'Routine Maintenance'},
+    'MC': {color:'#854F0B',bg:'#FFF9E6',icon:'🟡',label:'Mould Change'},
+  }
+
+  const shownHistory = activeTab==='all' ? history : history.filter(r=>r.record_type===activeTab)
 
   return <div>
-    {/* Search & Select */}
+    {/* Search Box */}
     <div style={S.card}>
-      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:14}}>🔍 Mould History</div>
-      <input style={{...S.fi,marginBottom:8}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Mould search karo — code ya naam..."/>
-      <div style={{maxHeight:200,overflowY:'auto',border:'1px solid #E0E0E0',borderRadius:8}}>
-        {filteredMoulds.map(m=><div key={m.code} onClick={()=>{setSelectedMould(m.code+' - '+m.name);load(m.code+' - '+m.name);setSearch('')}}
-          style={{padding:'8px 12px',cursor:'pointer',background:selectedMould.includes(m.code)?'#1F3864':'#fff',color:selectedMould.includes(m.code)?'#fff':'#333',borderBottom:'1px solid #F0F0F0',fontSize:12}}>
-          <span style={{fontWeight:600,color:selectedMould.includes(m.code)?'#FFD966':'#1F3864'}}>{m.code}</span> — {m.name}
-        </div>)}
-      </div>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:14}}>🔍 Mould History — Logbook (2022–2026)</div>
+      <input
+        style={{...S.fi,marginBottom:8}}
+        value={search}
+        onChange={e=>setSearch(e.target.value)}
+        placeholder="Mould naam ya job no se search karo... (e.g. 750ml, 6374)"
+      />
+      {search&&<div style={{maxHeight:220,overflowY:'auto',border:'1px solid #E0E0E0',borderRadius:8,background:'#fff'}}>
+        {filtered.length===0
+          ? <div style={{padding:12,color:'#666',fontSize:12}}>Koi mould nahi mila</div>
+          : filtered.map((m:any)=><div key={m.id||m.job_no}
+              onClick={()=>{loadHistory(m);setSearch('')}}
+              style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #F0F0F0',fontSize:12,
+                background:selected?.job_no===m.job_no?'#1F3864':'#fff',
+                color:selected?.job_no===m.job_no?'#fff':'#333'
+              }}>
+              <span style={{fontWeight:700,color:selected?.job_no===m.job_no?'#FFD966':'#1F3864'}}>
+                {m.job_no}
+              </span> — {m.name}
+            </div>)
+        }
+      </div>}
+
+      {/* Selected mould pill */}
+      {selected&&!search&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
+        <div style={{background:'#1F3864',color:'#fff',borderRadius:999,padding:'4px 14px',fontSize:12,fontWeight:600}}>
+          ⚙️ {selected.job_no} — {selected.name}
+        </div>
+        <button onClick={()=>{setSelected(null);setHistory([]);setStats(null)}}
+          style={{background:'none',border:'none',color:'#999',cursor:'pointer',fontSize:16}}>✕</button>
+      </div>}
     </div>
 
-    {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading mould history... ⏳</div>}
+    {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>
+      ⏳ Loading history...
+    </div>}
 
-    {data&&!loading&&<div>
-      {/* Mould Header */}
-      <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:'16px',marginBottom:8,color:'#fff'}}>
-        <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>⚙️ {data.mouldCode} — {data.mouldName}</div>
-        <div style={{fontSize:12,opacity:0.8}}>Complete Mould History</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr',gap:8,marginTop:12}}>
+    {stats&&!loading&&<div>
+      {/* Header Stats */}
+      <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:16,marginBottom:8,color:'#fff'}}>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:2}}>⚙️ {selected?.job_no} — {selected?.name}</div>
+        <div style={{fontSize:11,opacity:0.75,marginBottom:12}}>
+          Records: {stats.firstDate} → {stats.lastDate}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
           {[
-            {icon:'🔢',label:'Total Shots',val:data.totalShots.toLocaleString()},
-            {icon:'🏭',label:'Production Entries',val:data.totalProduction},
-            {icon:'🔄',label:'Mould Changes',val:data.totalMC},
-            {icon:'⚙️',label:'PM Done',val:data.totalPM},
-            {icon:'🔴',label:'Breakdowns',val:data.totalBd},
-          ].map((k,i)=><div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px',textAlign:'center'}}>
-            <div style={{fontSize:16}}>{k.icon}</div>
-            <div style={{fontSize:16,fontWeight:700}}>{k.val}</div>
+            {icon:'📋',label:'Total',val:stats.total,color:'#fff'},
+            {icon:'🟢',label:'PM',val:stats.pmCount,color:'#90EE90'},
+            {icon:'🔴',label:'Breakdown',val:stats.bdCount,color:'#FF8080'},
+            {icon:'⚪',label:'Routine',val:stats.rmCount,color:'#ccc'},
+            {icon:'🟡',label:'MC',val:stats.mcCount,color:'#FFD966'},
+          ].map((k,i)=><div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:8,textAlign:'center'}}>
+            <div style={{fontSize:14}}>{k.icon}</div>
+            <div style={{fontSize:20,fontWeight:700,color:k.color}}>{k.val}</div>
             <div style={{fontSize:9,opacity:0.8}}>{k.label}</div>
           </div>)}
         </div>
       </div>
 
-      {/* PM Status */}
-      {data.lastPM&&<div style={{...S.card,border:'2px solid #5B2C8D',background:'#F3E5F5',marginBottom:8}}>
-        <div style={{fontWeight:700,color:'#5B2C8D',marginBottom:6}}>⚙️ Last PM Done</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,fontSize:11}}>
-          <div><span style={{color:'#666'}}>Date:</span> <strong>{data.lastPM.date||data.lastPM.pm_date}</strong></div>
-          <div><span style={{color:'#666'}}>By:</span> <strong>{data.lastPM.done_by}</strong></div>
-          <div><span style={{color:'#666'}}>Result:</span> <strong style={{color:data.lastPM.overall_result==='OK'?'#276221':'#C00000'}}>{data.lastPM.overall_result}</strong></div>
-          <div><span style={{color:'#666'}}>Shots at PM:</span> <strong>{data.lastPM.current_shots?.toLocaleString()}</strong></div>
+      {/* Last PM & Last BD */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div style={{...S.card,border:'2px solid #276221',background:'#E8F5E9',margin:0}}>
+          <div style={{fontWeight:700,color:'#276221',fontSize:12,marginBottom:6}}>🟢 Last PM</div>
+          {stats.lastPM
+            ? <><div style={{fontSize:13,fontWeight:700}}>{stats.lastPM.record_date}</div>
+               <div style={{fontSize:11,color:'#444',marginTop:2}}>{stats.lastPM.work_done?.slice(0,80)}</div></>
+            : <div style={{fontSize:11,color:'#666'}}>Koi PM record nahi</div>
+          }
         </div>
-      </div>}
+        <div style={{...S.card,border:'2px solid #C00000',background:'#FFEBEE',margin:0}}>
+          <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:6}}>🔴 Last Breakdown</div>
+          {stats.lastBD
+            ? <><div style={{fontSize:13,fontWeight:700}}>{stats.lastBD.record_date}</div>
+               <div style={{fontSize:11,color:'#444',marginTop:2}}>{stats.lastBD.issue?.slice(0,80)}</div></>
+            : <div style={{fontSize:11,color:'#666'}}>Koi breakdown nahi</div>
+          }
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap' as const}}>
+        {(['all','PM','BD','RM','MC'] as const).map(t=>{
+          const cfg = t==='all'
+            ? {icon:'📋',label:`All (${stats.total})`,color:'#1F3864',bg:'#E8EDF5'}
+            : {...typeConfig[t],label:`${typeConfig[t].icon} ${t} (${t==='PM'?stats.pmCount:t==='BD'?stats.bdCount:t==='RM'?stats.rmCount:stats.mcCount})`}
+          return <button key={t} onClick={()=>setActiveTab(t)}
+            style={{padding:'6px 14px',borderRadius:999,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,
+              background:activeTab===t?(t==='all'?'#1F3864':typeConfig[t]?.color||'#1F3864'):(t==='all'?cfg.bg:typeConfig[t]?.bg||'#f0f0f0'),
+              color:activeTab===t?'#fff':(t==='all'?'#1F3864':typeConfig[t]?.color||'#333'),
+            }}>{t==='all'?`📋 All (${stats.total})`:cfg.label}</button>
+        })}
+      </div>
 
       {/* Timeline */}
       <div style={S.card}>
-        <div style={{fontWeight:700,color:'#1F3864',marginBottom:12,fontSize:13}}>📋 PM & Breakdown Timeline ({data.timeline.filter((e:any)=>e.type!=='production').length} events)</div>
-        {data.timeline.length===0
-          ? <div style={{textAlign:'center',color:'#666',padding:24}}>Is mould ka koi history nahi mila!</div>
+        <div style={{fontWeight:700,color:'#1F3864',marginBottom:12,fontSize:13}}>
+          📅 History Timeline — {shownHistory.length} records
+        </div>
+
+        {shownHistory.length===0
+          ? <div style={{textAlign:'center',color:'#666',padding:24,fontSize:12}}>
+              Is filter mein koi record nahi!
+            </div>
           : <div style={{position:'relative' as const}}>
-              {/* Timeline line */}
               <div style={{position:'absolute' as const,left:20,top:0,bottom:0,width:2,background:'#E0E0E0'}}/>
-              {data.timeline.filter((e:any)=>e.type!=='production').map((event:any,i:number)=><div key={i} style={{display:'flex',gap:12,marginBottom:12,position:'relative' as const}}>
-                {/* Icon */}
-                <div style={{width:40,height:40,borderRadius:'50%',background:event.bg,border:`2px solid ${event.color}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,position:'relative' as const,zIndex:1}}>
-                  {event.icon}
-                </div>
-                {/* Content */}
-                <div style={{flex:1,background:event.bg,border:`1px solid ${event.color}33`,borderRadius:8,padding:'8px 12px'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                    <div style={{fontWeight:700,fontSize:12,color:event.color}}>{event.title}</div>
-                    <div style={{fontSize:10,color:'#666',whiteSpace:'nowrap' as const}}>{event.date}</div>
+              {shownHistory.map((rec:any,i:number)=>{
+                const cfg = typeConfig[rec.record_type]||{color:'#666',bg:'#f5f5f5',icon:'📌'}
+                return <div key={rec.id||i} style={{display:'flex',gap:12,marginBottom:12,position:'relative' as const}}>
+                  {/* Circle icon */}
+                  <div style={{width:40,height:40,borderRadius:'50%',background:cfg.bg,
+                    border:`2px solid ${cfg.color}`,display:'flex',alignItems:'center',
+                    justifyContent:'center',fontSize:14,flexShrink:0,position:'relative' as const,zIndex:1}}>
+                    {cfg.icon}
                   </div>
-                  <div style={{fontSize:11,color:'#444'}}>{event.desc}</div>
+                  {/* Card */}
+                  <div style={{flex:1,background:cfg.bg,border:`1px solid ${cfg.color}33`,borderRadius:8,padding:'8px 12px'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                      <div style={{fontWeight:700,fontSize:12,color:cfg.color}}>
+                        {rec.record_type==='PM'?'🟢 Preventive Maintenance':
+                         rec.record_type==='BD'?'🔴 Breakdown':
+                         rec.record_type==='RM'?'⚪ Routine Maintenance':
+                         '🟡 Mould Change'}
+                        {rec.machine_no&&rec.machine_no!=='--'&&
+                          <span style={{fontWeight:400,color:'#666',marginLeft:6,fontSize:11}}>| {rec.machine_no}</span>}
+                        {rec._source==='live'&&
+                          <span style={{background:'#1F3864',color:'#fff',fontSize:9,padding:'1px 6px',borderRadius:4,marginLeft:6}}>LIVE</span>}
+                      </div>
+                      <div style={{fontSize:10,color:'#666',whiteSpace:'nowrap' as const,fontWeight:600}}>
+                        {rec.record_date}
+                      </div>
+                    </div>
+                    {/* Issue */}
+                    {rec.issue&&rec.issue!=='--'&&<div style={{fontSize:11,color:'#333',marginBottom:3}}>
+                      <span style={{fontWeight:600}}>Issue:</span> {rec.issue}
+                    </div>}
+                    {/* Work Done */}
+                    {rec.work_done&&rec.work_done!=='--'&&<div style={{fontSize:11,color:'#444',marginBottom:3}}>
+                      <span style={{fontWeight:600}}>Work:</span> {rec.work_done}
+                    </div>}
+                    {/* Parts */}
+                    {rec.parts_changed&&rec.parts_changed!=='--'&&rec.parts_changed!==''&&
+                      <div style={{fontSize:11,color:'#5B2C8D',marginBottom:3}}>
+                        <span style={{fontWeight:600}}>Parts:</span> {rec.parts_changed}
+                      </div>}
+                    {/* Result */}
+                    {rec.result&&<span style={{
+                      background:rec.result==='Fixed'||rec.result==='Done'||rec.result==='Running'?'#276221':'#854F0B',
+                      color:'#fff',fontSize:9,padding:'2px 8px',borderRadius:999,fontWeight:600}}>
+                      {rec.result}
+                    </span>}
+                  </div>
                 </div>
-              </div>)}
+              })}
             </div>
         }
       </div>
-
-      {/* Mould Change Details */}
-      {data.mouldMC.length>0&&<div style={S.card}>
-        <div style={{fontWeight:700,color:'#854F0B',marginBottom:8,fontSize:13}}>🔄 Mould Change History ({data.mouldMC.length})</div>
-        <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-            <thead><tr>
-              {['Date','Machine','Old→New','Time','Target','Result','By'].map(h=>
-                <th key={h} style={{background:'#854F0B',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
-            </tr></thead>
-            <tbody>{data.mouldMC.map((m:any,i:number)=>{
-              const onTime=m.estimated_min>0&&m.total_minutes>0&&m.total_minutes<=m.estimated_min
-              return <tr key={i} style={{background:i%2===0?'#FFF9E6':'#fff'}}>
-                <td style={{padding:'6px 8px',fontSize:10}}>{m.date}</td>
-                <td style={{padding:'6px 8px',fontWeight:600}}>{m.machine}</td>
-                <td style={{padding:'6px 8px',fontSize:10}}>{m.old_mould?.split(' - ')[0]} → {m.new_mould?.split(' - ')[0]}</td>
-                <td style={{padding:'6px 8px',fontWeight:700,color:m.total_minutes>0?(onTime?'#276221':'#C00000'):'#666'}}>{m.total_minutes>0?m.total_minutes+'m':'--'}</td>
-                <td style={{padding:'6px 8px',color:'#854F0B'}}>{m.estimated_min>0?m.estimated_min+'m':'--'}</td>
-                <td style={{padding:'6px 8px'}}>
-                  <span style={{background:onTime?'#E8F5E9':'#FFEBEE',color:onTime?'#276221':'#C00000',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>
-                    {m.total_minutes>0?(onTime?'✅ On Time':'⚠️ Delayed'):'--'}
-                  </span>
-                </td>
-                <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{m.entered_by}</td>
-              </tr>
-            })}</tbody>
-          </table>
-        </div>
-      </div>}
-
-      {/* Breakdown Details */}
-      {data.mouldBd.length>0&&<div style={S.card}>
-        <div style={{fontWeight:700,color:'#C00000',marginBottom:8,fontSize:13}}>🔴 Related Breakdowns ({data.mouldBd.length})</div>
-        <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-            <thead><tr>
-              {['Date','Machine','Problem','Analysis','Solution','Parts','Downtime'].map(h=>
-                <th key={h} style={{background:'#C00000',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
-            </tr></thead>
-            <tbody>{data.mouldBd.map((b:any,i:number)=><tr key={i} style={{background:i%2===0?'#FFF5F5':'#fff'}}>
-              <td style={{padding:'6px 8px',fontSize:10}}>{b.date}</td>
-              <td style={{padding:'6px 8px',fontWeight:600}}>{b.machine}</td>
-              <td style={{padding:'6px 8px',fontSize:10,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#854F0B',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.analysis}>{b.analysis||'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#276221',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.solution}>{b.solution||'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10,color:'#5B2C8D',maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{b.spares_used||'--'}</td>
-              <td style={{padding:'6px 8px',fontWeight:700,color:'#C00000'}}>{b.downtime_min?b.downtime_min+'m':'--'}</td>
-            </tr>)}</tbody>
-          </table>
-        </div>
-      </div>}
-
-      {/* PM History */}
-      {data.mouldPM.length>0&&<div style={S.card}>
-        <div style={{fontWeight:700,color:'#5B2C8D',marginBottom:8,fontSize:13}}>⚙️ PM History ({data.mouldPM.length})</div>
-        {data.mouldPM.map((p:any,i:number)=>{
-          // Parse checklist items to find NG points
-          const checks=p.checklist_items||p.checklistItems||[]
-          const ngPoints=checks.filter((c:any)=>c.result==='NG'||c.status==='NG'||c.value==='NG')
-          const hasNG=ngPoints.length>0||p.overall_result==='NG'
-
-          return <div key={i} style={{border:`2px solid ${hasNG?'#C00000':'#5B2C8D'}`,borderRadius:8,padding:'10px 12px',marginBottom:8,background:hasNG?'#FFF5F5':'#F8F5FF'}}>
-            {/* Header */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:12,color:'#1F3864'}}>{p.date||p.pm_date}</div>
-                <div style={{fontSize:11,color:'#666'}}>By: {p.done_by} | Shots: {p.current_shots?.toLocaleString()||'--'}</div>
-              </div>
-              <span style={{background:p.overall_result==='OK'?'#276221':'#C00000',color:'#fff',padding:'4px 12px',borderRadius:999,fontSize:11,fontWeight:600}}>
-                {p.overall_result==='OK'?'✅ OK':'❌ NG'}
-              </span>
-            </div>
-
-            {/* NG Points */}
-            {ngPoints.length>0&&<div style={{marginBottom:8}}>
-              <div style={{fontWeight:600,color:'#C00000',marginBottom:4,fontSize:11}}>❌ Error Points ({ngPoints.length}):</div>
-              {ngPoints.map((ng:any,j:number)=><div key={j} style={{background:'#FFEBEE',borderRadius:4,padding:'4px 8px',marginBottom:3,fontSize:11,color:'#C00000'}}>
-                • {ng.name||ng.point||ng.label||ng.description||JSON.stringify(ng)}
-              </div>)}
-            </div>}
-
-            {/* No NG points */}
-            {ngPoints.length===0&&p.overall_result==='OK'&&<div style={{background:'#E8F5E9',borderRadius:4,padding:'4px 8px',marginBottom:8,fontSize:11,color:'#276221'}}>
-              ✅ Koi error nahi — sab checkpoints pass!
-            </div>}
-
-            {/* Changes Done / Remarks */}
-            {p.remarks&&p.remarks!=='--'&&<div>
-              <div style={{fontWeight:600,color:'#5B2C8D',marginBottom:4,fontSize:11}}>🔧 Changes Done / Remarks:</div>
-              <div style={{background:'#F3E5F5',borderRadius:4,padding:'6px 8px',fontSize:11,color:'#444'}}>
-                {p.remarks}
-              </div>
-            </div>}
-          </div>
-        })}
-      </div>}
     </div>}
 
-    {!data&&!loading&&<div style={{...S.card,textAlign:'center',color:'#666',padding:32,fontSize:13}}>
-      👆 Upar se mould select karo — poora history dikhega!
+    {!selected&&!loading&&<div style={{...S.card,textAlign:'center',color:'#666',padding:40,fontSize:13}}>
+      👆 Upar mould search karo — poora logbook history dikhega!<br/>
+      <span style={{fontSize:11,opacity:0.7}}>530+ records | Jun 2022 – May 2026 | 4 PDF logbooks</span>
     </div>}
   </div>
 }
 
-// ─── Upload Old Records (AI powered) ─────────────────────────
+
 function UploadOldRecords() {
   const [uploading,setUploading]=useState(false)
   const [extracting,setExtracting]=useState(false)
