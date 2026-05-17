@@ -6487,9 +6487,6 @@ function MouldHistoryTab() {
   const [activeTab,setActiveTab]=useState<'all'|'PM'|'BD'|'RM'|'MC'>('all')
   const [stats,setStats]=useState<any>(null)
 
-  const SB='https://wqstclmbzsskqopkbndi.supabase.co'
-  const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxc3RjbG1ienNza3FvcGtibmRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NjI1MzQsImV4cCI6MjA5MjEzODUzNH0.xyKjmazLr4y9ISxIVB79QwEFgimDh09VThveb1CL3E0'
-
   // Use MOULDS constant directly — no Supabase fetch needed for list
   const filteredMoulds = MOULDS.filter(m=>
     !search
@@ -6507,15 +6504,15 @@ function MouldHistoryTab() {
     setSearch('')
 
     try {
-      // Fetch from mould_history table by job_no
+      // Fetch via API route
       const [histRes, pmRes, bdRes] = await Promise.all([
-        fetch(`/api/mouldhistory?job_no=${mould.code}`).then(r=>r.json()).catch(()=>({data:[]})),
+        fetch(`/api/mouldhistory?job_no=${mould.code}`).then(r=>r.json()).catch(()=>[]),
         fetch(`/api/mouldpm`).then(r=>r.json()).catch(()=>({data:[]})),
         fetch(`/api/breakdown`).then(r=>r.json()).catch(()=>({data:[]})),
       ])
 
       // Historical logbook records
-      const logbookRows: any[] = Array.isArray(histRes) ? histRes : (histRes.data||[])
+      const logbookRows: any[] = Array.isArray(histRes) ? histRes : (histRes?.data||[])
 
       // Live PM records for this mould
       const livePM = (pmRes.data||[])
