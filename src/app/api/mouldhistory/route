@@ -14,16 +14,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'job_no required' }, { status: 400 })
   }
 
-  // job_no TEXT hai Supabase mein — string match karo
   const { data, error } = await supabase
     .from('mould_history')
     .select('*')
-    .eq('job_no', String(job_no).trim())
+    .eq('job_no', job_no)
     .order('record_date', { ascending: true })
     .limit(500)
 
   if (error) {
-    console.error('mould_history error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
