@@ -1606,9 +1606,9 @@ function MouldChangeTab({user}:{user:User}) {
       setToast({msg:'Pehle Plant, Machine, Old aur New Mould select karo!',ok:false});return
     }
     // Check if this machine already has pending
-    const alreadyPending=pendingEntries.find((pe:any)=>pe.machine===form.machine)
+    const alreadyPending=pendingEntries.find((pe:any)=>pe.machine===form.machine && pe.plant===form.plant)
     if(alreadyPending){
-      setToast({msg:`${form.machine} ka mould change already chal raha hai!`,ok:false});return
+      setToast({msg:`${form.plant} - ${form.machine} ka mould change already chal raha hai!`,ok:false});return
     }
     setSaving(true)
     const res=await fetch('/api/mouldchange',{
@@ -2013,7 +2013,7 @@ function BreakdownTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [showForm,setShowForm]=useState(false)
-  const [form,setForm]=useState({date:nd(),plant:'',machine:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
+  const [form,setForm]=useState({date:nd(),plant:'',machine:'',mouldRunning:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
   const [resolveId,setResolveId]=useState<string|null>(null)
   const [resolveForm,setResolveForm]=useState({solution:'',analysis:'',sparesUsed:'',remarks:''})
 
@@ -2053,6 +2053,7 @@ function BreakdownTab({user}:{user:User}) {
       body:JSON.stringify({
         type:'report',
         ...form,
+        mouldRunning:form.mouldRunning,
         reportedTime:new Date().toISOString(),
         enteredBy:user.name
       })
@@ -2061,7 +2062,7 @@ function BreakdownTab({user}:{user:User}) {
     setToast({msg:res.msg,ok:res.success})
     if(res.success){
       setShowForm(false)
-      setForm({date:nd(),plant:'',machine:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
+      setForm({date:nd(),plant:'',machine:'',mouldRunning:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
       load()
     }
   }
@@ -2155,6 +2156,12 @@ function BreakdownTab({user}:{user:User}) {
             <option value="">Select</option>{machines.map(m=><option key={m}>{m}</option>)}
           </select>
         </div>
+        <div style={{...S.f,gridColumn:'span 2'}}><label style={S.lbl}>Mould Running (Konsa mould chal raha tha?)</label>
+          <select style={S.fi} value={form.mouldRunning} onChange={e=>setForm(p=>({...p,mouldRunning:e.target.value}))}>
+            <option value="">-- Select Mould --</option>
+            {MOULDS.map((m:any)=><option key={m.code} value={`${m.name} (${m.code})`}>{m.name} ({m.code})</option>)}
+          </select>
+        </div>
       </div>
       <div style={S.f}><label style={S.lbl}>Problem Description</label>
         <textarea style={{...S.fi,height:70,resize:'none' as const}} value={form.problem} onChange={e=>setForm(p=>({...p,problem:e.target.value}))} placeholder="Kya problem hai? Detail mein likho..."/>
@@ -2180,6 +2187,7 @@ function BreakdownTab({user}:{user:User}) {
             <div>
               <div style={{fontWeight:700,fontSize:13,color:'#1F3864'}}>{b.machine} — {b.plant}</div>
               <div style={{fontSize:11,color:'#666',marginTop:2}}>{b.category} | {b.bd_id||b.id?.slice(0,8)}</div>
+              {b.mould_running&&<div style={{fontSize:11,color:'#1F3864',marginTop:3,fontWeight:600,background:'#E8EDF5',display:'inline-block',padding:'2px 8px',borderRadius:4}}>⚙️ {b.mould_running}</div>}
               <div style={{fontSize:12,color:'#333',marginTop:4,fontWeight:500}}>{b.problem}</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}>
