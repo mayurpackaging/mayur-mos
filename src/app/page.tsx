@@ -2250,7 +2250,7 @@ function BreakdownTab({user}:{user:User}) {
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['BD ID','Machine','Category','Problem','Analysis','Solution','Parts Used','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
+            {['BD ID','Machine','⚙️ Mould','Category','Problem','Analysis','Solution','Parts Used','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
           </tr></thead>
           <tbody>{resolved.map((b:any,i:number)=>{
@@ -2260,6 +2260,7 @@ function BreakdownTab({user}:{user:User}) {
             return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666',whiteSpace:'nowrap' as const}}>{b.bd_id||b.id?.slice(0,8)}</td>
               <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864',whiteSpace:'nowrap' as const}}>{b.machine}</td>
+              <td style={{padding:'6px 8px',fontSize:10,fontWeight:600,color:'#854F0B',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.mould_running||'--'}>{b.mould_running||'--'}</td>
               <td style={{padding:'6px 8px',fontSize:10}}><span style={{background:'#E6F1FB',color:'#1F3864',padding:'2px 6px',borderRadius:4,fontSize:9}}>{b.category}</span></td>
               <td style={{padding:'6px 8px',fontSize:10,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
               <td style={{padding:'6px 8px',fontSize:10,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const,color:'#854F0B'}} title={b.analysis||'--'}>{b.analysis||'--'}</td>
@@ -6394,14 +6395,14 @@ function DailyReportTab({user}:{user:User}) {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
             <thead><tr>
-              {['Machine','Plant','Product','Problem','Analysis','Solution','Parts Used','Category','Reported','Resolved','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
+              {['Machine','Plant','Mould Running','Problem','Analysis','Solution','Parts Used','Category','Reported','Resolved','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
             </tr></thead>
             <tbody>{data.bd.map((b:any,i:number)=>{
               const dtMins=b.reported_time&&b.resolved_time?Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000):0
               return <tr key={i} style={{background:i%2===0?'#FFF5F5':'#fff'}}>
                 <td style={{padding:'5px 8px',fontWeight:600,whiteSpace:'nowrap' as const}}>{b.machine}</td>
                 <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>{b.plant}</td>
-                <td style={{padding:'5px 8px',fontSize:10,color:'#854F0B',maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{(()=>{const mp=(data?.prod||[]).find((p:any)=>p.machine===b.machine);return mp?.product?.split(' ').slice(0,2).join(' ')||'--'})()}</td>
+                <td style={{padding:'5px 8px',fontSize:10,color:'#1F3864',fontWeight:600,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.mould_running||'--'}>{b.mould_running||'--'}</td>
                 <td style={{padding:'5px 8px',fontSize:10,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
                 <td style={{padding:'5px 8px',fontSize:10,color:'#854F0B',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.analysis||'--'}>{b.analysis||'--'}</td>
                 <td style={{padding:'5px 8px',fontSize:10,color:'#276221',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.solution||'--'}>{b.solution||'--'}</td>
