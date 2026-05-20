@@ -2877,6 +2877,10 @@ function SparesTab({user}:{user:User}) {
   const [action,setAction]=useState('Stock In')
   const [showOpeningStock,setShowOpeningStock]=useState(false)
   const [spareItems,setSpareItems]=useState([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}])
+  const [usedForPlant,setUsedForPlant]=useState('')
+  const [usedForMachine,setUsedForMachine]=useState('')
+  const [usedForMould,setUsedForMould]=useState('')
+  const [usedFor,setUsedFor]=useState('Machine')
 
   const load=useCallback(()=>{fetch('/api/spares').then(r=>r.json()).then(d=>{setSpares(d.spares||[]);setMovements(d.recentMovements||[]);setLoading(false)})},[])
   useEffect(()=>{load()},[load])
@@ -2915,9 +2919,9 @@ function SparesTab({user}:{user:User}) {
     setSaving(true)
     // Save vendor name for next time
     if(vendor) localStorage.setItem('lastVendor', vendor)
-    const res=await fetch('/api/spares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendor,slipNo,date,action,doneBy:user.name,items:validItems})}).then(r=>r.json())
+    const res=await fetch('/api/spares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendor,slipNo,date,action,doneBy:user.name,items:validItems,plant:usedForPlant,machine:usedForMachine,mouldNo:usedForMould,usedFor})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
-    if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}]);setVendor('');setSlipNo('')}
+    if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}]);setVendor('');setSlipNo('');setUsedForPlant('');setUsedForMachine('');setUsedForMould('');setUsedFor('Machine')}
   }
 
   const outOfStock=spares.filter(s=>s.status==='Out of Stock').length
@@ -3043,9 +3047,43 @@ function SparesTab({user}:{user:User}) {
         </div>
       </div>}
 
-      {/* Use Entry info */}
-      {action==='Used in Machine'&&<div style={{background:'#FFF3E0',border:'1px solid #FF9800',borderRadius:6,padding:'8px 12px',marginBottom:10,fontSize:11,color:'#854F0B'}}>
-        ℹ️ Sirf Part Name aur Qty bharo — Stock automatically kam ho jaayega!
+      {/* Use Entry — Machine & Mould fields */}
+      {action==='Used in Machine'&&<div style={{background:'#FFF9E6',border:'2px solid #854F0B',borderRadius:8,padding:12,marginBottom:10}}>
+        <div style={{fontWeight:700,color:'#854F0B',fontSize:12,marginBottom:8}}>🔧 Kahan Use Hua?</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+          <div style={S.f}><label style={S.lbl}>Used For</label>
+            <select style={S.fi} value={usedFor} onChange={e=>setUsedFor(e.target.value)}>
+              <option value="Machine">Machine</option>
+              <option value="Mould">Mould</option>
+              <option value="Both">Machine + Mould</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div style={S.f}><label style={S.lbl}>Plant</label>
+            <select style={S.fi} value={usedForPlant} onChange={e=>{setUsedForPlant(e.target.value);setUsedForMachine('')}}>
+              <option value="">Select Plant</option>
+              <option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+            </select>
+          </div>
+          <div style={S.f}><label style={S.lbl}>Machine No.</label>
+            <select style={S.fi} value={usedForMachine} onChange={e=>setUsedForMachine(e.target.value)}>
+              <option value="">Select Machine</option>
+              {(MACH[usedForPlant]||[]).map((m:string)=><option key={m}>{m}</option>)}
+            </select>
+          </div>
+          {(usedFor==='Mould'||usedFor==='Both')&&<div style={S.f}><label style={S.lbl}>Mould (Job No / Name)</label>
+            <select style={S.fi} value={usedForMould} onChange={e=>setUsedForMould(e.target.value)}>
+              <option value="">-- Select Mould --</option>
+              {MOULDS.map((m:any)=><option key={m.code} value={`${m.name} (${m.code})`}>{m.name} ({m.code})</option>)}
+            </select>
+          </div>}
+        </div>
+        {usedForMachine&&<div style={{fontSize:11,color:'#276221',fontWeight:600}}>
+          ✅ {usedForPlant} — {usedForMachine} {usedForMould?`| ⚙️ ${usedForMould}`:''}
+        </div>}
+        {(usedFor==='Mould'||usedFor==='Both')&&usedForMould&&<div style={{fontSize:10,color:'#854F0B',marginTop:4,fontWeight:600}}>
+          📋 Yeh spare Mould History mein bhi record hoga!
+        </div>}
       </div>}
 
       <div style={S.fr}>
