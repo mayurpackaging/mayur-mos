@@ -6,6 +6,18 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// Extract job_no from mould_running string like "750 ml Tub (6374)"
+function extractJobNo(mouldRunning: string): string {
+  if (!mouldRunning) return ''
+  const match = mouldRunning.match(/\((\d+)\)/)
+  return match ? match[1] : ''
+}
+
+function extractMouldName(mouldRunning: string): string {
+  if (!mouldRunning) return ''
+  return mouldRunning.split('(')[0].trim()
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get('date') || ''
@@ -40,9 +52,31 @@ export async function POST(req: Request) {
 
     if (error) return NextResponse.json({ success: false, msg: error.message })
 
+    // ✅ Auto save to mould_history if mould was running
+    if (d.mouldRunning) {
+      const jobNo = extractJobNo(d.mouldRunning)
+      const mouldName = extractMouldName(d.mouldRunning)
+      if (jobNo) {
+        await supabase.from('mould_history').insert({
+          mould_no: '---',
+          job_no: jobNo,
+          mould_name: mouldName,
+          record_date: d.date || today,
+          pdf_source: 'LIVE',
+          record_type: 'BD',
+          machine_no: d.machine || '',
+          issue: d.problem || '',
+          work_done: 'Breakdown reported — resolution pending',
+          parts_changed: '',
+          result: 'Pending',
+          remarks: 'BD ID: ' + (bd?.bd_id || bd?.id?.slice(0,8) || '') + ' | Plant: ' + (d.plant || '') + ' | Reported by: ' + (d.enteredBy || '')
+        })
+      }
+    }
+
     // Send alert email if configured
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/alerts`, {
+      await fetch((process.env.NEXT_PUBLIC_SITE_URL || '') + '/api/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'breakdown', breakdown: bd })
@@ -67,8 +101,13 @@ export async function POST(req: Request) {
   if (d.type === 'resolve') {
     const resolvedTime = new Date().toISOString()
 
-    // Get reported time for downtime calculation
-    const { data: bd } = await supabase.from('breakdowns').select('reported_time, work_started_time').eq('id', d.id).single()
+    // Get full breakdown record for mould_history update
+    const { data: bd } = await supabase
+      .from('breakdowns')
+      .select('*')
+      .eq('id', d.id)
+      .single()
+
     const reportedTime = bd?.reported_time || resolvedTime
     const downtimeMins = Math.round((new Date(resolvedTime).getTime() - new Date(reportedTime).getTime()) / 60000)
 
@@ -76,13 +115,62 @@ export async function POST(req: Request) {
       resolved_time: resolvedTime,
       status: 'Resolved',
       solution: d.solution || '',
+      analysis: d.analysis || '',
+      spares_used: d.sparesUsed || '',
       downtime_min: downtimeMins,
       resolved_by: d.enteredBy || '',
       remarks: d.remarks || ''
     }).eq('id', d.id)
 
     if (error) return NextResponse.json({ success: false, msg: error.message })
-    return NextResponse.json({ success: true, msg: `Resolved! Downtime: ${downtimeMins} min` })
+
+    // ✅ Update mould_history — find existing BD record and update it
+    // OR create new resolved record if mould was running
+    if (bd?.mould_running) {
+      const jobNo = extractJobNo(bd.mould_running)
+      const mouldName = extractMouldName(bd.mould_running)
+
+      if (jobNo) {
+        const bdRef = bd.bd_id || bd.id?.slice(0, 8) || ''
+
+        // Try to update existing mould_history record for this breakdown
+        const { data: existing } = await supabase
+          .from('mould_history')
+          .select('id')
+          .eq('job_no', jobNo)
+          .eq('record_type', 'BD')
+          .ilike('remarks', '%' + bdRef + '%')
+          .maybeSingle()
+
+        if (existing) {
+          // Update existing record with solution
+          await supabase.from('mould_history').update({
+            work_done: d.solution || '',
+            parts_changed: d.sparesUsed || '',
+            result: 'Fixed',
+            remarks: 'BD ID: ' + bdRef + ' | Downtime: ' + downtimeMins + 'min | By: ' + (d.enteredBy || '') + ' | Plant: ' + (bd.plant || '')
+          }).eq('id', existing.id)
+        } else {
+          // Create new resolved record
+          await supabase.from('mould_history').insert({
+            mould_no: '---',
+            job_no: jobNo,
+            mould_name: mouldName,
+            record_date: bd.date || today,
+            pdf_source: 'LIVE',
+            record_type: 'BD',
+            machine_no: bd.machine || '',
+            issue: bd.problem || '',
+            work_done: d.solution || '',
+            parts_changed: d.sparesUsed || '',
+            result: 'Fixed',
+            remarks: 'BD ID: ' + bdRef + ' | Downtime: ' + downtimeMins + 'min | By: ' + (d.enteredBy || '') + ' | Plant: ' + (bd.plant || '')
+          })
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, msg: 'Resolved! Downtime: ' + downtimeMins + ' min' })
   }
 
   return NextResponse.json({ success: false, msg: 'Unknown type' })
