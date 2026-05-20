@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       date: d.date || today,
       plant: d.plant || '',
       machine: d.machine || '',
+      mould_running: d.mouldRunning || '',
       problem: d.problem || '',
       category: d.category || 'Mechanical',
       operator_name: d.operator || '',
