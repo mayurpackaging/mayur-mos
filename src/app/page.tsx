@@ -3158,10 +3158,10 @@ function SparesTab({user}:{user:User}) {
               </select>
             </div>
             <div style={S.f}><label style={S.lbl}>Qty</label><input type="number" min="0" style={S.fi} value={item.qty} onChange={e=>updateItem(i,'qty',e.target.value)} placeholder="0"/></div>
-            <div style={S.f}><label style={S.lbl}>Price/Pc (₹)</label><input type="number" min="0" style={S.fi} value={item.pricePerPc} onChange={e=>updateItem(i,'pricePerPc',e.target.value)} placeholder="0"/></div>
+            {action==='Stock In'&&<div style={S.f}><label style={S.lbl}>Price/Pc (₹)</label><input type="number" min="0" style={S.fi} value={item.pricePerPc} onChange={e=>updateItem(i,'pricePerPc',e.target.value)} placeholder="0"/></div>}
           </div>
-          {/* Location Details */}
-          <div style={{background:'#F0F4FF',border:'1px solid #1F3864',borderRadius:8,padding:'8px 10px',marginTop:6}}>
+          {/* Storage Location — only for Stock In */}
+          {action==='Stock In'&&<div style={{background:'#F0F4FF',border:'1px solid #1F3864',borderRadius:8,padding:'8px 10px',marginTop:6}}>
             <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:6}}>📍 Storage Location</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:5}}>
               <div style={S.f}><label style={S.lbl}>Plant</label>
@@ -3185,8 +3185,8 @@ function SparesTab({user}:{user:User}) {
                 </select>
               </div>
             </div>
-          </div>
-          {item.total>0&&<div style={{fontSize:11,color:'#276221',fontWeight:700,marginTop:4}}>Total: ₹{item.total.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>}
+          </div>}
+          {action==='Stock In'&&item.total>0&&<div style={{fontSize:11,color:'#276221',fontWeight:700,marginTop:4}}>Total: ₹{item.total.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>}
         </div>
       ))}
       <button onClick={addItem} style={{width:'100%',padding:8,border:'1.5px dashed #1F3864',borderRadius:8,background:'transparent',color:'#1F3864',fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:10}}>+ Item Add Karo</button>
