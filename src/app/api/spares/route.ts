@@ -66,7 +66,12 @@ export async function POST(req: Request) {
         price_per_pc: price,
         total_price: qty * price,
         done_by: d.doneBy,
-        new_stock: newStock
+        new_stock: newStock,
+        plant: d.plant || '',
+        machine: d.machine || '',
+        mould_no: d.mouldNo || '',
+        mould_name: d.mouldNo ? d.mouldNo.split('(')[0].trim() : '',
+        used_for: d.usedFor || ''
       })
     } else {
       // New spare - add to master
@@ -101,10 +106,39 @@ export async function POST(req: Request) {
         price_per_pc: price,
         total_price: qty * price,
         done_by: d.doneBy,
-        new_stock: newStock
+        new_stock: newStock,
+        plant: d.plant || '',
+        machine: d.machine || '',
+        mould_no: d.mouldNo || '',
+        mould_name: d.mouldNo ? d.mouldNo.split('(')[0].trim() : '',
+        used_for: d.usedFor || ''
       })
     }
   }
 
-  return NextResponse.json({ success: true, msg: `${items.length} items saved!` })
+  // If used in mould — also save to mould_history
+  if (d.action === 'Used in Machine' && (d.usedFor === 'Mould' || d.usedFor === 'Both') && d.mouldNo) {
+    const mouldCode = d.mouldNo.match(/\((\d+)\)/)?.[1] || ''
+    const mouldName = d.mouldNo.split('(')[0].trim()
+    const partsList = items.map((i:any) => `${i.partName} x${i.qty}`).join(', ')
+
+    if (mouldCode) {
+      await supabase.from('mould_history').insert({
+        mould_no: '---',
+        job_no: mouldCode,
+        mould_name: mouldName,
+        record_date: d.date || today,
+        pdf_source: 'LIVE',
+        record_type: 'RM',
+        machine_no: d.machine || '',
+        issue: `Spare parts used in mould`,
+        work_done: `Parts replaced/used: ${partsList}`,
+        parts_changed: partsList,
+        result: 'Done',
+        remarks: `Used by: ${d.doneBy} | Plant: ${d.plant}`
+      })
+    }
+  }
+
+  return NextResponse.json({ success: true, msg: \`\${items.length} items saved!\` })
 }
