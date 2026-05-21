@@ -170,6 +170,82 @@ export async function POST(req: Request) {
       }
     }
 
+    // Handle resolved parts — stock minus + logs
+    if (d.resolvedParts && d.resolvedParts.length > 0) {
+      const today2 = new Date().toISOString().split('T')[0]
+      for (const part of d.resolvedParts) {
+        if (!part.partName || !part.qty) continue
+        const qty = parseFloat(part.qty) || 0
+        const isMouldPart = (part.category || '').includes('Mould')
+
+        // Update spares stock
+        const { data: spare } = await supabase
+          .from('spares_master').select('*').ilike('part_name', part.partName).maybeSingle()
+
+        if (spare) {
+          const newStock = Math.max(0, (spare.current_stock || 0) - qty)
+          const status = newStock === 0 ? 'Out of Stock' : newStock < (spare.min_qty || 0) ? 'Low' : 'OK'
+          await supabase.from('spares_master').update({
+            current_stock: newStock, status, last_updated: new Date().toISOString()
+          }).eq('id', spare.id)
+
+          // Spare movement
+          await supabase.from('spare_movements').insert({
+            date: bd?.date || today2,
+            part_name: part.partName,
+            category: part.category || '',
+            action: 'Used in Machine',
+            qty,
+            done_by: d.enteredBy || '',
+            new_stock: newStock,
+            plant: bd?.plant || '',
+            machine: bd?.machine || '',
+            mould_no: bd?.mould_running || '',
+            mould_name: bd?.mould_running ? bd.mould_running.split('(')[0].trim() : '',
+            used_for: isMouldPart ? 'Mould' : 'Machine'
+          })
+        }
+
+        // Mould part → mould_history RM
+        if (isMouldPart && bd?.mould_running) {
+          const jobMatch = bd.mould_running.match(/\((\d+)\)/)
+          const jobNo = jobMatch ? jobMatch[1] : ''
+          const mouldName = bd.mould_running.split('(')[0].trim()
+          if (jobNo) {
+            await supabase.from('mould_history').insert({
+              mould_no: '---',
+              job_no: jobNo,
+              mould_name: mouldName,
+              record_date: bd.date || today2,
+              pdf_source: 'LIVE',
+              record_type: 'RM',
+              machine_no: bd.machine || '',
+              issue: 'Parts replaced during breakdown',
+              work_done: 'BD Resolve: ' + (d.solution || ''),
+              parts_changed: part.partName + ' x' + qty,
+              result: 'Done',
+              remarks: 'BD ID: ' + (bd.bd_id || String(bd.id).slice(0,8)) + ' | By: ' + (d.enteredBy || '')
+            })
+          }
+        }
+
+        // Machine part → maintenance_logs
+        if (!isMouldPart) {
+          await supabase.from('maintenance_logs').insert({
+            date: bd?.date || today2,
+            plant: bd?.plant || '',
+            machine: bd?.machine || '',
+            section: part.category || 'General',
+            check_point: 'Part replaced during breakdown: ' + part.partName + ' x' + qty,
+            result: 'Replaced',
+            remarks: 'BD ID: ' + (bd?.bd_id || String(bd?.id).slice(0,8)) + ' | ' + (d.solution || ''),
+            done_by: d.enteredBy || '',
+            frequency: 'Breakdown'
+          })
+        }
+      }
+    }
+
     return NextResponse.json({ success: true, msg: 'Resolved! Downtime: ' + downtimeMins + ' min' })
   }
 
