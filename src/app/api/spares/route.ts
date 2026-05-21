@@ -120,7 +120,7 @@ export async function POST(req: Request) {
   if (d.action === 'Used in Machine' && (d.usedFor === 'Mould' || d.usedFor === 'Both') && d.mouldNo) {
     const mouldCode = d.mouldNo.match(/\((\d+)\)/)?.[1] || ''
     const mouldName = d.mouldNo.split('(')[0].trim()
-    const partsList = items.map((i:any) => `${i.partName} x${i.qty}`).join(', ')
+    const partsList = items.map((i:any) => i.partName + ' x' + i.qty).join(', ')
 
     if (mouldCode) {
       await supabase.from('mould_history').insert({
@@ -131,14 +131,14 @@ export async function POST(req: Request) {
         pdf_source: 'LIVE',
         record_type: 'RM',
         machine_no: d.machine || '',
-        issue: `Spare parts used in mould`,
-        work_done: `Parts replaced/used: ${partsList}`,
+        issue: 'Spare parts used in mould',
+        work_done: 'Parts replaced/used: ' + partsList,
         parts_changed: partsList,
         result: 'Done',
-        remarks: `Used by: ${d.doneBy} | Plant: ${d.plant}`
+        remarks: 'Used by: ' + d.doneBy + ' | Plant: ' + d.plant
       })
     }
   }
 
-  return NextResponse.json({ success: true, msg: `${items.length} items saved!` })
+  return NextResponse.json({ success: true, msg: items.length + ' items saved!' })
 }
