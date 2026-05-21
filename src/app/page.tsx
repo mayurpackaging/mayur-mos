@@ -3126,12 +3126,13 @@ function SparesTab({user}:{user:User}) {
         </div>}
 
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Part Name','Category','Stock','Min Qty','Status',canEdit?'Edit':''].filter(Boolean).map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <thead><tr>{['Part Name','Plant','Category','Stock','Min Qty','Status',canEdit?'Edit':''].filter(Boolean).map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
           <tbody>{spares.length===0?<tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>Koi spare nahi — neeche add karo!</td></tr>:spares.map((s:any,i:number)=>{
             const col=s.status==='Out of Stock'?'#C00000':s.status==='Low'?'#854F0B':'#276221'
             const bg=s.status==='Out of Stock'?'#FFEBEE':s.status==='Low'?'#FFF3E0':'#E8F5E9'
             return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{s.part_name}<div style={{fontSize:9,color:'#888',fontWeight:400}}>{s.plant||''} {s.room?'| '+s.room:''} {s.almirah?'| '+s.almirah:''}</div></td>
+              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{s.part_name}<div style={{fontSize:9,color:'#888',fontWeight:400}}>{s.room||''}{s.almirah?' | '+s.almirah:''}</div></td>
+              <td style={{padding:'6px 8px',fontSize:10,fontWeight:600,color:'#1F3864'}}>{s.plant||'--'}</td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{s.category||'--'}</td>
               <td style={{padding:'6px 8px',fontWeight:700,color:col}}>{s.current_stock} {s.unit}</td>
               <td style={{padding:'6px 8px',textAlign:'center',color:'#666'}}>{s.min_qty||0}</td>
@@ -6697,6 +6698,15 @@ function MouldHistoryTab() {
   const [history,setHistory]=useState<any[]>([])
   const [activeTab,setActiveTab]=useState<'all'|'PM'|'BD'|'RM'|'MC'>('all')
   const [stats,setStats]=useState<any>(null)
+  const [mainTab,setMainTab]=useState<'history'|'parts'>('history')
+  const [parts,setParts]=useState<any[]>([])
+  const [partChanges,setPartChanges]=useState<any[]>([])
+  const [partsLoading,setPartsLoading]=useState(false)
+  const [showAddPart,setShowAddPart]=useState(false)
+  const [showChangePart,setShowChangePart]=useState<any>(null)
+  const [partForm,setPartForm]=useState<any>({part_type:'Nipple',part_name:'',size_spec:'',qty_installed:1,installed_date:nd(),done_by:'',remarks:''})
+  const [changeForm,setChangeForm]=useState<any>({reason:'',changed_by:'',changed_date:nd(),shots_at_change:'',new_spec:'',remarks:''})
+  const [partSaving,setPartSaving]=useState(false)
 
   // Use MOULDS constant directly — no Supabase fetch needed for list
   const filteredMoulds = MOULDS.filter(m=>
@@ -6713,6 +6723,14 @@ function MouldHistoryTab() {
     setStats(null)
     setActiveTab('all')
     setSearch('')
+    setMainTab('history')
+    // Load parts
+    setPartsLoading(true)
+    fetch('/api/mouldparts?job_no=' + mould.code).then(r=>r.json()).then(d=>{
+      setParts(d.parts||[])
+      setPartChanges(d.changes||[])
+      setPartsLoading(false)
+    }).catch(()=>setPartsLoading(false))
 
     try {
       // Fetch via API route
@@ -6877,6 +6895,184 @@ function MouldHistoryTab() {
         </div>
       </div>
 
+      {/* Main Tab — History | Parts */}
+      <div style={{display:'flex',gap:6,marginBottom:8}}>
+        <button onClick={()=>setMainTab('history')} style={{flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
+          background:mainTab==='history'?'#1F3864':'#F0F0F0',color:mainTab==='history'?'#fff':'#444'}}>
+          📅 Maintenance History
+        </button>
+        <button onClick={()=>setMainTab('parts')} style={{flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
+          background:mainTab==='parts'?'#854F0B':'#F0F0F0',color:mainTab==='parts'?'#fff':'#444'}}>
+          🔩 Parts Register ({parts.length})
+        </button>
+      </div>
+
+      {/* ── PARTS TAB ── */}
+      {mainTab==='parts'&&<div>
+        {/* Add Part Button */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div style={{fontSize:12,color:'#666'}}>Mould ke saare parts — nipples, heaters, bolts, O-rings</div>
+          <button onClick={()=>setShowAddPart(!showAddPart)}
+            style={{background:'#854F0B',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+            {showAddPart?'✕ Cancel':'+ Part Add Karo'}
+          </button>
+        </div>
+
+        {/* Add Part Form */}
+        {showAddPart&&<div style={{...S.card,border:'2px solid #854F0B',marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#854F0B',fontSize:12,marginBottom:10}}>🔩 Naya Part Add Karo</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <div style={S.f}><label style={S.lbl}>Part Type</label>
+              <select style={S.fi} value={partForm.part_type} onChange={e=>setPartForm((p:any)=>({...p,part_type:e.target.value}))}>
+                {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map(t=><option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Part Name / Description</label>
+              <input style={S.fi} value={partForm.part_name} onChange={e=>setPartForm((p:any)=>({...p,part_name:e.target.value}))} placeholder="e.g. Water Nipple 1/4 inch, Heater 500W"/>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Size / Spec</label>
+              <input style={S.fi} value={partForm.size_spec} onChange={e=>setPartForm((p:any)=>({...p,size_spec:e.target.value}))} placeholder="e.g. M6x20, 500W 240V, 12x2.5mm"/>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Qty Installed</label>
+              <input type="number" style={S.fi} value={partForm.qty_installed} onChange={e=>setPartForm((p:any)=>({...p,qty_installed:e.target.value}))} min="1"/>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Installed Date</label>
+              <input type="date" style={S.fi} value={partForm.installed_date} onChange={e=>setPartForm((p:any)=>({...p,installed_date:e.target.value}))}/>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Added By</label>
+              <input style={S.fi} value={partForm.done_by} onChange={e=>setPartForm((p:any)=>({...p,done_by:e.target.value}))} placeholder="Naam"/>
+            </div>
+            <div style={{...S.f,gridColumn:'span 2'}}><label style={S.lbl}>Remarks</label>
+              <input style={S.fi} value={partForm.remarks} onChange={e=>setPartForm((p:any)=>({...p,remarks:e.target.value}))} placeholder="Optional notes"/>
+            </div>
+          </div>
+          <button disabled={partSaving||!partForm.part_name} onClick={async()=>{
+            setPartSaving(true)
+            const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({type:'add_part',job_no:selected.code,mould_name:selected.name,...partForm})
+            }).then(r=>r.json())
+            if(res.success){
+              setParts(p=>[...p,res.data])
+              setShowAddPart(false)
+              setPartForm({part_type:'Nipple',part_name:'',size_spec:'',qty_installed:1,installed_date:nd(),done_by:'',remarks:''})
+            }
+            setPartSaving(false)
+          }} style={{...S.sb,background:'#854F0B',marginTop:10,opacity:!partForm.part_name?0.5:1}}>
+            {partSaving?'Saving...':'✅ Part Add Karo'}
+          </button>
+        </div>}
+
+        {/* Change Part Modal */}
+        {showChangePart&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:12,padding:20,width:340,maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{fontWeight:700,color:'#C00000',fontSize:13,marginBottom:12}}>🔄 Part Change Record</div>
+            <div style={{background:'#FFF9E6',borderRadius:6,padding:'6px 10px',marginBottom:10,fontSize:11}}>
+              <b>{showChangePart.part_name}</b> — {showChangePart.size_spec||'--'}
+            </div>
+            <div style={S.f}><label style={S.lbl}>Reason for Change</label>
+              <select style={S.fi} value={changeForm.reason} onChange={e=>setChangeForm((p:any)=>({...p,reason:e.target.value}))}>
+                <option value="">Select reason</option>
+                {['Damaged/Broken','Leakage','Worn Out','Preventive Change','Size Change','Upgrade','Other'].map(r=><option key={r}>{r}</option>)}
+              </select>
+            </div>
+            <div style={S.f}><label style={S.lbl}>New Spec (agar change hua)</label>
+              <input style={S.fi} value={changeForm.new_spec} onChange={e=>setChangeForm((p:any)=>({...p,new_spec:e.target.value}))} placeholder="Same rahega toh blank chhodo"/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <div style={S.f}><label style={S.lbl}>Changed By</label>
+                <input style={S.fi} value={changeForm.changed_by} onChange={e=>setChangeForm((p:any)=>({...p,changed_by:e.target.value}))} placeholder="Naam"/>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Date</label>
+                <input type="date" style={S.fi} value={changeForm.changed_date} onChange={e=>setChangeForm((p:any)=>({...p,changed_date:e.target.value}))}/>
+              </div>
+              <div style={{...S.f,gridColumn:'span 2'}}><label style={S.lbl}>Shots at Change (optional)</label>
+                <input type="number" style={S.fi} value={changeForm.shots_at_change} onChange={e=>setChangeForm((p:any)=>({...p,shots_at_change:e.target.value}))} placeholder="Kitne shots pe change kiya"/>
+              </div>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Remarks</label>
+              <input style={S.fi} value={changeForm.remarks} onChange={e=>setChangeForm((p:any)=>({...p,remarks:e.target.value}))} placeholder="Optional"/>
+            </div>
+            <div style={{display:'flex',gap:8,marginTop:10}}>
+              <button disabled={partSaving||!changeForm.reason||!changeForm.changed_by} onClick={async()=>{
+                setPartSaving(true)
+                const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({
+                    type:'change_part',
+                    job_no:selected.code,
+                    mould_name:selected.name,
+                    part_id:showChangePart.id,
+                    part_name:showChangePart.part_name,
+                    part_type:showChangePart.part_type,
+                    old_spec:showChangePart.size_spec,
+                    ...changeForm
+                  })
+                }).then(r=>r.json())
+                if(res.success){
+                  // Reload parts
+                  fetch('/api/mouldparts?job_no='+selected.code).then(r=>r.json()).then(d=>{setParts(d.parts||[]);setPartChanges(d.changes||[])})
+                  setShowChangePart(null)
+                  setChangeForm({reason:'',changed_by:'',changed_date:nd(),shots_at_change:'',new_spec:'',remarks:''})
+                }
+                setPartSaving(false)
+              }} style={{flex:1,background:'#C00000',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer',opacity:(!changeForm.reason||!changeForm.changed_by)?0.5:1}}>
+                {partSaving?'Saving...':'✅ Record Change'}
+              </button>
+              <button onClick={()=>setShowChangePart(null)} style={{background:'#f0f0f0',border:'none',borderRadius:6,padding:'8px 14px',cursor:'pointer'}}>Cancel</button>
+            </div>
+          </div>
+        </div>}
+
+        {/* Parts List */}
+        {partsLoading?<div style={{textAlign:'center',padding:24,color:'#666'}}>Loading parts...</div>
+        :parts.length===0
+          ?<div style={{textAlign:'center',padding:32,color:'#888',fontSize:12}}>
+              Koi part add nahi hua abhi — upar "+ Part Add Karo" click karo
+            </div>
+          :<div>
+            {/* Group by part type */}
+            {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map(ptype=>{
+              const typeParts = parts.filter((p:any)=>p.part_type===ptype)
+              if(typeParts.length===0) return null
+              return <div key={ptype} style={{marginBottom:10}}>
+                <div style={{fontWeight:700,color:'#1F3864',fontSize:11,padding:'4px 8px',background:'#E8EDF5',borderRadius:6,marginBottom:4}}>
+                  🔩 {ptype} ({typeParts.length})
+                </div>
+                {typeParts.map((p:any)=><div key={p.id} style={{background:'#fff',border:'1px solid #E0E0E0',borderRadius:8,padding:'8px 12px',marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:600,fontSize:12}}>{p.part_name}</div>
+                    <div style={{fontSize:10,color:'#666',marginTop:2}}>
+                      {p.size_spec&&<span style={{marginRight:8}}>📐 {p.size_spec}</span>}
+                      <span style={{marginRight:8}}>🔢 Qty: {p.qty_installed}</span>
+                      {p.last_changed_date&&<span style={{color:'#854F0B'}}>🔄 Last change: {p.last_changed_date}</span>}
+                    </div>
+                    {p.total_changes>0&&<div style={{fontSize:10,color:'#C00000',marginTop:2}}>Changed {p.total_changes} times | Last by: {p.last_changed_by}</div>}
+                  </div>
+                  <button onClick={()=>{setShowChangePart(p);setChangeForm({reason:'',changed_by:'',changed_date:nd(),shots_at_change:'',new_spec:'',remarks:''})}}
+                    style={{background:'#FFEBEE',border:'1px solid #C00000',color:'#C00000',borderRadius:6,padding:'4px 10px',fontSize:10,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap' as const}}>
+                    🔄 Change
+                  </button>
+                </div>)}
+              </div>
+            })}
+
+            {/* Recent Changes */}
+            {partChanges.length>0&&<div style={{marginTop:12}}>
+              <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:6}}>🔄 Recent Part Changes</div>
+              {partChanges.slice(0,10).map((c:any,i:number)=><div key={i} style={{background:'#FFEBEE',border:'1px solid #C00000',borderRadius:6,padding:'6px 10px',marginBottom:4,fontSize:11}}>
+                <div style={{display:'flex',justifyContent:'space-between'}}>
+                  <span style={{fontWeight:600}}>{c.part_name}</span>
+                  <span style={{color:'#666',fontSize:10}}>{c.changed_date}</span>
+                </div>
+                <div style={{color:'#444',marginTop:2}}>Reason: {c.reason} | By: {c.changed_by}</div>
+                {c.shots_at_change>0&&<div style={{color:'#854F0B',fontSize:10}}>Shots at change: {c.shots_at_change?.toLocaleString()}</div>}
+              </div>)}
+            </div>}
+          </div>
+        }
+      </div>}
+
+      {/* ── HISTORY TAB ── */}
+      {mainTab==='history'&&<div>
       {/* Last PM + Last BD cards */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
         <div style={{background:'#E8F5E9',border:'2px solid #276221',borderRadius:10,padding:12}}>
@@ -6999,6 +7195,9 @@ function MouldHistoryTab() {
       </div>
 
     </div>}
+
+      </div>}{/* close history tab */}
+    </div>}{/* close stats section */}
 
     {/* Empty state */}
     {!selected&&!loading&&<div style={{...S.card,textAlign:'center',color:'#888',padding:40}}>
