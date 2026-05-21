@@ -3385,54 +3385,64 @@ function SparesTab({user}:{user:User}) {
 
 // ─── Quality Tab ──────────────────────────────────────────────
 function QualityTab({user}:{user:User}) {
-  const [items,setItems]=useState<any[]>([])
+  const [items,setItems]=useState([])
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
-  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [toast,setToast]=useState(null)
   const [date,setDate]=useState(nd())
   const [shift,setShift]=useState('Day')
   const [plant,setPlant]=useState('')
   const [qcPerson,setQcPerson]=useState(user.name)
-  const [machineData,setMachineData]=useState<Record<string,any>>({})
+  const [machineData,setMachineData]=useState({})
 
-  useEffect(()=>{fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})},[])
+  // Time slots — every 3 hours
+  const TIME_SLOTS = ['06:00','09:00','12:00','15:00','18:00','21:00']
+  const getCurrentSlot = () => {
+    const now = new Date()
+    const h = now.getHours()
+    if(h<6) return '06:00'
+    if(h<9) return '06:00'
+    if(h<12) return '09:00'
+    if(h<15) return '12:00'
+    if(h<18) return '15:00'
+    if(h<21) return '18:00'
+    return '21:00'
+  }
+  const [checkTime,setCheckTime]=useState(getCurrentSlot())
+
+  useEffect(()=>{
+    fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})
+  },[])
 
   const machines=MACH[plant]||[]
+  const VIS=['No short shots','No flash','No burn marks','No flow marks','No sink marks','Uniform color','No contamination']
+  const DIM=['Wall thickness','Height','Diameter','Lid fit','Stack ability','Drop test','Weight check']
 
-  const setCheck=(machine:string,type:string,idx:number,val:string)=>{
-    setMachineData(prev=>({
-      ...prev,
-      [machine]:{
-        ...prev[machine],
-        [`${type}_${idx}`]:val
-      }
-    }))
-  }
+  const setCheck=(machine,type,idx,val)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],[type+'_'+idx]:val}}))
+  const getCheck=(machine,type,idx)=>machineData[machine]?.[type+'_'+idx]||''
+  const setField=(machine,field,val)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],[field]:val}}))
 
-  const getCheck=(machine:string,type:string,idx:number)=>machineData[machine]?.[`${type}_${idx}`]||''
-  const setProduct=(machine:string,val:string)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],product:val}}))
-  const setMould=(machine:string,val:string)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],mould:val}}))
-
-  const copyM1ToAll=()=>{
-    const m1=machines[0]
-    if(!m1) return
-    const m1Data=machineData[m1]||{}
-    const newData:{[key:string]:any}={...machineData}
-    machines.forEach((m,i)=>{
-      if(i===0) return
-      newData[m]={...m1Data,product:machineData[m]?.product||m1Data.product}
-    })
-    setMachineData(newData)
-    setToast({msg:'M1 ke results sabko copy ho gaye!',ok:true})
+  const getSlotColor=(slot)=>{
+    if(slot===checkTime) return {bg:'#1F3864',color:'#fff'}
+    return {bg:'#F0F0F0',color:'#666'}
   }
 
   const save=async()=>{
     if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
+    const now=new Date()
+    const submittedAt=now.toISOString()
     const entries=machines.map(machine=>{
       const d=machineData[machine]||{}
       if(!d.product) return null
       return {
-        date,shift,machine:plant+' - '+machine,part_name:d.product,qc_person:qcPerson,mould_code:d.mould?d.mould.split('(')[1]?.replace(')',''):'',mould_name:d.mould?d.mould.split('(')[0].trim():'',
+        date,shift,
+        machine:plant+' - '+machine,
+        part_name:d.product,
+        qc_person:qcPerson,
+        mould_code:d.mould?d.mould.split('(')[1]?.replace(')',''):'',
+        mould_name:d.mould?d.mould.split('(')[0].trim():'',
+        check_time:checkTime,
+        submitted_at:submittedAt,
         no_short_shots:getCheck(machine,'vis',0)||'N/A',
         no_flash:getCheck(machine,'vis',1)||'N/A',
         no_burn_marks:getCheck(machine,'vis',2)||'N/A',
@@ -3447,102 +3457,156 @@ function QualityTab({user}:{user:User}) {
         stack_ability:getCheck(machine,'dim',4)||'N/A',
         drop_test:getCheck(machine,'dim',5)||'N/A',
         weight_check:getCheck(machine,'dim',6)||'N/A',
-        overall_result: Object.values(d).some((v:any)=>v==='NG')?'NG':'OK',
+        overall_result:Object.values(d).some(v=>v==='NG')?'NG':'OK',
         remarks:d.remarks||''
       }
     }).filter(Boolean)
-
     if(entries.length===0){setToast({msg:'Koi machine ka product select nahi!',ok:false});return}
     setSaving(true)
     const res=await fetch('/api/quality',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries})}).then(r=>r.json())
-    setSaving(false);setToast({msg:res.msg,ok:res.success})
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success) setMachineData({})
   }
 
-  const VIS=['No short shots','No flash','No burn marks','No flow marks','No sink marks','Uniform color','No contamination']
-  const DIM=['Wall Thickness','Height','Diameter','Lid Fit','Stack Ability','Drop Test','Weight Check']
+  const completedCount=machines.filter(m=>machineData[m]?.product).length
 
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
-  return <div>
-    <div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:10}}>Quality Check — Bulk Entry</div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
-        <div style={S.f}><label style={S.lbl}>Shift</label><select style={S.fi} value={shift} onChange={e=>setShift(e.target.value)}><option>Day</option><option>Night</option></select></div>
-      </div>
-      <div style={S.fr}>
-        <div style={S.f}><label style={S.lbl}>Plant</label>
-          <select style={S.fi} value={plant} onChange={e=>setPlant(e.target.value)}>
-            <option value="">Select Plant</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
-          </select>
+  return (
+    <div>
+      {/* Header */}
+      <div style={S.card}>
+        <div style={{fontWeight:700,marginBottom:10,fontSize:14,color:'#1F3864'}}>Quality Check — Every 3 Hours</div>
+
+        {/* Time Slots */}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:'#666',marginBottom:6}}>Check Slot (current: {checkTime})</div>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+            {TIME_SLOTS.map(slot=>{
+              const sc=getSlotColor(slot)
+              return <button key={slot} onClick={()=>setCheckTime(slot)}
+                style={{padding:'5px 12px',borderRadius:999,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,background:sc.bg,color:sc.color}}>
+                {slot}
+              </button>
+            })}
+          </div>
         </div>
-        <div style={S.f}><label style={S.lbl}>QC Person</label><input style={S.fi} value={qcPerson} onChange={e=>setQcPerson(e.target.value)}/></div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+          <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
+          <div style={S.f}><label style={S.lbl}>Shift</label>
+            <select style={S.fi} value={shift} onChange={e=>setShift(e.target.value)}>
+              <option>Day</option><option>Night</option>
+            </select>
+          </div>
+          <div style={S.f}><label style={S.lbl}>Plant</label>
+            <select style={S.fi} value={plant} onChange={e=>{setPlant(e.target.value);setMachineData({})}}>
+              <option value="">Select Plant</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+            </select>
+          </div>
+          <div style={S.f}><label style={S.lbl}>QC Person</label>
+            <input style={S.fi} value={qcPerson} onChange={e=>setQcPerson(e.target.value)}/>
+          </div>
+        </div>
+
+        {plant&&<div style={{background:'#FFF9E6',border:'1px solid #854F0B',borderRadius:6,padding:'6px 12px',fontSize:11,color:'#854F0B',fontWeight:600}}>
+          ⏰ Slot: {checkTime} | {completedCount}/{machines.length} machines complete
+        </div>}
       </div>
-      {plant&&<button onClick={copyM1ToAll} style={{marginBottom:10,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,cursor:'pointer'}}>M1 ke results sabko copy karo</button>}
+
+      {/* Machine Cards */}
+      {machines.map((machine,mi)=>{
+        const d=machineData[machine]||{}
+        const hasNG=Object.values(d).some(v=>v==='NG')
+        const hasProduct=!!d.product
+        return (
+          <div key={machine} style={{...S.card,marginBottom:8,border:hasNG?'2px solid #C00000':'1px solid #E0E0E0'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{machine}</span>
+              {hasProduct&&<span style={{background:hasNG?'#FFEBEE':'#E8F5E9',color:hasNG?'#C00000':'#276221',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:600}}>{hasNG?'NG Found!':'OK'}</span>}
+              {!hasProduct&&<span style={{background:'#F0F0F0',color:'#888',padding:'2px 10px',borderRadius:999,fontSize:11}}>Pending</span>}
+            </div>
+
+            {/* Product + Mould */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:hasProduct?10:0}}>
+              <div style={S.f}><label style={S.lbl}>Product</label>
+                <select style={S.fi} value={d.product||''} onChange={e=>setField(machine,'product',e.target.value)}>
+                  <option value="">-- Select --</option>
+                  {items.map(i=><option key={i.name}>{i.name}</option>)}
+                </select>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Mould</label>
+                <select style={S.fi} value={d.mould||''} onChange={e=>setField(machine,'mould',e.target.value)}>
+                  <option value="">-- Select --</option>
+                  {MOULDS.map(m=><option key={m.code} value={m.name+' ('+m.code+')'}>{m.name} ({m.code})</option>)}
+                </select>
+              </div>
+            </div>
+
+            {hasProduct&&<>
+              {/* Visual Checks */}
+              <div style={{fontSize:11,fontWeight:600,color:'#1F3864',marginBottom:6}}>Visual inspection</div>
+              {VIS.map((check,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
+                  <span style={{fontSize:11,flex:1}}>{check}</span>
+                  <div style={{display:'flex',gap:4}}>
+                    {['OK','NG','N/A'].map(v=>{
+                      const val=getCheck(machine,'vis',i)
+                      const active=val===v
+                      const bg=active?(v==='OK'?'#E2EFDA':v==='NG'?'#FFEBEE':'#F0F0F0'):'transparent'
+                      const col=active?(v==='OK'?'#276221':v==='NG'?'#C00000':'#555'):'#aaa'
+                      const border=active?(v==='OK'?'#276221':v==='NG'?'#C00000':'#666'):'#E0E0E0'
+                      return <button key={v} onClick={()=>setCheck(machine,'vis',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:'1px solid '+border,borderRadius:999,background:bg,color:col,cursor:'pointer'}}>{v}</button>
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* Dimensional Checks */}
+              <div style={{fontSize:11,fontWeight:600,color:'#1F3864',margin:'8px 0 6px'}}>Dimensional & functional</div>
+              {DIM.map((check,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
+                  <span style={{fontSize:11,flex:1}}>{check}</span>
+                  <div style={{display:'flex',gap:4}}>
+                    {['OK','NG'].map(v=>{
+                      const val=getCheck(machine,'dim',i)
+                      const active=val===v
+                      const bg=active?(v==='OK'?'#E2EFDA':'#FFEBEE'):'transparent'
+                      const col=active?(v==='OK'?'#276221':'#C00000'):'#aaa'
+                      const border=active?(v==='OK'?'#276221':'#C00000'):'#E0E0E0'
+                      return <button key={v} onClick={()=>setCheck(machine,'dim',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:'1px solid '+border,borderRadius:999,background:bg,color:col,cursor:'pointer'}}>{v}</button>
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <div style={{marginTop:8}}>
+                <label style={S.lbl}>Remarks</label>
+                <input style={S.fi} value={d.remarks||''} onChange={e=>setField(machine,'remarks',e.target.value)} placeholder="Any observations..."/>
+              </div>
+            </>}
+          </div>
+        )
+      })}
+
+      {plant&&machines.length>0&&<>
+        <div style={{...S.card,background:'#F0F4FF',marginBottom:8}}>
+          <div style={{fontSize:12,color:'#1F3864',fontWeight:600}}>
+            ⏰ Check Slot: {checkTime} | Machines: {completedCount}/{machines.length} complete
+          </div>
+          <div style={{fontSize:10,color:'#666',marginTop:4}}>
+            Submit karte waqt exact timestamp save hoga
+          </div>
+        </div>
+        <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Quality Check — '+checkTime}</button>
+        {toast&&<Toast {...toast}/>}
+      </>}
     </div>
-
-    {machines.map((machine,mi)=>{
-      const d=machineData[machine]||{}
-      const hasNG=Object.values(d).some((v:any)=>v==='NG')
-      const hasProduct=!!d.product
-      return <div key={machine} style={{...S.card,marginBottom:8}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{machine}</span>
-          {hasProduct&&<span style={{background:hasNG?'#FFEBEE':'#E8F5E9',color:hasNG?'#C00000':'#276221',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:600}}>{hasNG?'NG Found!':'OK'}</span>}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div style={S.f}><label style={S.lbl}>Product</label>
-            <select style={S.fi} value={d.product||''} onChange={e=>setProduct(machine,e.target.value)}>
-              <option value="">-- Select Product --</option>
-              {items.map(i=><option key={i.name}>{i.name}</option>)}
-            </select>
-          </div>
-          <div style={S.f}><label style={S.lbl}>⚙️ Mould (Job No)</label>
-            <select style={S.fi} value={d.mould||''} onChange={e=>setMould(machine,e.target.value)}>
-              <option value="">-- Select Mould --</option>
-              {MOULDS.map(m=><option key={m.code} value={m.name+' ('+m.code+')'}>{m.name} ({m.code})</option>)}
-            </select>
-          </div>
-        </div>
-        {hasProduct&&<>
-          <div style={{fontSize:11,fontWeight:600,color:'#1F3864',marginBottom:6}}>Visual Inspection</div>
-          {VIS.map((check,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
-              <span style={{fontSize:11,flex:1}}>{check}</span>
-              <div style={{display:'flex',gap:4}}>
-                {['OK','NG','N/A'].map(v=>{
-                  const val=getCheck(machine,'vis',i)
-                  return <button key={v} onClick={()=>setCheck(machine,'vis',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:`1px solid ${val===v?(v==='OK'?'#276221':v==='NG'?'#C00000':'#666'):'#E0E0E0'}`,borderRadius:999,background:val===v?(v==='OK'?'#E2EFDA':v==='NG'?'#FFEBEE':'#F0F0F0'):'transparent',color:val===v?(v==='OK'?'#276221':v==='NG'?'#C00000':'#666'):'#666',cursor:'pointer'}}>{v}</button>
-                })}
-              </div>
-            </div>
-          ))}
-          <div style={{fontSize:11,fontWeight:600,color:'#1F3864',margin:'8px 0 6px'}}>Dimensional & Functional</div>
-          {DIM.map((check,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
-              <span style={{fontSize:11,flex:1}}>{check}</span>
-              <div style={{display:'flex',gap:4}}>
-                {['OK','NG'].map(v=>{
-                  const val=getCheck(machine,'dim',i)
-                  return <button key={v} onClick={()=>setCheck(machine,'dim',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:`1px solid ${val===v?(v==='OK'?'#276221':'#C00000'):'#E0E0E0'}`,borderRadius:999,background:val===v?(v==='OK'?'#E2EFDA':'#FFEBEE'):'transparent',color:val===v?(v==='OK'?'#276221':'#C00000'):'#666',cursor:'pointer'}}>{v}</button>
-                })}
-              </div>
-            </div>
-          ))}
-          <div style={{marginTop:8}}><label style={S.lbl}>Remarks</label><input style={S.fi} value={d.remarks||''} onChange={e=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],remarks:e.target.value}}))} placeholder="Any observations..."/></div>
-        </>}
-      </div>
-    })}
-
-    {plant&&machines.length>0&&<>
-      <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save All Machines Quality Check'}</button>
-      {toast&&<Toast {...toast}/>}
-    </>}
-    {!plant&&<div style={{...S.card,textAlign:'center',color:'#666'}}>Pehle Plant select karo! 👆</div>}
-  </div>
+  )
 }
 
-// ─── Batch Tab ────────────────────────────────────────────────
+
 function BatchTab({user}:{user:User}) {
   const [items,setItems]=useState<any[]>([])
   const [loading,setLoading]=useState(true)
