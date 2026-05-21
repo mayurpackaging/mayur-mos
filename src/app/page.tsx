@@ -3483,8 +3483,7 @@ function QualityTab({user}:{user:User}) {
       r.wall_thickness,r.height,r.diameter,r.lid_fit,r.stack_ability,r.drop_test,r.weight_check,
       r.overall_result,r.remarks||'',r.submitted_at||''
     ])
-    const csv=[headers,...rows].map(r=>r.join(',')).join('
-')
+    const csv=[headers,...rows].map(r=>r.join(',')).join('\n')
     const blob=new Blob([csv],{type:'text/csv'})
     const url=URL.createObjectURL(blob)
     const a=document.createElement('a')
