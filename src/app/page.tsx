@@ -6726,7 +6726,7 @@ function MouldHistoryTab() {
     setMainTab('history')
     // Load parts
     setPartsLoading(true)
-    fetch('/api/mouldparts?job_no=' + mould.code).then(r=>r.json()).then(d=>{
+    fetch('/api/mouldparts?job_no='+mould.code).then(r=>r.json()).then(d=>{
       setParts(d.parts||[])
       setPartChanges(d.changes||[])
       setPartsLoading(false)
@@ -6735,9 +6735,9 @@ function MouldHistoryTab() {
     try {
       // Fetch via API route
       const [histRes, pmRes, bdRes] = await Promise.all([
-        fetch(`/api/mouldhistory?job_no=${mould.code}`).then(r=>r.json()).catch(()=>[]),
-        fetch(`/api/mouldpm`).then(r=>r.json()).catch(()=>({data:[]})),
-        fetch(`/api/breakdown`).then(r=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/mouldhistory?job_no='+mould.code).then(r=>r.json()).catch(()=>[]),
+        fetch('/api/mouldpm').then(r=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/breakdown').then(r=>r.json()).catch(()=>({data:[]})),
       ])
 
       // Historical logbook records
@@ -6747,11 +6747,11 @@ function MouldHistoryTab() {
       const livePM = (pmRes.data||[])
         .filter((p:any)=> p.mould_code===mould.code || p.mould?.includes(mould.code))
         .map((p:any)=>({
-          id:`live_pm_${p.id}`,
+          id:'live_pm_'+p.id,
           record_date: p.date||p.pm_date||'',
           record_type:'PM',
           issue:'Preventive Maintenance',
-          work_done:`Shots at PM: ${p.current_shots?.toLocaleString()||'--'} | By: ${p.done_by||'--'}`,
+          work_done:'Shots at PM: '+(p.current_shots?.toLocaleString()||'--')+' | By: '+(p.done_by||'--'),
           result: p.overall_result==='OK'?'OK':'NG',
           machine_no:'--',
           parts_changed:'--',
@@ -6767,7 +6767,7 @@ function MouldHistoryTab() {
           b.problem?.toLowerCase().includes(mouldNameShort)
         )
         .map((b:any)=>({
-          id:`live_bd_${b.id}`,
+          id:'live_bd_'+b.id,
           record_date: b.date||'',
           record_type:'BD',
           issue: b.problem||'Breakdown',
@@ -6775,7 +6775,7 @@ function MouldHistoryTab() {
           result:'Fixed',
           machine_no: b.machine||'--',
           parts_changed: b.spares_used||'--',
-          remarks:`Downtime: ${b.downtime_min||'--'} min`,
+          remarks:'Downtime: '+(b.downtime_min||'--')+' min',
           _live:true
         }))
 
@@ -7104,11 +7104,11 @@ function MouldHistoryTab() {
       {/* Filter tabs */}
       <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap' as const}}>
         {([ 
-          {key:'all', label:`All (${stats.total})`,       ac:'#1F3864', ic:'#E8EDF5'},
-          {key:'PM',  label:`🟢 PM (${stats.pmCount})`,   ac:'#276221', ic:'#E8F5E9'},
-          {key:'BD',  label:`🔴 BD (${stats.bdCount})`,   ac:'#C00000', ic:'#FFEBEE'},
-          {key:'RM',  label:`⚪ RM (${stats.rmCount})`,   ac:'#555',    ic:'#F0F0F0'},
-          {key:'MC',  label:`🟡 MC (${stats.mcCount})`,   ac:'#854F0B', ic:'#FFF9E6'},
+          {key:'all', label:'All ('+stats.total+')',       ac:'#1F3864', ic:'#E8EDF5'},
+          {key:'PM',  label:'🟢 PM ('+stats.pmCount+')',   ac:'#276221', ic:'#E8F5E9'},
+          {key:'BD',  label:'🔴 BD ('+stats.bdCount+')',   ac:'#C00000', ic:'#FFEBEE'},
+          {key:'RM',  label:'⚪ RM ('+stats.rmCount+')',   ac:'#555',    ic:'#F0F0F0'},
+          {key:'MC',  label:'🟡 MC ('+stats.mcCount+')',   ac:'#854F0B', ic:'#FFF9E6'},
         ] as {key:any,label:string,ac:string,ic:string}[]).map(t=>
           <button key={t.key} onClick={()=>setActiveTab(t.key)}
             style={{padding:'6px 14px',borderRadius:999,border:'none',cursor:'pointer',
@@ -7138,13 +7138,13 @@ function MouldHistoryTab() {
                 return <div key={rec.id||i} style={{display:'flex',gap:10,marginBottom:10,position:'relative' as const,zIndex:1}}>
                   {/* Circle */}
                   <div style={{width:40,height:40,borderRadius:'50%',flexShrink:0,
-                    background:cfg.bg,border:`2px solid ${cfg.border}`,
+                    background:cfg.bg,border:'2px solid '+cfg.border,
                     display:'flex',alignItems:'center',justifyContent:'center',
                     fontSize:14,position:'relative' as const,zIndex:2}}>
                     {cfg.icon}
                   </div>
                   {/* Card */}
-                  <div style={{flex:1,background:cfg.bg,border:`1px solid ${cfg.border}44`,
+                  <div style={{flex:1,background:cfg.bg,border:'1px solid '+cfg.border+'44',
                     borderRadius:8,padding:'8px 12px',minWidth:0}}>
                     {/* Top row */}
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4,gap:8}}>
