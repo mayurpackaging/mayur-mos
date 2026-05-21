@@ -3394,13 +3394,15 @@ function QualityTab({user}:{user:User}) {
   const [plant,setPlant]=useState('')
   const [qcPerson,setQcPerson]=useState(user.name)
   const [machineData,setMachineData]=useState({})
+  const [qualityView,setQualityView]=useState('entry')
+  const [reportData,setReportData]=useState([])
+  const [reportLoading,setReportLoading]=useState(false)
+  const [reportFrom,setReportFrom]=useState(nd())
+  const [reportTo,setReportTo]=useState(nd())
 
-  // Time slots — every 3 hours
-  const TIME_SLOTS = ['06:00','09:00','12:00','15:00','18:00','21:00']
-  const getCurrentSlot = () => {
-    const now = new Date()
-    const h = now.getHours()
-    if(h<6) return '06:00'
+  const TIME_SLOTS=['06:00','09:00','12:00','15:00','18:00','21:00']
+  const getCurrentSlot=()=>{
+    const h=new Date().getHours()
     if(h<9) return '06:00'
     if(h<12) return '09:00'
     if(h<15) return '12:00'
@@ -3422,15 +3424,16 @@ function QualityTab({user}:{user:User}) {
   const getCheck=(machine,type,idx)=>machineData[machine]?.[type+'_'+idx]||''
   const setField=(machine,field,val)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],[field]:val}}))
 
-  const getSlotColor=(slot)=>{
-    if(slot===checkTime) return {bg:'#1F3864',color:'#fff'}
-    return {bg:'#F0F0F0',color:'#666'}
+  const loadReport=async()=>{
+    setReportLoading(true)
+    const res=await fetch('/api/quality?report=1&from='+reportFrom+'&to='+reportTo).then(r=>r.json()).catch(()=>({data:[]}))
+    setReportData(res.data||[])
+    setReportLoading(false)
   }
 
   const save=async()=>{
     if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
-    const now=new Date()
-    const submittedAt=now.toISOString()
+    const submittedAt=new Date().toISOString()
     const entries=machines.map(machine=>{
       const d=machineData[machine]||{}
       if(!d.product) return null
@@ -3471,137 +3474,270 @@ function QualityTab({user}:{user:User}) {
 
   const completedCount=machines.filter(m=>machineData[m]?.product).length
 
+  // Download CSV
+  const downloadCSV=()=>{
+    const headers=['Date','Check Time','Machine','Product','Mould','QC Person','Short Shots','Flash','Burn Marks','Flow Marks','Sink Marks','Uniform Color','Contamination','Wall Thickness','Height','Diameter','Lid Fit','Stack Ability','Drop Test','Weight Check','Overall','Remarks','Submitted At']
+    const rows=reportData.map(r=>[
+      r.date,r.check_time||'',r.machine,r.part_name,r.mould_name||'',r.qc_person,
+      r.no_short_shots,r.no_flash,r.no_burn_marks,r.no_flow_marks,r.no_sink_marks,r.uniform_color,r.no_contamination,
+      r.wall_thickness,r.height,r.diameter,r.lid_fit,r.stack_ability,r.drop_test,r.weight_check,
+      r.overall_result,r.remarks||'',r.submitted_at||''
+    ])
+    const csv=[headers,...rows].map(r=>r.join(',')).join('
+')
+    const blob=new Blob([csv],{type:'text/csv'})
+    const url=URL.createObjectURL(blob)
+    const a=document.createElement('a')
+    a.href=url
+    a.download='quality_report_'+reportFrom+'_to_'+reportTo+'.csv'
+    a.click()
+  }
+
+  // Report stats
+  const totalChecks=reportData.length
+  const ngChecks=reportData.filter(r=>r.overall_result==='NG').length
+  const okChecks=reportData.filter(r=>r.overall_result==='OK').length
+  const ngPct=totalChecks>0?Math.round(ngChecks/totalChecks*100):0
+
+  // Machine wise NG count
+  const machineNG={}
+  reportData.forEach(r=>{
+    if(r.overall_result==='NG'){
+      machineNG[r.machine]=(machineNG[r.machine]||0)+1
+    }
+  })
+  const topNG=Object.entries(machineNG).sort((a,b)=>b[1]-a[1]).slice(0,5)
+
+  // Date wise summary
+  const dateWise={}
+  reportData.forEach(r=>{
+    if(!dateWise[r.date]) dateWise[r.date]={total:0,ng:0,ok:0}
+    dateWise[r.date].total++
+    if(r.overall_result==='NG') dateWise[r.date].ng++
+    else dateWise[r.date].ok++
+  })
+
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
   return (
     <div>
-      {/* Header */}
-      <div style={S.card}>
-        <div style={{fontWeight:700,marginBottom:10,fontSize:14,color:'#1F3864'}}>Quality Check — Every 3 Hours</div>
-
-        {/* Time Slots */}
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,color:'#666',marginBottom:6}}>Check Slot (current: {checkTime})</div>
-          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-            {TIME_SLOTS.map(slot=>{
-              const sc=getSlotColor(slot)
-              return <button key={slot} onClick={()=>setCheckTime(slot)}
-                style={{padding:'5px 12px',borderRadius:999,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,background:sc.bg,color:sc.color}}>
-                {slot}
-              </button>
-            })}
-          </div>
-        </div>
-
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-          <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
-          <div style={S.f}><label style={S.lbl}>Shift</label>
-            <select style={S.fi} value={shift} onChange={e=>setShift(e.target.value)}>
-              <option>Day</option><option>Night</option>
-            </select>
-          </div>
-          <div style={S.f}><label style={S.lbl}>Plant</label>
-            <select style={S.fi} value={plant} onChange={e=>{setPlant(e.target.value);setMachineData({})}}>
-              <option value="">Select Plant</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
-            </select>
-          </div>
-          <div style={S.f}><label style={S.lbl}>QC Person</label>
-            <input style={S.fi} value={qcPerson} onChange={e=>setQcPerson(e.target.value)}/>
-          </div>
-        </div>
-
-        {plant&&<div style={{background:'#FFF9E6',border:'1px solid #854F0B',borderRadius:6,padding:'6px 12px',fontSize:11,color:'#854F0B',fontWeight:600}}>
-          ⏰ Slot: {checkTime} | {completedCount}/{machines.length} machines complete
-        </div>}
+      {/* Tabs */}
+      <div style={{display:'flex',gap:6,marginBottom:8}}>
+        {[{k:'entry',l:'✍️ Entry'},{k:'today',l:'📋 Aaj ki Report'},{k:'report',l:'📊 Date Range Report'}].map(t=>(
+          <button key={t.k} onClick={()=>{setQualityView(t.k);if(t.k==='today'){setReportFrom(nd());setReportTo(nd());setTimeout(()=>loadReport(),100)}}}
+            style={{flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
+              background:qualityView===t.k?'#1F3864':'#F0F0F0',color:qualityView===t.k?'#fff':'#444'}}>
+            {t.l}
+          </button>
+        ))}
       </div>
 
-      {/* Machine Cards */}
-      {machines.map((machine,mi)=>{
-        const d=machineData[machine]||{}
-        const hasNG=Object.values(d).some(v=>v==='NG')
-        const hasProduct=!!d.product
-        return (
-          <div key={machine} style={{...S.card,marginBottom:8,border:hasNG?'2px solid #C00000':'1px solid #E0E0E0'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-              <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{machine}</span>
-              {hasProduct&&<span style={{background:hasNG?'#FFEBEE':'#E8F5E9',color:hasNG?'#C00000':'#276221',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:600}}>{hasNG?'NG Found!':'OK'}</span>}
-              {!hasProduct&&<span style={{background:'#F0F0F0',color:'#888',padding:'2px 10px',borderRadius:999,fontSize:11}}>Pending</span>}
-            </div>
-
-            {/* Product + Mould */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:hasProduct?10:0}}>
-              <div style={S.f}><label style={S.lbl}>Product</label>
-                <select style={S.fi} value={d.product||''} onChange={e=>setField(machine,'product',e.target.value)}>
-                  <option value="">-- Select --</option>
-                  {items.map(i=><option key={i.name}>{i.name}</option>)}
-                </select>
-              </div>
-              <div style={S.f}><label style={S.lbl}>Mould</label>
-                <select style={S.fi} value={d.mould||''} onChange={e=>setField(machine,'mould',e.target.value)}>
-                  <option value="">-- Select --</option>
-                  {MOULDS.map(m=><option key={m.code} value={m.name+' ('+m.code+')'}>{m.name} ({m.code})</option>)}
-                </select>
-              </div>
-            </div>
-
-            {hasProduct&&<>
-              {/* Visual Checks */}
-              <div style={{fontSize:11,fontWeight:600,color:'#1F3864',marginBottom:6}}>Visual inspection</div>
-              {VIS.map((check,i)=>(
-                <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
-                  <span style={{fontSize:11,flex:1}}>{check}</span>
-                  <div style={{display:'flex',gap:4}}>
-                    {['OK','NG','N/A'].map(v=>{
-                      const val=getCheck(machine,'vis',i)
-                      const active=val===v
-                      const bg=active?(v==='OK'?'#E2EFDA':v==='NG'?'#FFEBEE':'#F0F0F0'):'transparent'
-                      const col=active?(v==='OK'?'#276221':v==='NG'?'#C00000':'#555'):'#aaa'
-                      const border=active?(v==='OK'?'#276221':v==='NG'?'#C00000':'#666'):'#E0E0E0'
-                      return <button key={v} onClick={()=>setCheck(machine,'vis',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:'1px solid '+border,borderRadius:999,background:bg,color:col,cursor:'pointer'}}>{v}</button>
-                    })}
-                  </div>
-                </div>
+      {/* ── ENTRY TAB ── */}
+      {qualityView==='entry'&&<div>
+        <div style={S.card}>
+          <div style={{fontWeight:700,marginBottom:10,fontSize:14,color:'#1F3864'}}>Quality Check — Every 3 Hours</div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:'#666',marginBottom:6}}>Check Slot</div>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              {TIME_SLOTS.map(slot=>(
+                <button key={slot} onClick={()=>setCheckTime(slot)}
+                  style={{padding:'5px 12px',borderRadius:999,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,
+                    background:checkTime===slot?'#1F3864':'#F0F0F0',color:checkTime===slot?'#fff':'#666'}}>
+                  {slot}
+                </button>
               ))}
-
-              {/* Dimensional Checks */}
-              <div style={{fontSize:11,fontWeight:600,color:'#1F3864',margin:'8px 0 6px'}}>Dimensional & functional</div>
-              {DIM.map((check,i)=>(
-                <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
-                  <span style={{fontSize:11,flex:1}}>{check}</span>
-                  <div style={{display:'flex',gap:4}}>
-                    {['OK','NG'].map(v=>{
-                      const val=getCheck(machine,'dim',i)
-                      const active=val===v
-                      const bg=active?(v==='OK'?'#E2EFDA':'#FFEBEE'):'transparent'
-                      const col=active?(v==='OK'?'#276221':'#C00000'):'#aaa'
-                      const border=active?(v==='OK'?'#276221':'#C00000'):'#E0E0E0'
-                      return <button key={v} onClick={()=>setCheck(machine,'dim',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,border:'1px solid '+border,borderRadius:999,background:bg,color:col,cursor:'pointer'}}>{v}</button>
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              <div style={{marginTop:8}}>
-                <label style={S.lbl}>Remarks</label>
-                <input style={S.fi} value={d.remarks||''} onChange={e=>setField(machine,'remarks',e.target.value)} placeholder="Any observations..."/>
-              </div>
-            </>}
+            </div>
           </div>
-        )
-      })}
-
-      {plant&&machines.length>0&&<>
-        <div style={{...S.card,background:'#F0F4FF',marginBottom:8}}>
-          <div style={{fontSize:12,color:'#1F3864',fontWeight:600}}>
-            ⏰ Check Slot: {checkTime} | Machines: {completedCount}/{machines.length} complete
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+            <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={date} onChange={e=>setDate(e.target.value)}/></div>
+            <div style={S.f}><label style={S.lbl}>Shift</label>
+              <select style={S.fi} value={shift} onChange={e=>setShift(e.target.value)}><option>Day</option><option>Night</option></select>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Plant</label>
+              <select style={S.fi} value={plant} onChange={e=>{setPlant(e.target.value);setMachineData({})}}>
+                <option value="">Select Plant</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+              </select>
+            </div>
+            <div style={S.f}><label style={S.lbl}>QC Person</label>
+              <input style={S.fi} value={qcPerson} onChange={e=>setQcPerson(e.target.value)}/>
+            </div>
           </div>
-          <div style={{fontSize:10,color:'#666',marginTop:4}}>
-            Submit karte waqt exact timestamp save hoga
-          </div>
+          {plant&&<div style={{background:'#FFF9E6',border:'1px solid #854F0B',borderRadius:6,padding:'6px 12px',fontSize:11,color:'#854F0B',fontWeight:600}}>
+            ⏰ Slot: {checkTime} | {completedCount}/{machines.length} machines complete
+          </div>}
         </div>
-        <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Quality Check — '+checkTime}</button>
-        {toast&&<Toast {...toast}/>}
-      </>}
+
+        {machines.map(machine=>{
+          const d=machineData[machine]||{}
+          const hasNG=Object.values(d).some(v=>v==='NG')
+          const hasProduct=!!d.product
+          return (
+            <div key={machine} style={{...S.card,marginBottom:8,border:hasNG?'2px solid #C00000':'1px solid #E0E0E0'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{machine}</span>
+                {hasProduct
+                  ?<span style={{background:hasNG?'#FFEBEE':'#E8F5E9',color:hasNG?'#C00000':'#276221',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:600}}>{hasNG?'NG!':'OK'}</span>
+                  :<span style={{background:'#F0F0F0',color:'#888',padding:'2px 10px',borderRadius:999,fontSize:11}}>Pending</span>
+                }
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:hasProduct?10:0}}>
+                <div style={S.f}><label style={S.lbl}>Product</label>
+                  <select style={S.fi} value={d.product||''} onChange={e=>setField(machine,'product',e.target.value)}>
+                    <option value="">-- Select --</option>
+                    {items.map(i=><option key={i.name}>{i.name}</option>)}
+                  </select>
+                </div>
+                <div style={S.f}><label style={S.lbl}>Mould</label>
+                  <select style={S.fi} value={d.mould||''} onChange={e=>setField(machine,'mould',e.target.value)}>
+                    <option value="">-- Select --</option>
+                    {MOULDS.map(m=><option key={m.code} value={m.name+' ('+m.code+')'}>{m.name} ({m.code})</option>)}
+                  </select>
+                </div>
+              </div>
+              {hasProduct&&<>
+                <div style={{fontSize:11,fontWeight:600,color:'#1F3864',marginBottom:6}}>Visual inspection</div>
+                {VIS.map((check,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
+                    <span style={{fontSize:11,flex:1}}>{check}</span>
+                    <div style={{display:'flex',gap:4}}>
+                      {['OK','NG','N/A'].map(v=>{
+                        const val=getCheck(machine,'vis',i)
+                        const active=val===v
+                        return <button key={v} onClick={()=>setCheck(machine,'vis',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,cursor:'pointer',borderRadius:999,border:'1px solid '+(active?(v==='OK'?'#276221':v==='NG'?'#C00000':'#666'):'#E0E0E0'),background:active?(v==='OK'?'#E2EFDA':v==='NG'?'#FFEBEE':'#F0F0F0'):'transparent',color:active?(v==='OK'?'#276221':v==='NG'?'#C00000':'#555'):'#aaa'}}>{v}</button>
+                      })}
+                    </div>
+                  </div>
+                ))}
+                <div style={{fontSize:11,fontWeight:600,color:'#1F3864',margin:'8px 0 6px'}}>Dimensional & functional</div>
+                {DIM.map((check,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #F5F5F5'}}>
+                    <span style={{fontSize:11,flex:1}}>{check}</span>
+                    <div style={{display:'flex',gap:4}}>
+                      {['OK','NG'].map(v=>{
+                        const val=getCheck(machine,'dim',i)
+                        const active=val===v
+                        return <button key={v} onClick={()=>setCheck(machine,'dim',i,v)} style={{padding:'3px 8px',fontSize:10,fontWeight:600,cursor:'pointer',borderRadius:999,border:'1px solid '+(active?(v==='OK'?'#276221':'#C00000'):'#E0E0E0'),background:active?(v==='OK'?'#E2EFDA':'#FFEBEE'):'transparent',color:active?(v==='OK'?'#276221':'#C00000'):'#aaa'}}>{v}</button>
+                      })}
+                    </div>
+                  </div>
+                ))}
+                <div style={{marginTop:8}}>
+                  <label style={S.lbl}>Remarks</label>
+                  <input style={S.fi} value={d.remarks||''} onChange={e=>setField(machine,'remarks',e.target.value)} placeholder="Any observations..."/>
+                </div>
+              </>}
+            </div>
+          )
+        })}
+
+        {plant&&machines.length>0&&<>
+          <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Quality Check — '+checkTime}</button>
+          {toast&&<Toast {...toast}/>}
+        </>}
+      </div>}
+
+      {/* ── TODAY / REPORT TAB ── */}
+      {(qualityView==='today'||qualityView==='report')&&<div>
+        {qualityView==='report'&&<div style={S.card}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:10}}>📊 Date Range Select</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end'}}>
+            <div style={S.f}><label style={S.lbl}>From</label><input type="date" style={S.fi} value={reportFrom} onChange={e=>setReportFrom(e.target.value)}/></div>
+            <div style={S.f}><label style={S.lbl}>To</label><input type="date" style={S.fi} value={reportTo} onChange={e=>setReportTo(e.target.value)}/></div>
+            <button onClick={loadReport} style={{...S.sb,margin:0,padding:'8px 16px'}}>Load</button>
+          </div>
+        </div>}
+
+        {qualityView==='today'&&<div style={{...S.card,background:'#E8EDF5',marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>📋 Aaj ki Quality Report — {nd()}</div>
+          <button onClick={loadReport} style={{marginTop:6,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'4px 12px',fontSize:11,cursor:'pointer'}}>Refresh</button>
+        </div>}
+
+        {reportLoading&&<div style={{textAlign:'center',padding:24,color:'#666'}}>Loading...</div>}
+
+        {!reportLoading&&reportData.length>0&&<>
+          {/* Summary Stats */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:8}}>
+            {[
+              {label:'Total Checks',val:totalChecks,bg:'#E8EDF5',color:'#1F3864'},
+              {label:'OK',val:okChecks,bg:'#E8F5E9',color:'#276221'},
+              {label:'NG',val:ngChecks,bg:'#FFEBEE',color:'#C00000'},
+              {label:'NG %',val:ngPct+'%',bg:'#FFF9E6',color:'#854F0B'},
+            ].map((s,i)=>(
+              <div key={i} style={{background:s.bg,borderRadius:8,padding:10,textAlign:'center'}}>
+                <div style={{fontSize:20,fontWeight:700,color:s.color}}>{s.val}</div>
+                <div style={{fontSize:10,color:s.color,marginTop:2}}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Machine wise NG */}
+          {topNG.length>0&&<div style={{...S.card,marginBottom:8}}>
+            <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:8}}>🔴 Machine Wise NG Count</div>
+            {topNG.map((m,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid #F5F5F5'}}>
+                <span style={{fontSize:12,fontWeight:600}}>{m[0]}</span>
+                <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>{m[1]} NG</span>
+              </div>
+            ))}
+          </div>}
+
+          {/* Date Wise Summary */}
+          {qualityView==='report'&&Object.keys(dateWise).length>0&&<div style={{...S.card,marginBottom:8}}>
+            <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:8}}>📅 Date Wise Summary</div>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                <thead><tr>
+                  {['Date','Total','OK','NG','NG%'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {Object.entries(dateWise).sort((a,b)=>b[0].localeCompare(a[0])).map(([dt,s],i)=>(
+                    <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                      <td style={{padding:'5px 8px',fontWeight:600}}>{dt}</td>
+                      <td style={{padding:'5px 8px'}}>{s.total}</td>
+                      <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{s.ok}</td>
+                      <td style={{padding:'5px 8px',color:'#C00000',fontWeight:600}}>{s.ng}</td>
+                      <td style={{padding:'5px 8px',color:s.ng>0?'#C00000':'#276221',fontWeight:700}}>{s.total>0?Math.round(s.ng/s.total*100):0}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>}
+
+          {/* Detail Table */}
+          <div style={S.card}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div style={{fontWeight:700,color:'#1F3864',fontSize:12}}>Detail Records ({reportData.length})</div>
+              <button onClick={downloadCSV} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>⬇️ CSV Download</button>
+            </div>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                <thead><tr>
+                  {['Date','Slot','Machine','Product','Mould','QC By','Overall','Remarks'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap'}}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {reportData.map((r,i)=>(
+                    <tr key={i} style={{background:r.overall_result==='NG'?'#FFF5F5':i%2===0?'#FAFAFA':'#fff'}}>
+                      <td style={{padding:'5px 8px',fontWeight:600,whiteSpace:'nowrap'}}>{r.date}</td>
+                      <td style={{padding:'5px 8px',color:'#854F0B',fontWeight:600}}>{r.check_time||'--'}</td>
+                      <td style={{padding:'5px 8px',whiteSpace:'nowrap'}}>{r.machine}</td>
+                      <td style={{padding:'5px 8px',color:'#854F0B'}}>{r.part_name}</td>
+                      <td style={{padding:'5px 8px',fontSize:10,color:'#555'}}>{r.mould_name||'--'}</td>
+                      <td style={{padding:'5px 8px'}}>{r.qc_person}</td>
+                      <td style={{padding:'5px 8px'}}><span style={{background:r.overall_result==='NG'?'#FFEBEE':'#E8F5E9',color:r.overall_result==='NG'?'#C00000':'#276221',padding:'2px 8px',borderRadius:999,fontWeight:700,fontSize:10}}>{r.overall_result}</span></td>
+                      <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>{r.remarks||'--'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>}
+
+        {!reportLoading&&reportData.length===0&&<div style={{...S.card,textAlign:'center',color:'#888',padding:32}}>
+          Koi data nahi — date range select karke Load karo
+        </div>}
+      </div>}
     </div>
   )
 }
