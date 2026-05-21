@@ -21,7 +21,8 @@ export async function GET(req: Request) {
     .select('*')
     .eq('job_no', job_no)
     .order('record_date', { ascending: true })
-    .limit(500)
+    .order('created_at', { ascending: true })
+    .limit(1000)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
