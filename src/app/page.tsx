@@ -6716,7 +6716,7 @@ function MouldHistoryTab() {
         m.code.includes(search)
   )
 
-  const loadHistory=async(mould:{code:string,name:string})=>{
+  const loadHistory=async(mould:any)=>{
     setSelected(mould)
     setLoading(true)
     setHistory([])
