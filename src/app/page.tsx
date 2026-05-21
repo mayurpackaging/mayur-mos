@@ -2930,11 +2930,15 @@ function DispatchTab({user}:{user:User}) {
 
 // ─── Spares Tab ───────────────────────────────────────────────
 function SparesTab({user}:{user:User}) {
+  const canEdit = user?.modules?.includes('spares_edit') || user?.role==='Admin'
   const [spares,setSpares]=useState<any[]>([])
   const [movements,setMovements]=useState<any[]>([])
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [editSpare,setEditSpare]=useState<any>(null)
+  const [editForm,setEditForm]=useState<any>({})
+  const [editSaving,setEditSaving]=useState(false)
   const [vendor,setVendor]=useState(()=>localStorage.getItem('lastVendor')||'')
   const [slipNo,setSlipNo]=useState('')
   const [date,setDate]=useState(nd())
@@ -3037,21 +3041,93 @@ function SparesTab({user}:{user:User}) {
     <div style={S.card}>
       <div style={{fontWeight:700,marginBottom:8}}>Spares Stock Status</div>
       <div style={{overflowX:'auto'}}>
+        {/* Edit Modal — sirf Admin/nitin ke liye */}
+        {editSpare&&canEdit&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:12,padding:20,width:340,maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{fontWeight:700,color:'#1F3864',fontSize:14,marginBottom:12}}>✏️ Edit Spare — {editSpare.part_name}</div>
+            
+            <div style={S.f}><label style={S.lbl}>Part Name</label>
+              <input style={S.fi} value={editForm.part_name||''} onChange={e=>setEditForm((p:any)=>({...p,part_name:e.target.value}))}/>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Category</label>
+              <select style={S.fi} value={editForm.category||''} onChange={e=>setEditForm((p:any)=>({...p,category:e.target.value}))}>
+                <option value="">-- Select --</option>
+                {['Mould — Lock & Fasteners','Mould — Cooling System','Mould — Plate & Body','Mould — Core & Cavity','Mould — Ejector System','Mould — Hot Runner','Mould — Slider & Lifter','Mould — Gas Vent & Seal','Mould — Maintenance','Machine — Heating & Barrel','Machine — Hydraulic','Machine — Electrical','Machine — Clamping','Machine — Injection Unit','Machine — Cooling & Chiller','Machine — Pneumatic','Machine — Lubrication','Machine — Safety & Sensors','Machine — Drive & Motion','General — Tools','General — Consumables'].map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <div style={S.f}><label style={S.lbl}>Current Stock</label>
+                <input type="number" style={S.fi} value={editForm.current_stock||0} onChange={e=>setEditForm((p:any)=>({...p,current_stock:e.target.value}))}/>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Min Qty (Alert)</label>
+                <input type="number" style={S.fi} value={editForm.min_qty||0} onChange={e=>setEditForm((p:any)=>({...p,min_qty:e.target.value}))}/>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Unit</label>
+                <select style={S.fi} value={editForm.unit||'Pcs'} onChange={e=>setEditForm((p:any)=>({...p,unit:e.target.value}))}>
+                  <option>Pcs</option><option>Set</option><option>Kg</option><option>Ltr</option><option>Mtr</option><option>Box</option>
+                </select>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Last Price (₹)</label>
+                <input type="number" style={S.fi} value={editForm.last_price||0} onChange={e=>setEditForm((p:any)=>({...p,last_price:e.target.value}))}/>
+              </div>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Last Vendor</label>
+              <input style={S.fi} value={editForm.last_vendor||''} onChange={e=>setEditForm((p:any)=>({...p,last_vendor:e.target.value}))}/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <div style={S.f}><label style={S.lbl}>Plant</label>
+                <select style={S.fi} value={editForm.plant||''} onChange={e=>setEditForm((p:any)=>({...p,plant:e.target.value}))}>
+                  <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option><option>Main Store</option>
+                </select>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Room</label>
+                <select style={S.fi} value={editForm.room||''} onChange={e=>setEditForm((p:any)=>({...p,room:e.target.value}))}>
+                  <option value="">Select</option><option>Tool Room</option><option>Maintenance Room</option><option>Store Room</option><option>Production Floor</option>
+                </select>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Almirah/Rack</label>
+                <input style={S.fi} value={editForm.almirah||''} onChange={e=>setEditForm((p:any)=>({...p,almirah:e.target.value}))} placeholder="e.g. A1"/>
+              </div>
+              <div style={S.f}><label style={S.lbl}>Box No.</label>
+                <input style={S.fi} value={editForm.box_no||''} onChange={e=>setEditForm((p:any)=>({...p,box_no:e.target.value}))} placeholder="e.g. Box-5"/>
+              </div>
+            </div>
+            
+            <div style={{display:'flex',gap:8,marginTop:12}}>
+              <button onClick={async()=>{
+                setEditSaving(true)
+                const status = parseFloat(editForm.current_stock)===0?'Out of Stock':parseFloat(editForm.current_stock)<parseFloat(editForm.min_qty||0)?'Low':'OK'
+                await fetch('/api/spares',{method:'PUT',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({id:editSpare.id,...editForm,status,updatedBy:user.name})
+                }).then(r=>r.json())
+                setEditSaving(false)
+                setEditSpare(null)
+                load()
+              }} style={{flex:1,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                {editSaving?'Saving...':'✅ Save Changes'}
+              </button>
+              <button onClick={()=>setEditSpare(null)} style={{background:'#f0f0f0',border:'none',borderRadius:6,padding:'8px 14px',cursor:'pointer',fontSize:12}}>Cancel</button>
+            </div>
+          </div>
+        </div>}
+
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Part Name','Category','Stock','Min','Last Vendor','Last Price','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <thead><tr>{['Part Name','Category','Stock','Min Qty','Status',canEdit?'Edit':''].filter(Boolean).map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
           <tbody>{spares.length===0?<tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>Koi spare nahi — neeche add karo!</td></tr>:spares.map((s:any,i:number)=>{
             const col=s.status==='Out of Stock'?'#C00000':s.status==='Low'?'#854F0B':'#276221'
             const bg=s.status==='Out of Stock'?'#FFEBEE':s.status==='Low'?'#FFF3E0':'#E8F5E9'
             return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{s.part_name}</td>
+              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{s.part_name}<div style={{fontSize:9,color:'#888',fontWeight:400}}>{s.plant||''} {s.room?'| '+s.room:''} {s.almirah?'| '+s.almirah:''}</div></td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{s.category||'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{s.plant||'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{s.room||'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{s.almirah||'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{s.box_no||'--'}</td>
               <td style={{padding:'6px 8px',fontWeight:700,color:col}}>{s.current_stock} {s.unit}</td>
-              <td style={{padding:'6px 8px',textAlign:'center',color:'#666'}}>{s.min_qty}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',color:'#666'}}>{s.min_qty||0}</td>
               <td style={{padding:'6px 8px'}}><span style={{background:bg,color:col,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{s.status}</span></td>
+              {canEdit&&<td style={{padding:'4px 8px'}}>
+                <button onClick={()=>{setEditSpare(s);setEditForm({...s})}}
+                  style={{background:'#E8EDF5',border:'1px solid #1F3864',borderRadius:4,padding:'2px 8px',fontSize:10,cursor:'pointer',color:'#1F3864',fontWeight:600}}>
+                  ✏️ Edit
+                </button>
+              </td>}
             </tr>
           })}</tbody>
         </table>
