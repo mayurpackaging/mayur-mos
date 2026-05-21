@@ -3499,16 +3499,16 @@ function QualityTab({user}:{user:User}) {
   const ngPct=totalChecks>0?Math.round(ngChecks/totalChecks*100):0
 
   // Machine wise NG count
-  const machineNG={}
+  const machineNG:{[key:string]:number}={}
   reportData.forEach(r=>{
     if(r.overall_result==='NG'){
       machineNG[r.machine]=(machineNG[r.machine]||0)+1
     }
   })
-  const topNG=Object.entries(machineNG).sort((a,b)=>b[1]-a[1]).slice(0,5)
+  const topNG=Object.entries(machineNG).sort((a,b)=>(b[1] as number)-(a[1] as number)).slice(0,5)
 
   // Date wise summary
-  const dateWise={}
+  const dateWise:{[key:string]:{total:number,ng:number,ok:number}}={}
   reportData.forEach(r=>{
     if(!dateWise[r.date]) dateWise[r.date]={total:0,ng:0,ok:0}
     dateWise[r.date].total++
