@@ -2016,6 +2016,10 @@ function BreakdownTab({user}:{user:User}) {
   const [form,setForm]=useState({date:nd(),plant:'',machine:'',mouldRunning:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
   const [resolveId,setResolveId]=useState<string|null>(null)
   const [resolveForm,setResolveForm]=useState({solution:'',analysis:'',sparesUsed:'',remarks:''})
+  const [resolveParts,setResolveParts]=useState<{partName:string,qty:string,category:string,stock:number}[]>([])
+  const [spareSearch,setSpareSearch]=useState('')
+  const [sparesList,setSparesList]=useState<any[]>([])
+  const [showSpareSearch,setShowSpareSearch]=useState(false)
 
   const load=async()=>{
     const res=await fetch('/api/breakdown').then(r=>r.json())
@@ -2089,15 +2093,16 @@ function BreakdownTab({user}:{user:User}) {
         type:'resolve',id,
         solution:resolveForm.solution,
         analysis:resolveForm.analysis,
-        sparesUsed:resolveForm.sparesUsed,
+        sparesUsed:resolveParts.length>0 ? resolveParts.map(p=>p.partName+' x'+p.qty).join(', ') : resolveForm.sparesUsed,
         remarks:resolveForm.remarks,
+        resolvedParts:resolveParts,
         resolvedTime:new Date().toISOString(),
         enteredBy:user.name
       })
     }).then(r=>r.json())
     setSaving(false)
     setToast({msg:res.msg,ok:res.success})
-    if(res.success){setResolveId(null);setResolveForm({solution:'',analysis:'',sparesUsed:'',remarks:''});load()}
+    if(res.success){setResolveId(null);setResolveForm({solution:'',analysis:'',sparesUsed:'',remarks:''});setResolveParts([]);setSparesList([]);load()}
   }
 
   const pending=bds.filter((b:any)=>b.status==='Pending'||b.status==='In Progress')
@@ -2217,7 +2222,15 @@ function BreakdownTab({user}:{user:User}) {
             {!b.work_started_time&&<button onClick={()=>startWork(b.id)} style={{flex:1,background:'#854F0B',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
               🔧 Work Started — Mark Time
             </button>}
-            <button onClick={()=>{setResolveId(b.id);setResolveForm({solution:'',analysis:'',sparesUsed:'',remarks:''})}} style={{flex:1,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+            <button onClick={async()=>{
+                setResolveId(b.id)
+                setResolveForm({solution:'',analysis:'',sparesUsed:'',remarks:''})
+                setResolveParts([])
+                setSpareSearch('')
+                // Load spares list
+                const res=await fetch('/api/spares').then(r=>r.json()).catch(()=>({spares:[]}))
+                setSparesList(res.spares||[])
+              }} style={{flex:1,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
               ✅ Mark Resolved
             </button>
           </div>}
@@ -2229,7 +2242,57 @@ function BreakdownTab({user}:{user:User}) {
             </div>
             <textarea style={{...S.fi,height:50,resize:'none' as const,marginBottom:6}} value={resolveForm.analysis||''} onChange={e=>setResolveForm(p=>({...p,analysis:e.target.value}))} placeholder="Analysis — kya problem thi exactly?"/>
             <textarea style={{...S.fi,height:50,resize:'none' as const,marginBottom:6}} value={resolveForm.solution} onChange={e=>setResolveForm(p=>({...p,solution:e.target.value}))} placeholder="Solution — kya kiya resolve karne ke liye?"/>
-            <input style={{...S.fi,marginBottom:6}} value={resolveForm.sparesUsed||''} onChange={e=>setResolveForm(p=>({...p,sparesUsed:e.target.value}))} placeholder="Parts/Spares used (e.g. Heater Band, O-Ring, Sensor)"/>
+            
+            {/* Parts Used — Spares Stock se */}
+            <div style={{border:'2px solid #854F0B',borderRadius:8,padding:10,marginBottom:6,background:'#FFF9E6'}}>
+              <div style={{fontWeight:700,color:'#854F0B',fontSize:11,marginBottom:8}}>🔧 Parts Used (Stock se automatically minus hoga)</div>
+              
+              {/* Added parts list */}
+              {resolveParts.length>0&&<div style={{marginBottom:8}}>
+                {resolveParts.map((p,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:6,marginBottom:4,background:'#fff',borderRadius:6,padding:'4px 8px',border:'1px solid #ddd'}}>
+                  <span style={{flex:1,fontSize:11,fontWeight:600}}>{p.partName}</span>
+                  <span style={{fontSize:10,color:'#666',background:'#F0F0F0',padding:'1px 6px',borderRadius:4}}>{p.category?.includes('Mould')?'🔩 Mould':'⚙️ Machine'}</span>
+                  <span style={{fontSize:11,color:'#276221',fontWeight:700}}>Stock: {p.stock}</span>
+                  <input type="number" min="1" max={p.stock} value={p.qty}
+                    onChange={e=>setResolveParts(prev=>prev.map((x,j)=>j===i?{...x,qty:e.target.value}:x))}
+                    style={{width:50,padding:'2px 4px',border:'1px solid #ccc',borderRadius:4,fontSize:11,textAlign:'center'}}/>
+                  <button onClick={()=>setResolveParts(prev=>prev.filter((_,j)=>j!==i))}
+                    style={{background:'#FFEBEE',border:'none',borderRadius:4,padding:'2px 6px',cursor:'pointer',color:'#C00000',fontSize:12}}>✕</button>
+                </div>)}
+              </div>}
+              
+              {/* Search spare */}
+              <div style={{position:'relative' as const}}>
+                <input style={{...S.fi,marginBottom:0}}
+                  value={spareSearch}
+                  onChange={e=>{setSpareSearch(e.target.value);setShowSpareSearch(true)}}
+                  placeholder="Part search karo — e.g. O-Ring, Heater..."
+                  onFocus={()=>setShowSpareSearch(true)}/>
+                {showSpareSearch&&spareSearch&&<div style={{position:'absolute' as const,top:'100%',left:0,right:0,background:'#fff',border:'1px solid #ddd',borderRadius:6,maxHeight:150,overflowY:'auto',zIndex:100}}>
+                  {sparesList.filter((s:any)=>s.part_name?.toLowerCase().includes(spareSearch.toLowerCase())).slice(0,8).map((s:any)=><div
+                    key={s.id}
+                    onClick={()=>{
+                      if(!resolveParts.find(p=>p.partName===s.part_name)){
+                        setResolveParts(prev=>[...prev,{partName:s.part_name,qty:'1',category:s.category||'',stock:s.current_stock||0}])
+                      }
+                      setSpareSearch('')
+                      setShowSpareSearch(false)
+                    }}
+                    style={{padding:'6px 10px',cursor:'pointer',fontSize:11,borderBottom:'1px solid #f0f0f0',display:'flex',justifyContent:'space-between'}}
+                    onMouseEnter={e=>(e.currentTarget.style.background='#FFF9E6')}
+                    onMouseLeave={e=>(e.currentTarget.style.background='#fff')}>
+                    <span style={{fontWeight:600}}>{s.part_name}</span>
+                    <span style={{color:s.current_stock>0?'#276221':'#C00000',fontSize:10}}>Stock: {s.current_stock} {s.unit}</span>
+                  </div>)}
+                  {sparesList.filter((s:any)=>s.part_name?.toLowerCase().includes(spareSearch.toLowerCase())).length===0&&
+                    <div style={{padding:'8px 10px',fontSize:11,color:'#888'}}>Koi spare nahi mila</div>}
+                </div>}
+              </div>
+              {resolveParts.length===0&&<div style={{fontSize:10,color:'#888',marginTop:4}}>
+                💡 Spare select karo — Mould part → mould_history mein, Machine part → maintenance mein jayega
+              </div>}
+            </div>
+            
             <textarea style={{...S.fi,height:35,resize:'none' as const,marginBottom:8}} value={resolveForm.remarks} onChange={e=>setResolveForm(p=>({...p,remarks:e.target.value}))} placeholder="Remarks (optional)"/>
             <div style={{display:'flex',gap:6}}>
               <button onClick={()=>resolve(b.id)} style={{flex:2,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer'}} disabled={saving}>
