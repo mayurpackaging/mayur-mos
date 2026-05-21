@@ -297,7 +297,7 @@ function RejectionComparison({from,to,plant}:{from:string,to:string,plant:string
 
     // Group production by date+machine+product
     const prodMap:Record<string,any>={}
-    prodData.forEach((r:any)=>{
+    prodData.forEach(r=>{
       const key=`${r.date}||${r.machine}||${r.product}`
       if(!prodMap[key]) prodMap[key]={date:r.date,machine:r.machine,product:r.product,plant:r.plant,operatorRej:0,shift:r.shift}
       prodMap[key].operatorRej+=(r.rejection||0)
@@ -305,7 +305,7 @@ function RejectionComparison({from,to,plant}:{from:string,to:string,plant:string
 
     // Group rejection by date+machine+product
     const rejMap:Record<string,any>={}
-    rejData.forEach((r:any)=>{
+    rejData.forEach(r=>{
       const key=`${r.date}||${r.machine}||${r.product}`
       if(!rejMap[key]) rejMap[key]={date:r.date,machine:r.machine,product:r.product,plant:r.plant,qcRej:0,reason:r.reason}
       rejMap[key].qcRej+=(r.rejection_qty||0)
@@ -425,7 +425,7 @@ function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
 
   // Build slot matrix
   const getEntry=(machine:string,slot:string)=>{
-    const entries=(data||[]).filter((e:any)=>
+    const entries=(data||[]).filter(e=>
       e.machine===machine&&
       e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')&&
       (e.production_slots||[]).some((s:any)=>s.slot_name===slot)
@@ -436,7 +436,7 @@ function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
   }
 
   const getMachineTotal=(machine:string)=>{
-    const entries=(data||[]).filter((e:any)=>
+    const entries=(data||[]).filter(e=>
       e.machine===machine&&
       e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')
     )
@@ -447,7 +447,7 @@ function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
     return slots.filter(slot=>!getEntry(machine,slot))
   }
 
-  const totalGood=(data||[]).filter((e:any)=>e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')).reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+  const totalGood=(data||[]).filter(e=>e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')).reduce((a:number,e:any)=>a+(e.good_parts||0),0)
   const pendingMachines=machines.filter(m=>getMachinePendingSlots(m).length===slots.length)
   const partialMachines=machines.filter(m=>{const p=getMachinePendingSlots(m);return p.length>0&&p.length<slots.length})
   const doneMachines=machines.filter(m=>getMachinePendingSlots(m).length===0)
@@ -540,7 +540,7 @@ function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
               <td style={{padding:'6px',textAlign:'center',borderBottom:'1px solid #E0E0E0'}}>
                 {(()=>{
                   // Calculate machine efficiency
-                  const machEntries=(data||[]).filter((e:any)=>
+                  const machEntries=(data||[]).filter(e=>
                     e.machine===machine&&e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')
                   )
                   const totalGoodM=machEntries.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
@@ -571,7 +571,7 @@ function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
           <tfoot><tr style={{background:'#1F3864'}}>
             <td style={{padding:'8px 10px',color:'#FFD966',fontWeight:700}}>TOTAL</td>
             {slots.map(slot=>{
-              const slotTotal=(data||[]).filter((e:any)=>
+              const slotTotal=(data||[]).filter(e=>
                 e.shift?.toLowerCase().includes(selectedShift==='day'?'day':'night')&&
                 (e.production_slots||[]).some((s:any)=>s.slot_name===slot)
               ).reduce((a:number,e:any)=>{
@@ -1063,7 +1063,7 @@ function IMSTab({user}:{user:User}) {
             const nl='\n';let csv='Item,Category,'+res.dates.join(',')+nl
             res.trendData.forEach((item:any)=>{
               csv+=`"${item.name}",${item.category},`
-              csv+=item.trend.map((t:any)=>t.stock??'').join(',')
+              csv+=item.trend.map(t=>t.stock??'').join(',')
               csv+=nl
             })
             const blob=new Blob([csv],{type:'text/csv'})
@@ -1164,7 +1164,7 @@ function ProductionTab({user}:{user:User}) {
   const loadExistingEntries=async(date:string,machine:string)=>{
     if(!date||!machine) return
     const res=await fetch(`/api/production?date=${date}&machine=${encodeURIComponent(machine)}`).then(r=>r.json())
-    const slots=((res.data||[]) as any[]).flatMap((r:any)=>
+    const slots=((res.data||[]) as any[]).flatMap(r=>
       (r.production_slots||[]).map((s:any)=>({slot:s.slot_name||s.slot}))
     )
     setExistingEntries(slots)
@@ -1319,7 +1319,7 @@ function ProductionTab({user}:{user:User}) {
         </div>
       </div>
       {existingEntries.length>0&&<div style={{background:'#E8F5E9',border:'1px solid #276221',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#276221',fontWeight:600}}>
-        ✅ Already entered today: {todayEntries.filter((e:any)=>e.machine===machForm.machine).flatMap((e:any)=>(e.production_slots||[]).map((s:any)=>s.slot_name?.split('(')[0]||s.slot_name)).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i).join(', ')}
+        ✅ Already entered today: {todayEntries.filter(e=>e.machine===machForm.machine).flatMap(e=>(e.production_slots||[]).map((s:any)=>s.slot_name?.split('(')[0]||s.slot_name)).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i).join(', ')}
       </div>}
       <div style={S.f}><label style={S.lbl}>Machine Status</label>
         <select style={S.fi} value={machForm.machineStatus} onChange={e=>setMachForm(p=>({...p,machineStatus:e.target.value}))}>
@@ -1396,7 +1396,7 @@ function ProductionTab({user}:{user:User}) {
             <div style={{display:'flex',gap:4,flexWrap:'wrap' as const}}>
               {prod.slots.map((_:any,si:number)=>{
                 const slotName=(machForm.shift==='night'?NIGHT_SLOTS:DAY_SLOTS)[si]
-                const isDone=machForm.machine?todayEntries.some((e:any)=>
+                const isDone=machForm.machine?todayEntries.some(e=>
                   e.machine===machForm.machine&&
                   (e.production_slots||[]).some((s:any)=>s.slot_name===slotName)
                 ):false
@@ -1420,15 +1420,15 @@ function ProductionTab({user}:{user:User}) {
             const eff=calcEff(slot.good,slotProj)
             const effCol=eff>=90?'#276221':eff>=75?'#854F0B':'#C00000'
             // Freeze if same machine + same slot already saved
-            const isDone=machForm.machine?todayEntries.some((e:any)=>
+            const isDone=machForm.machine?todayEntries.some(e=>
               e.machine===machForm.machine&&
               (e.production_slots||[]).some((s:any)=>s.slot_name===slot.slot)
             ):false
             
             // Find existing data for this slot
             const existingSlotData=todayEntries
-              .filter((e:any)=>e.machine===machForm.machine&&e.product===prod.product)
-              .flatMap((e:any)=>e.production_slots||[])
+              .filter(e=>e.machine===machForm.machine&&e.product===prod.product)
+              .flatMap(e=>e.production_slots||[])
               .find((s:any)=>s.slot_name===slot.slot)
 
             return <div key={si} id={`slot-${prod.id}-${si}`} style={{
@@ -1951,7 +1951,7 @@ function MouldPMTab({user}:{user:User}) {
         <div style={S.f}><label style={S.lbl}>Mould Name</label>
           <select style={S.fi} value={setupForm.mouldName} onChange={e=>setSetupForm(p=>({...p,mouldName:e.target.value}))}>
             <option value="">-- Select Mould --</option>
-            {moulds.map((m:any)=><option key={m.id} value={m.mould_name}>{m.mould_name}</option>)}
+            {moulds.map(m=><option key={m.id} value={m.mould_name}>{m.mould_name}</option>)}
           </select>
         </div>
         <div style={S.f}><label style={S.lbl}>PM Frequency (Shots)</label><input type="number" style={S.fi} value={setupForm.pmShots} onChange={e=>setSetupForm(p=>({...p,pmShots:e.target.value}))} placeholder="e.g. 500000"/></div>
@@ -2105,8 +2105,8 @@ function BreakdownTab({user}:{user:User}) {
     if(res.success){setResolveId(null);setResolveForm({solution:'',analysis:'',sparesUsed:'',remarks:''});setResolveParts([]);setSparesList([]);load()}
   }
 
-  const pending=bds.filter((b:any)=>b.status==='Pending'||b.status==='In Progress')
-  const resolved=bds.filter((b:any)=>b.status==='Resolved')
+  const pending=bds.filter(b=>b.status==='Pending'||b.status==='In Progress')
+  const resolved=bds.filter(b=>b.status==='Resolved')
 
   return <div>
     {/* Summary */}
@@ -2117,13 +2117,13 @@ function BreakdownTab({user}:{user:User}) {
       </div>
       <div style={S.met}>
         <div style={{fontSize:10,color:'#276221',fontWeight:600}}>✅ Resolved Today</div>
-        <div style={{fontSize:24,fontWeight:700,color:'#276221'}}>{resolved.filter((b:any)=>b.date===nd()).length}</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#276221'}}>{resolved.filter(b=>b.date===nd()).length}</div>
       </div>
       <div style={S.met}>
         <div style={{fontSize:10,color:'#854F0B',fontWeight:600}}>⏱️ Avg Downtime</div>
         <div style={{fontSize:18,fontWeight:700,color:'#854F0B'}}>
-          {resolved.filter((b:any)=>b.resolved_time&&b.reported_time).length>0
-            ?`${Math.round(resolved.filter((b:any)=>b.resolved_time&&b.reported_time).reduce((a:number,b:any)=>a+Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000),0)/resolved.filter((b:any)=>b.resolved_time&&b.reported_time).length)}m`
+          {resolved.filter(b=>b.resolved_time&&b.reported_time).length>0
+            ?`${Math.round(resolved.filter(b=>b.resolved_time&&b.reported_time).reduce((a:number,b:any)=>a+Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000),0)/resolved.filter(b=>b.resolved_time&&b.reported_time).length)}m`
             :'--'}
         </div>
       </div>
@@ -2164,7 +2164,7 @@ function BreakdownTab({user}:{user:User}) {
         <div style={{...S.f,gridColumn:'span 2'}}><label style={S.lbl}>Mould Running (Konsa mould chal raha tha?)</label>
           <select style={S.fi} value={form.mouldRunning} onChange={e=>setForm(p=>({...p,mouldRunning:e.target.value}))}>
             <option value="">-- Select Mould --</option>
-            {MOULDS.map((m:any)=><option key={m.code} value={`${m.name} (${m.code})`}>{m.name} ({m.code})</option>)}
+            {MOULDS.map(m=><option key={m.code} value={`${m.name} (${m.code})`}>{m.name} ({m.code})</option>)}
           </select>
         </div>
       </div>
@@ -2886,7 +2886,7 @@ function DispatchTab({user}:{user:User}) {
       <div style={S.f}>
         <label style={S.lbl}>Party / Customer Name</label>
         <input style={S.fi} value={customer} onChange={e=>setCustomer(e.target.value)} placeholder="Party naam..." list="party-list"/>
-        <datalist id="party-list">{parties.map((p:any)=><option key={p.party_name} value={p.party_name}/>)}</datalist>
+        <datalist id="party-list">{parties.map(p=><option key={p.party_name} value={p.party_name}/>)}</datalist>
       </div>
       <div style={S.fr}>
         <div style={S.f}><label style={S.lbl}>Vehicle No.</label><input style={S.fi} value={vehicleNo} onChange={e=>setVehicleNo(e.target.value)} placeholder="e.g. DL 1C 1234"/></div>
@@ -3044,7 +3044,7 @@ function SparesTab({user}:{user:User}) {
         {key:'entry',label:'➕ Entry',color:'#276221',bg:'#E8F5E9'},
         {key:'stock',label:'📦 Stock Status',color:'#1F3864',bg:'#E8EDF5'},
         {key:'movements',label:'🔄 Movements',color:'#854F0B',bg:'#FFF9E6'},
-      ].map((t:any)=><button key={t.key} onClick={()=>setSpareView(t.key as any)}
+      ].map(t=><button key={t.key} onClick={()=>setSpareView(t.key as any)}
         style={{flex:1,padding:'10px 6px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
           background:spareView===t.key?t.color:'#F5F5F5',
           color:spareView===t.key?'#fff':t.color,
@@ -3061,49 +3061,49 @@ function SparesTab({user}:{user:User}) {
             <div style={{fontWeight:700,color:'#1F3864',fontSize:14,marginBottom:12}}>✏️ Edit Spare — {editSpare.part_name}</div>
             
             <div style={S.f}><label style={S.lbl}>Part Name</label>
-              <input style={S.fi} value={editForm.part_name||''} onChange={e=>setEditForm((p:any)=>({...p,part_name:e.target.value}))}/>
+              <input style={S.fi} value={editForm.part_name||''} onChange={e=>setEditForm(p=>({...p,part_name:e.target.value}))}/>
             </div>
             <div style={S.f}><label style={S.lbl}>Category</label>
-              <select style={S.fi} value={editForm.category||''} onChange={e=>setEditForm((p:any)=>({...p,category:e.target.value}))}>
+              <select style={S.fi} value={editForm.category||''} onChange={e=>setEditForm(p=>({...p,category:e.target.value}))}>
                 <option value="">-- Select --</option>
                 {['Mould — Lock & Fasteners','Mould — Cooling System','Mould — Plate & Body','Mould — Core & Cavity','Mould — Ejector System','Mould — Hot Runner','Mould — Slider & Lifter','Mould — Gas Vent & Seal','Mould — Maintenance','Machine — Heating & Barrel','Machine — Hydraulic','Machine — Electrical','Machine — Clamping','Machine — Injection Unit','Machine — Cooling & Chiller','Machine — Pneumatic','Machine — Lubrication','Machine — Safety & Sensors','Machine — Drive & Motion','General — Tools','General — Consumables'].map(c=><option key={c}>{c}</option>)}
               </select>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
               <div style={S.f}><label style={S.lbl}>Current Stock</label>
-                <input type="number" style={S.fi} value={editForm.current_stock||0} onChange={e=>setEditForm((p:any)=>({...p,current_stock:e.target.value}))}/>
+                <input type="number" style={S.fi} value={editForm.current_stock||0} onChange={e=>setEditForm(p=>({...p,current_stock:e.target.value}))}/>
               </div>
               <div style={S.f}><label style={S.lbl}>Min Qty (Alert)</label>
-                <input type="number" style={S.fi} value={editForm.min_qty||0} onChange={e=>setEditForm((p:any)=>({...p,min_qty:e.target.value}))}/>
+                <input type="number" style={S.fi} value={editForm.min_qty||0} onChange={e=>setEditForm(p=>({...p,min_qty:e.target.value}))}/>
               </div>
               <div style={S.f}><label style={S.lbl}>Unit</label>
-                <select style={S.fi} value={editForm.unit||'Pcs'} onChange={e=>setEditForm((p:any)=>({...p,unit:e.target.value}))}>
+                <select style={S.fi} value={editForm.unit||'Pcs'} onChange={e=>setEditForm(p=>({...p,unit:e.target.value}))}>
                   <option>Pcs</option><option>Set</option><option>Kg</option><option>Ltr</option><option>Mtr</option><option>Box</option>
                 </select>
               </div>
               <div style={S.f}><label style={S.lbl}>Last Price (₹)</label>
-                <input type="number" style={S.fi} value={editForm.last_price||0} onChange={e=>setEditForm((p:any)=>({...p,last_price:e.target.value}))}/>
+                <input type="number" style={S.fi} value={editForm.last_price||0} onChange={e=>setEditForm(p=>({...p,last_price:e.target.value}))}/>
               </div>
             </div>
             <div style={S.f}><label style={S.lbl}>Last Vendor</label>
-              <input style={S.fi} value={editForm.last_vendor||''} onChange={e=>setEditForm((p:any)=>({...p,last_vendor:e.target.value}))}/>
+              <input style={S.fi} value={editForm.last_vendor||''} onChange={e=>setEditForm(p=>({...p,last_vendor:e.target.value}))}/>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
               <div style={S.f}><label style={S.lbl}>Plant</label>
-                <select style={S.fi} value={editForm.plant||''} onChange={e=>setEditForm((p:any)=>({...p,plant:e.target.value}))}>
+                <select style={S.fi} value={editForm.plant||''} onChange={e=>setEditForm(p=>({...p,plant:e.target.value}))}>
                   <option value="">Select</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option><option>Main Store</option>
                 </select>
               </div>
               <div style={S.f}><label style={S.lbl}>Room</label>
-                <select style={S.fi} value={editForm.room||''} onChange={e=>setEditForm((p:any)=>({...p,room:e.target.value}))}>
+                <select style={S.fi} value={editForm.room||''} onChange={e=>setEditForm(p=>({...p,room:e.target.value}))}>
                   <option value="">Select</option><option>Tool Room</option><option>Maintenance Room</option><option>Store Room</option><option>Production Floor</option>
                 </select>
               </div>
               <div style={S.f}><label style={S.lbl}>Almirah/Rack</label>
-                <input style={S.fi} value={editForm.almirah||''} onChange={e=>setEditForm((p:any)=>({...p,almirah:e.target.value}))} placeholder="e.g. A1"/>
+                <input style={S.fi} value={editForm.almirah||''} onChange={e=>setEditForm(p=>({...p,almirah:e.target.value}))} placeholder="e.g. A1"/>
               </div>
               <div style={S.f}><label style={S.lbl}>Box No.</label>
-                <input style={S.fi} value={editForm.box_no||''} onChange={e=>setEditForm((p:any)=>({...p,box_no:e.target.value}))} placeholder="e.g. Box-5"/>
+                <input style={S.fi} value={editForm.box_no||''} onChange={e=>setEditForm(p=>({...p,box_no:e.target.value}))} placeholder="e.g. Box-5"/>
               </div>
             </div>
             
@@ -3231,7 +3231,7 @@ function SparesTab({user}:{user:User}) {
           {(usedFor==='Mould'||usedFor==='Both')&&<div style={S.f}><label style={S.lbl}>Mould (Job No / Name)</label>
             <select style={S.fi} value={usedForMould} onChange={e=>setUsedForMould(e.target.value)}>
               <option value="">-- Select Mould --</option>
-              {MOULDS.map((m:any)=><option key={m.code} value={`${m.name} (${m.code})`}>{m.name} ({m.code})</option>)}
+              {MOULDS.map(m=><option key={m.code} value={`${m.name} (${m.code})`}>{m.name} ({m.code})</option>)}
             </select>
           </div>}
         </div>
@@ -3650,7 +3650,7 @@ function SalesTab({user}:{user:User}) {
     <div style={S.fr}>
       <div style={S.f}><label style={S.lbl}>Customer</label>
         <input style={S.fi} value={form.customer} onChange={e=>setForm(p=>({...p,customer:e.target.value}))} placeholder="Party naam..." list="sales-party-list"/>
-        <datalist id="sales-party-list">{parties.map((p:any)=><option key={p.name} value={p.name}/>)}</datalist>
+        <datalist id="sales-party-list">{parties.map(p=><option key={p.name} value={p.name}/>)}</datalist>
       </div>
       <div style={S.f}><label style={S.lbl}>Source</label>
         <select style={S.fi} value={form.source} onChange={e=>setForm(p=>({...p,source:e.target.value}))}>
@@ -4207,8 +4207,8 @@ function MISComparisonSection() {
 
     if (compareType === 'shift') {
       // Split by shift from r1
-      const dayData = (r1.data||[]).filter((r:any)=>r.shift?.includes('Day'))
-      const nightData = (r1.data||[]).filter((r:any)=>r.shift?.includes('Night'))
+      const dayData = (r1.data||[]).filter(r=>r.shift?.includes('Day'))
+      const nightData = (r1.data||[]).filter(r=>r.shift?.includes('Night'))
       const calcSummary = (rows:any[]) => ({
         good: rows.reduce((a:number,r:any)=>a+(r.good_parts||0),0),
         rej: rows.reduce((a:number,r:any)=>a+(r.rejection||0),0),
@@ -4230,8 +4230,8 @@ function MISComparisonSection() {
       const plants = ['Plant 477','Plant 488','Plant 433']
       const byPlant = plants.map(p => ({
         plant: p,
-        p1: calcSummary((r1.data||[]).filter((r:any)=>r.plant===p)),
-        p2: calcSummary((r2?.data||[]).filter((r:any)=>r.plant===p))
+        p1: calcSummary((r1.data||[]).filter(r=>r.plant===p)),
+        p2: calcSummary((r2?.data||[]).filter(r=>r.plant===p))
       }))
 
       setData({ p1Label, p2Label, s1, s2, byPlant })
@@ -4413,7 +4413,7 @@ function MISPivotSection() {
     const colVals=new Set<string>()
     const pivot:Record<string,Record<string,number>>={}
 
-    records.forEach((r:any)=>{
+    records.forEach(r=>{
       const rowKey=rowBy==='machine'?r.machine:rowBy==='plant'?r.plant:rowBy==='product'?r.product:rowBy==='shift'?(r.shift?.includes('Day')?'Day':'Night'):r.operator||''
       const colKey=colBy==='date'?r.date:colBy==='plant'?r.plant:colBy==='shift'?(r.shift?.includes('Day')?'Day':'Night'):colBy==='machine'?r.machine:r.product||''
       const val=metric==='good'?r.good_parts||0:metric==='rej'?r.rejection||0:metric==='down'?r.downtime||0:r.good_parts||0
@@ -5163,7 +5163,7 @@ function BulkProductionTab({user}:{user:User}) {
     if(!usePlant||!useDate) return
     const res=await fetch(`/api/production?date=${useDate}&plant=${encodeURIComponent(usePlant)}`).then(r=>r.json())
     // Filter strictly by plant
-    setHistory((res.data||[]).filter((e:any)=>e.plant===usePlant))
+    setHistory((res.data||[]).filter(e=>e.plant===usePlant))
   }
 
   useEffect(()=>{
@@ -5270,7 +5270,7 @@ function BulkProductionTab({user}:{user:User}) {
       }
 
       // 4. Product different from setup
-      const setupEntry=machineSetup.find((m:any)=>m.machine===e.machine)
+      const setupEntry=machineSetup.find(m=>m.machine===e.machine)
       if(setupEntry&&setupEntry.product&&e.product&&setupEntry.product!==e.product&&!e.isMC){
         warnings.push(`${e.machine}: Product alag hai! Setup: "${setupEntry.product}" → Entry: "${e.product}"`)
       }
@@ -5319,7 +5319,7 @@ function BulkProductionTab({user}:{user:User}) {
     setToast({msg:res.msg,ok:res.success})
     if(res.success){
       // Auto save mould change for MC entries
-      const mcEntries=filledEntries.filter((e:any)=>e.isMC&&e.oldMould&&e.mould)
+      const mcEntries=filledEntries.filter(e=>e.isMC&&e.oldMould&&e.mould)
       for(const mc of mcEntries){
         const mcRes=await fetch('/api/mouldchange',{
           method:'POST',headers:{'Content-Type':'application/json'},
@@ -5605,9 +5605,9 @@ function BulkProductionTab({user}:{user:User}) {
               <td style={{padding:'6px 8px',fontSize:10}}>{h.product}</td>
               <td style={{padding:'6px 8px'}}><span style={{background:'#E6F1FB',color:'#1F3864',padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:600}}>{slotName}</span></td>
               {isEditing?<>
-                <td style={{padding:2}}><input type="number" value={editVals.good} onChange={e=>setEditVals((p:any)=>({...p,good:e.target.value}))} style={{width:70,padding:'4px',border:'2px solid #276221',borderRadius:4,textAlign:'center',fontSize:12,fontWeight:700}}/></td>
-                <td style={{padding:2}}><input type="number" value={editVals.rejection} onChange={e=>setEditVals((p:any)=>({...p,rejection:e.target.value}))} style={{width:60,padding:'4px',border:'2px solid #C00000',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
-                <td style={{padding:2}}><input type="number" value={editVals.down} onChange={e=>setEditVals((p:any)=>({...p,down:e.target.value}))} style={{width:55,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
+                <td style={{padding:2}}><input type="number" value={editVals.good} onChange={e=>setEditVals(p=>({...p,good:e.target.value}))} style={{width:70,padding:'4px',border:'2px solid #276221',borderRadius:4,textAlign:'center',fontSize:12,fontWeight:700}}/></td>
+                <td style={{padding:2}}><input type="number" value={editVals.rejection} onChange={e=>setEditVals(p=>({...p,rejection:e.target.value}))} style={{width:60,padding:'4px',border:'2px solid #C00000',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
+                <td style={{padding:2}}><input type="number" value={editVals.down} onChange={e=>setEditVals(p=>({...p,down:e.target.value}))} style={{width:55,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
                 <td style={{padding:'6px 8px',fontSize:10}}>{h.entered_by}</td>
                 <td style={{padding:4,display:'flex',gap:4}}>
                   <button onClick={()=>saveEdit(h)} style={{background:'#276221',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',fontSize:10,cursor:'pointer',fontWeight:700}}>Save</button>
@@ -5686,7 +5686,7 @@ function KRAReport({user}:{user:User}) {
     const isPlantHead=selectedUser==='Ranjan Kumar'
     const myProd=isPlantHead
       ? (prodRes.data||[]) // All entries
-      : (prodRes.data||[]).filter((e:any)=>
+      : (prodRes.data||[]).filter(e=>
           e.entered_by===selectedUser||
           e.operator===selectedUser||
           e.operator2===selectedUser||  // Helper bhi counted
@@ -5703,7 +5703,7 @@ function KRAReport({user}:{user:User}) {
     const prevProdRes=await fetch(`/api/production?from=${prevWeek.from}&to=${prevWeek.to}`).then(r=>r.json())
     const prevProd=isPlantHead
       ? (prevProdRes.data||[])
-      : (prevProdRes.data||[]).filter((e:any)=>
+      : (prevProdRes.data||[]).filter(e=>
           e.entered_by===selectedUser||e.operator===selectedUser||e.operator2===selectedUser
         )
     const prevGood=prevProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
@@ -5713,28 +5713,28 @@ function KRAReport({user}:{user:User}) {
     // Rejection stats
     const myRej=isPlantHead
       ? (rejRes.data||[])
-      : (rejRes.data||[]).filter((e:any)=>e.operator===selectedUser||e.entered_by===selectedUser)
+      : (rejRes.data||[]).filter(e=>e.operator===selectedUser||e.entered_by===selectedUser)
     const rejQty=myRej.reduce((a:number,e:any)=>a+(e.rejection_qty||0),0)
 
     // Breakdown stats
     const myBd=isPlantHead
       ? (bdRes.data||[])
-      : (bdRes.data||[]).filter((e:any)=>e.entered_by===selectedUser||e.operator_name===selectedUser)
-    const bdResolved=myBd.filter((e:any)=>e.status==='Resolved').length
-    const avgBdTime=myBd.filter((e:any)=>e.total_minutes>0).length>0
-      ?Math.round(myBd.filter((e:any)=>e.total_minutes>0).reduce((a:number,e:any)=>a+(e.downtime_min||0),0)/myBd.filter((e:any)=>e.total_minutes>0).length):0
+      : (bdRes.data||[]).filter(e=>e.entered_by===selectedUser||e.operator_name===selectedUser)
+    const bdResolved=myBd.filter(e=>e.status==='Resolved').length
+    const avgBdTime=myBd.filter(e=>e.total_minutes>0).length>0
+      ?Math.round(myBd.filter(e=>e.total_minutes>0).reduce((a:number,e:any)=>a+(e.downtime_min||0),0)/myBd.filter(e=>e.total_minutes>0).length):0
 
     // Mould change stats
     const myMC=isPlantHead
       ? (mcRes.data||[])
-      : (mcRes.data||[]).filter((e:any)=>
+      : (mcRes.data||[]).filter(e=>
           e.entered_by===selectedUser||e.operator_name===selectedUser
         )
-    const mcCount=myMC.filter((e:any)=>e.status==='complete').length
-    const avgMCTime=myMC.filter((e:any)=>e.total_minutes>0).length>0
-      ?Math.round(myMC.filter((e:any)=>e.total_minutes>0).reduce((a:number,e:any)=>a+(e.total_minutes||0),0)/myMC.filter((e:any)=>e.total_minutes>0).length):0
-    const bestMCTime=myMC.filter((e:any)=>e.total_minutes>0).length>0
-      ?Math.min(...myMC.filter((e:any)=>e.total_minutes>0).map((e:any)=>e.total_minutes)):0
+    const mcCount=myMC.filter(e=>e.status==='complete').length
+    const avgMCTime=myMC.filter(e=>e.total_minutes>0).length>0
+      ?Math.round(myMC.filter(e=>e.total_minutes>0).reduce((a:number,e:any)=>a+(e.total_minutes||0),0)/myMC.filter(e=>e.total_minutes>0).length):0
+    const bestMCTime=myMC.filter(e=>e.total_minutes>0).length>0
+      ?Math.min(...myMC.filter(e=>e.total_minutes>0).map(e=>e.total_minutes)):0
 
     setData({
       totalGood,totalRej,totalDown,shifts,eff,
@@ -5932,7 +5932,7 @@ function KRAReport({user}:{user:User}) {
               {['Date','Machine','Old→New','Time','vs Best','Result'].map(h=>
                 <th key={h} style={{background:'#5B2C8D',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
             </tr></thead>
-            <tbody>{data.myMC.filter((m:any)=>m.status==='complete').map((m:any,i:number)=>{
+            <tbody>{data.myMC.filter(m=>m.status==='complete').map((m:any,i:number)=>{
               const isBest=m.total_minutes===data.bestMCTime
               const isOver=m.total_minutes>data.avgMCTime
               return <tr key={i} style={{background:i%2===0?'#F8F5FF':'#fff'}}>
@@ -6051,8 +6051,8 @@ function MISDashboard() {
     const overallEff=totalGood+totalRej>0?Math.round(totalGood/(totalGood+totalRej)*100*100)/100:0
 
     // Day vs Night
-    const dayProd=prod.filter((e:any)=>e.shift?.toLowerCase().includes('day'))
-    const nightProd=prod.filter((e:any)=>e.shift?.toLowerCase().includes('night'))
+    const dayProd=prod.filter(e=>e.shift?.toLowerCase().includes('day'))
+    const nightProd=prod.filter(e=>e.shift?.toLowerCase().includes('night'))
     const dayGood=dayProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
     const dayRej=dayProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
     const dayDown=dayProd.reduce((a:number,e:any)=>a+(e.downtime||0),0)
@@ -6065,9 +6065,9 @@ function MISDashboard() {
     const nightEff=nightGood+nightRej>0?Math.round(nightGood/(nightGood+nightRej)*100*100)/100:0
 
     // Machine wise
-    const allMachines=prod.map((e:any)=>e.machine).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
+    const allMachines=prod.map(e=>e.machine).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
     const machineData=allMachines.map((machine:string)=>{
-      const mp=prod.filter((e:any)=>e.machine===machine)
+      const mp=prod.filter(e=>e.machine===machine)
       const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
       const rej=mp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
       const down=mp.reduce((a:number,e:any)=>a+(e.downtime||0),0)
@@ -6078,14 +6078,14 @@ function MISDashboard() {
       const shifts=mp.length
       const status=rejRate<=0.5?'✅ Excellent':rejRate<=1?'⚠️ Monitor':'❌ Action'
       return {machine,plant,product,good,rej,down,eff,rejRate,shifts,status}
-    }).sort((a:any,b:any)=>b.good-a.good)
+    }).sort((a,b)=>b.good-a.good)
 
     // Operator wise
-    const allOps=prod.map((e:any)=>e.entered_by||e.operator).filter(Boolean).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
+    const allOps=prod.map(e=>e.entered_by||e.operator).filter(Boolean).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
     const operatorData=allOps.map((op:string)=>{
-      const dayP=prod.filter((e:any)=>(e.entered_by===op||e.operator===op)&&e.shift?.toLowerCase().includes('day'))
-      const nightP=prod.filter((e:any)=>(e.entered_by===op||e.operator===op)&&e.shift?.toLowerCase().includes('night'))
-      const allP=prod.filter((e:any)=>e.entered_by===op||e.operator===op)
+      const dayP=prod.filter(e=>(e.entered_by===op||e.operator===op)&&e.shift?.toLowerCase().includes('day'))
+      const nightP=prod.filter(e=>(e.entered_by===op||e.operator===op)&&e.shift?.toLowerCase().includes('night'))
+      const allP=prod.filter(e=>e.entered_by===op||e.operator===op)
       const good=allP.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
       const rej=allP.reduce((a:number,e:any)=>a+(e.rejection||0),0)
       const down=allP.reduce((a:number,e:any)=>a+(e.downtime||0),0)
@@ -6096,13 +6096,13 @@ function MISDashboard() {
       const qualGrade=rejRate<=0.1?'A+':rejRate<=0.3?'A':rejRate<=0.5?'B':'C'
       const overall=volGrade==='A+'&&qualGrade==='A+'?'A+':volGrade>='A'&&qualGrade>='A'?'A':volGrade>='B'&&qualGrade>='B'?'B':'C'
       return {op,good,rej,down,eff,rejRate,shifts,volGrade,qualGrade,overall,dayShifts:dayP.length,nightShifts:nightP.length}
-    }).sort((a:any,b:any)=>b.good-a.good)
+    }).sort((a,b)=>b.good-a.good)
 
     // Date wise
-    const dates:string[]=prod.map((e:any)=>e.date).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i).sort()
+    const dates:string[]=prod.map(e=>e.date).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i).sort()
     const dateData=dates.map((date:string)=>{
-      const dp=prod.filter((e:any)=>e.date===date&&e.shift?.toLowerCase().includes('day'))
-      const np=prod.filter((e:any)=>e.date===date&&e.shift?.toLowerCase().includes('night'))
+      const dp=prod.filter(e=>e.date===date&&e.shift?.toLowerCase().includes('day'))
+      const np=prod.filter(e=>e.date===date&&e.shift?.toLowerCase().includes('night'))
       const dg=dp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
       const dr=dp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
       const dd=dp.reduce((a:number,e:any)=>a+(e.downtime||0),0)
@@ -6123,7 +6123,7 @@ function MISDashboard() {
       {kra:'KRA 4: Downtime Control',value:`${totalDown} min`,target:'≤ 500 min/week',status:totalDown<=500?'achieved':totalDown<=1000?'monitor':'action'},
       {kra:'KRA 5: Day Shift Quality',value:`${dayRejRate}%`,target:'≤ 0.3%',status:dayRejRate<=0.3?'achieved':dayRejRate<=0.5?'monitor':'action'},
       {kra:'KRA 6: Night Shift Quality',value:`${nightRejRate}%`,target:'≤ 0.3%',status:nightRejRate<=0.3?'achieved':nightRejRate<=0.5?'monitor':'action'},
-      {kra:'KRA 7: Breakdown Resolved',value:`${bd.filter((b:any)=>b.status==='Resolved').length}/${bd.length}`,target:'100% resolved',status:bd.length===0||bd.every((b:any)=>b.status==='Resolved')?'achieved':bd.filter((b:any)=>b.status==='Resolved').length/bd.length>=0.8?'monitor':'action'},
+      {kra:'KRA 7: Breakdown Resolved',value:`${bd.filter(b=>b.status==='Resolved').length}/${bd.length}`,target:'100% resolved',status:bd.length===0||bd.every(b=>b.status==='Resolved')?'achieved':bd.filter(b=>b.status==='Resolved').length/bd.length>=0.8?'monitor':'action'},
     ]
 
     setData({totalGood,totalRej,totalDown,overallEff,dayGood,dayRej,dayDown,dayRejRate,dayEff,nightGood,nightRej,nightDown,nightRejRate,nightEff,machineData,operatorData,dateData,kras,bd,mc})
@@ -6319,7 +6319,7 @@ function MISDashboard() {
       {/* KRA TAB */}
       {activeTab==='kra'&&<div style={S.card}>
         <div style={{fontWeight:700,color:'#1F3864',marginBottom:10,fontSize:13}}>🎯 Key Result Areas (KRA) — Plant Level</div>
-        {data.kras.map((k:any,i:number)=><div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',marginBottom:6,background:statusBg(k.status),border:`1px solid ${statusCol(k.status)}33`,borderRadius:8}}>
+        {data.kras.map((k,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',marginBottom:6,background:statusBg(k.status),border:`1px solid ${statusCol(k.status)}33`,borderRadius:8}}>
           <div>
             <div style={{fontWeight:700,fontSize:12,color:'#1F3864'}}>{k.kra}</div>
             <div style={{fontSize:11,color:'#666',marginTop:2}}>Target: {k.target}</div>
@@ -6378,28 +6378,28 @@ function DailyReportTab({user}:{user:User}) {
   const totalRej=data?.prod?.reduce((a:number,e:any)=>a+(e.rejection||0),0)||0
   const totalDown=data?.prod?.reduce((a:number,e:any)=>a+(e.downtime||0),0)||0
   const eff=totalGood+totalRej>0?Math.round(totalGood/(totalGood+totalRej)*100*10)/10:0
-  const dayProd=data?.prod?.filter((e:any)=>e.shift?.toLowerCase().includes('day'))||[]
-  const nightProd=data?.prod?.filter((e:any)=>e.shift?.toLowerCase().includes('night'))||[]
+  const dayProd=data?.prod?.filter(e=>e.shift?.toLowerCase().includes('day'))||[]
+  const nightProd=data?.prod?.filter(e=>e.shift?.toLowerCase().includes('night'))||[]
   const dayGood=dayProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
   const nightGood=nightProd.reduce((a:number,e:any)=>a+(e.rejection||0),0)
-  const pendingBd=data?.bd?.filter((b:any)=>b.status!=='Resolved')||[]
-  const resolvedBd=data?.bd?.filter((b:any)=>b.status==='Resolved')||[]
-  const mcDone=data?.mc?.filter((m:any)=>m.status==='complete')||[]
-  const mcInProgress=data?.mc?.filter((m:any)=>m.status==='in_progress')||[]
+  const pendingBd=data?.bd?.filter(b=>b.status!=='Resolved')||[]
+  const resolvedBd=data?.bd?.filter(b=>b.status==='Resolved')||[]
+  const mcDone=data?.mc?.filter(m=>m.status==='complete')||[]
+  const mcInProgress=data?.mc?.filter(m=>m.status==='in_progress')||[]
   const sparesIn=data?.spares?.filter((s:any)=>s.action==='Stock In')||[]
   const sparesOut=data?.spares?.filter((s:any)=>s.action!=='Stock In')||[]
 
   // Machine wise production
-  const machines=(data?.prod||[]).map((e:any)=>e.machine).filter(Boolean).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
+  const machines=(data?.prod||[]).map(e=>e.machine).filter(Boolean).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
   const machineStats=machines.map((m:string)=>{
-    const mp=(data?.prod||[]).filter((e:any)=>e.machine===m)
+    const mp=(data?.prod||[]).filter(e=>e.machine===m)
     const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
     const rej=mp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
     const down=mp.reduce((a:number,e:any)=>a+(e.downtime||0),0)
     const eff=good+rej>0?Math.round(good/(good+rej)*100):0
-    const remarks=mp.map((e:any)=>e.remarks).filter(Boolean).join(' | ')
+    const remarks=mp.map(e=>e.remarks).filter(Boolean).join(' | ')
     return {machine:m,good,rej,down,eff,product:mp[mp.length-1]?.product||'',shift:mp[0]?.shift||'',remarks}
-  }).sort((a:any,b:any)=>b.good-a.good)
+  }).sort((a,b)=>b.good-a.good)
 
   // Simple SVG pie chart
   const PieChart=({good,rej}:{good:number,rej:number})=>{
@@ -6525,7 +6525,7 @@ function DailyReportTab({user}:{user:User}) {
             </tr></thead>
             <tbody>{(()=>{
               const byMachine:(typeof machineStats[0]&{shift:string,product:string})[]=[]
-              data.prod.forEach((e:any)=>{
+              data.prod.forEach(e=>{
                 const eff=e.good_parts+e.rejection>0?Math.round(e.good_parts/(e.good_parts+e.rejection)*100):0
                 byMachine.push({machine:e.machine,good:e.good_parts,rej:e.rejection,eff,shift:e.shift,product:e.product})
               })
@@ -6708,12 +6708,12 @@ function MouldHistoryTab() {
   const [changeForm,setChangeForm]=useState<any>({reason:'',changed_by:'',changed_date:nd(),shots_at_change:'',new_spec:'',remarks:''})
   const [partSaving,setPartSaving]=useState(false)
 
-  const filteredMoulds = MOULDS.filter((m:any)=>
+  const filteredMoulds = MOULDS.filter(m=>
     !search ? false
       : m.name.toLowerCase().includes(search.toLowerCase()) || m.code.includes(search)
   )
 
-  const loadHistory=async(mould:any)=>{
+  const loadHistory=async(mould)=>{
     setSelected(mould)
     setLoading(true)
     setHistory([])
@@ -6722,7 +6722,7 @@ function MouldHistoryTab() {
     setSearch('')
     setMainTab('history')
     setPartsLoading(true)
-    fetch('/api/mouldparts?job_no='+mould.code).then((r:any)=>r.json()).then((d:any)=>{
+    fetch('/api/mouldparts?job_no='+mould.code).then(r=>r.json()).then(d=>{
       setParts(d.parts||[])
       setPartChanges(d.changes||[])
       setPartsLoading(false)
@@ -6730,16 +6730,16 @@ function MouldHistoryTab() {
 
     try {
       const [histRes,pmRes,bdRes] = await Promise.all([
-        fetch('/api/mouldhistory?job_no='+mould.code).then((r:any)=>r.json()).catch(()=>[]),
-        fetch('/api/mouldpm').then((r:any)=>r.json()).catch(()=>({data:[]})),
-        fetch('/api/breakdown').then((r:any)=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/mouldhistory?job_no='+mould.code).then(r=>r.json()).catch(()=>[]),
+        fetch('/api/mouldpm').then(r=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/breakdown').then(r=>r.json()).catch(()=>({data:[]})),
       ])
 
-      const logbookRows:any[] = Array.isArray(histRes) ? histRes : (histRes?.data||[])
+      const logbookRows = Array.isArray(histRes) ? histRes : (histRes?.data||[])
 
       const livePM = (pmRes.data||[])
-        .filter((p:any)=>p.mould_code===mould.code||p.mould?.includes(mould.code))
-        .map((p:any)=>({
+        .filter(p=>p.mould_code===mould.code||p.mould?.includes(mould.code))
+        .map(p=>({
           id:'live_pm_'+p.id,
           record_date:p.date||p.pm_date||'',
           record_type:'PM',
@@ -6754,8 +6754,8 @@ function MouldHistoryTab() {
 
       const mouldNameShort = mould.name.toLowerCase().slice(0,8)
       const liveBD = (bdRes.data||[])
-        .filter((b:any)=>b.mould?.includes(mould.code)||b.problem?.toLowerCase().includes(mouldNameShort))
-        .map((b:any)=>({
+        .filter(b=>b.mould?.includes(mould.code)||b.problem?.toLowerCase().includes(mouldNameShort))
+        .map(b=>({
           id:'live_bd_'+b.id,
           record_date:b.date||'',
           record_type:'BD',
@@ -6768,16 +6768,16 @@ function MouldHistoryTab() {
           _live:true
         }))
 
-      const allRows = [...logbookRows,...livePM,...liveBD].sort((a:any,b:any)=>{
+      const allRows = [...logbookRows,...livePM,...liveBD].sort((a,b)=>{
         const da=new Date(a.record_date||'1900-01-01').getTime()
         const db=new Date(b.record_date||'1900-01-01').getTime()
         return da-db
       })
 
-      const pmRows=allRows.filter((r:any)=>r.record_type==='PM')
-      const bdRows=allRows.filter((r:any)=>r.record_type==='BD')
-      const rmRows=allRows.filter((r:any)=>r.record_type==='RM')
-      const mcRows=allRows.filter((r:any)=>r.record_type==='MC')
+      const pmRows=allRows.filter(r=>r.record_type==='PM')
+      const bdRows=allRows.filter(r=>r.record_type==='BD')
+      const rmRows=allRows.filter(r=>r.record_type==='RM')
+      const mcRows=allRows.filter(r=>r.record_type==='MC')
 
       setStats({
         total:allRows.length,
@@ -6797,9 +6797,9 @@ function MouldHistoryTab() {
     setLoading(false)
   }
 
-  const shownHistory = activeTab==='all' ? history : history.filter((r:any)=>r.record_type===activeTab)
+  const shownHistory = activeTab==='all' ? history : history.filter(r=>r.record_type===activeTab)
 
-  const typeCfg:any = {
+  const typeCfg = {
     PM:{color:'#276221',bg:'#E8F5E9',border:'#276221',icon:'🟢'},
     BD:{color:'#C00000',bg:'#FFEBEE',border:'#C00000',icon:'🔴'},
     RM:{color:'#555555',bg:'#F5F5F5',border:'#AAAAAA',icon:'⚪'},
@@ -6809,15 +6809,15 @@ function MouldHistoryTab() {
   return <div>
     <div style={S.card}>
       <div style={{fontWeight:700,color:'#1F3864',fontSize:14,marginBottom:8}}>🔍 Mould History — Logbook (2022–2026)</div>
-      <input style={{...S.fi,marginBottom:4}} value={search} onChange={(e:any)=>setSearch(e.target.value)}
+      <input style={{...S.fi,marginBottom:4}} value={search} onChange={e=>setSearch(e.target.value)}
         placeholder="Job No ya naam type karo — e.g. 6374 ya 750ml Tub" autoComplete="off"/>
       {search.length>0&&<div style={{border:'1px solid #ddd',borderRadius:8,background:'#fff',maxHeight:200,overflowY:'auto',marginTop:2}}>
         {filteredMoulds.length===0
           ? <div style={{padding:'10px 14px',color:'#888',fontSize:12}}>Koi mould nahi mila</div>
-          : filteredMoulds.map((m:any)=><div key={m.code} onClick={()=>loadHistory(m)}
+          : filteredMoulds.map(m=><div key={m.code} onClick={()=>loadHistory(m)}
               style={{padding:'9px 14px',cursor:'pointer',borderBottom:'1px solid #F5F5F5',fontSize:12,display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fff'}}
-              onMouseEnter={(e:any)=>(e.currentTarget.style.background='#EEF4FF')}
-              onMouseLeave={(e:any)=>(e.currentTarget.style.background='#fff')}>
+              onMouseEnter={e=>(e.currentTarget.style.background='#EEF4FF')}
+              onMouseLeave={e=>(e.currentTarget.style.background='#fff')}>
               <span style={{fontWeight:600,color:'#1F3864'}}>{m.name}</span>
               <span style={{color:'#888',fontSize:11,background:'#F0F0F0',padding:'2px 8px',borderRadius:4}}>#{m.code}</span>
             </div>)
@@ -6839,7 +6839,7 @@ function MouldHistoryTab() {
         <div style={{fontSize:17,fontWeight:700,marginBottom:2}}>⚙️ {selected?.name}</div>
         <div style={{fontSize:11,opacity:0.75,marginBottom:12}}>Job No: #{selected?.code} | {stats.firstDate} → {stats.lastDate}</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6}}>
-          {[{icon:'📋',label:'Total',val:stats.total},{icon:'🟢',label:'PM',val:stats.pmCount},{icon:'🔴',label:'Breakdown',val:stats.bdCount},{icon:'⚪',label:'Routine',val:stats.rmCount},{icon:'🟡',label:'MC',val:stats.mcCount}].map((k:any,i:number)=><div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
+          {[{icon:'📋',label:'Total',val:stats.total},{icon:'🟢',label:'PM',val:stats.pmCount},{icon:'🔴',label:'Breakdown',val:stats.bdCount},{icon:'⚪',label:'Routine',val:stats.rmCount},{icon:'🟡',label:'MC',val:stats.mcCount}].map((k,i)=><div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
             <div style={{fontSize:13}}>{k.icon}</div>
             <div style={{fontSize:20,fontWeight:700}}>{k.val}</div>
             <div style={{fontSize:9,opacity:0.8}}>{k.label}</div>
@@ -6862,30 +6862,30 @@ function MouldHistoryTab() {
           <div style={{fontWeight:700,color:'#854F0B',fontSize:12,marginBottom:10}}>🔩 Naya Part Add Karo</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <div style={S.f}><label style={S.lbl}>Part Type</label>
-              <select style={S.fi} value={partForm.part_type} onChange={(e:any)=>setPartForm((p:any)=>({...p,part_type:e.target.value}))}>
-                {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map((t:any)=><option key={t}>{t}</option>)}
+              <select style={S.fi} value={partForm.part_type} onChange={e=>setPartForm(p=>({...p,part_type:e.target.value}))}>
+                {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map(t=><option key={t}>{t}</option>)}
               </select>
             </div>
             <div style={S.f}><label style={S.lbl}>Part Name</label>
-              <input style={S.fi} value={partForm.part_name} onChange={(e:any)=>setPartForm((p:any)=>({...p,part_name:e.target.value}))} placeholder="e.g. Water Nipple 1/4 inch"/>
+              <input style={S.fi} value={partForm.part_name} onChange={e=>setPartForm(p=>({...p,part_name:e.target.value}))} placeholder="e.g. Water Nipple 1/4 inch"/>
             </div>
             <div style={S.f}><label style={S.lbl}>Size / Spec</label>
-              <input style={S.fi} value={partForm.size_spec} onChange={(e:any)=>setPartForm((p:any)=>({...p,size_spec:e.target.value}))} placeholder="e.g. M6x20, 500W 240V"/>
+              <input style={S.fi} value={partForm.size_spec} onChange={e=>setPartForm(p=>({...p,size_spec:e.target.value}))} placeholder="e.g. M6x20, 500W 240V"/>
             </div>
             <div style={S.f}><label style={S.lbl}>Qty Installed</label>
-              <input type="number" style={S.fi} value={partForm.qty_installed} onChange={(e:any)=>setPartForm((p:any)=>({...p,qty_installed:e.target.value}))} min="1"/>
+              <input type="number" style={S.fi} value={partForm.qty_installed} onChange={e=>setPartForm(p=>({...p,qty_installed:e.target.value}))} min="1"/>
             </div>
             <div style={S.f}><label style={S.lbl}>Installed Date</label>
-              <input type="date" style={S.fi} value={partForm.installed_date} onChange={(e:any)=>setPartForm((p:any)=>({...p,installed_date:e.target.value}))}/>
+              <input type="date" style={S.fi} value={partForm.installed_date} onChange={e=>setPartForm(p=>({...p,installed_date:e.target.value}))}/>
             </div>
             <div style={S.f}><label style={S.lbl}>Added By</label>
-              <input style={S.fi} value={partForm.done_by} onChange={(e:any)=>setPartForm((p:any)=>({...p,done_by:e.target.value}))} placeholder="Naam"/>
+              <input style={S.fi} value={partForm.done_by} onChange={e=>setPartForm(p=>({...p,done_by:e.target.value}))} placeholder="Naam"/>
             </div>
           </div>
           <button disabled={partSaving||!partForm.part_name} onClick={async()=>{
             setPartSaving(true)
-            const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'add_part',job_no:selected.code,mould_name:selected.name,...partForm})}).then((r:any)=>r.json())
-            if(res.success){setParts((p:any)=>[...p,res.data]);setShowAddPart(false);setPartForm({part_type:'Nipple',part_name:'',size_spec:'',qty_installed:1,installed_date:nd(),done_by:'',remarks:''})}
+            const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'add_part',job_no:selected.code,mould_name:selected.name,...partForm})}).then(r=>r.json())
+            if(res.success){setParts(p=>[...p,res.data]);setShowAddPart(false);setPartForm({part_type:'Nipple',part_name:'',size_spec:'',qty_installed:1,installed_date:nd(),done_by:'',remarks:''})}
             setPartSaving(false)
           }} style={{...S.sb,background:'#854F0B',marginTop:10,opacity:!partForm.part_name?0.5:1}}>
             {partSaving?'Saving...':'✅ Part Add Karo'}
@@ -6897,34 +6897,34 @@ function MouldHistoryTab() {
             <div style={{fontWeight:700,color:'#C00000',fontSize:13,marginBottom:12}}>🔄 Part Change Record</div>
             <div style={{background:'#FFF9E6',borderRadius:6,padding:'6px 10px',marginBottom:10,fontSize:11}}><b>{showChangePart.part_name}</b> — {showChangePart.size_spec||'--'}</div>
             <div style={S.f}><label style={S.lbl}>Reason for Change</label>
-              <select style={S.fi} value={changeForm.reason} onChange={(e:any)=>setChangeForm((p:any)=>({...p,reason:e.target.value}))}>
+              <select style={S.fi} value={changeForm.reason} onChange={e=>setChangeForm(p=>({...p,reason:e.target.value}))}>
                 <option value="">Select reason</option>
-                {['Damaged/Broken','Leakage','Worn Out','Preventive Change','Size Change','Upgrade','Other'].map((r:any)=><option key={r}>{r}</option>)}
+                {['Damaged/Broken','Leakage','Worn Out','Preventive Change','Size Change','Upgrade','Other'].map(r=><option key={r}>{r}</option>)}
               </select>
             </div>
             <div style={S.f}><label style={S.lbl}>New Spec (agar change hua)</label>
-              <input style={S.fi} value={changeForm.new_spec} onChange={(e:any)=>setChangeForm((p:any)=>({...p,new_spec:e.target.value}))} placeholder="Same rahega toh blank"/>
+              <input style={S.fi} value={changeForm.new_spec} onChange={e=>setChangeForm(p=>({...p,new_spec:e.target.value}))} placeholder="Same rahega toh blank"/>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
               <div style={S.f}><label style={S.lbl}>Changed By</label>
-                <input style={S.fi} value={changeForm.changed_by} onChange={(e:any)=>setChangeForm((p:any)=>({...p,changed_by:e.target.value}))} placeholder="Naam"/>
+                <input style={S.fi} value={changeForm.changed_by} onChange={e=>setChangeForm(p=>({...p,changed_by:e.target.value}))} placeholder="Naam"/>
               </div>
               <div style={S.f}><label style={S.lbl}>Date</label>
-                <input type="date" style={S.fi} value={changeForm.changed_date} onChange={(e:any)=>setChangeForm((p:any)=>({...p,changed_date:e.target.value}))}/>
+                <input type="date" style={S.fi} value={changeForm.changed_date} onChange={e=>setChangeForm(p=>({...p,changed_date:e.target.value}))}/>
               </div>
             </div>
             <div style={S.f}><label style={S.lbl}>Shots at Change</label>
-              <input type="number" style={S.fi} value={changeForm.shots_at_change} onChange={(e:any)=>setChangeForm((p:any)=>({...p,shots_at_change:e.target.value}))} placeholder="Optional"/>
+              <input type="number" style={S.fi} value={changeForm.shots_at_change} onChange={e=>setChangeForm(p=>({...p,shots_at_change:e.target.value}))} placeholder="Optional"/>
             </div>
             <div style={S.f}><label style={S.lbl}>Remarks</label>
-              <input style={S.fi} value={changeForm.remarks} onChange={(e:any)=>setChangeForm((p:any)=>({...p,remarks:e.target.value}))} placeholder="Optional"/>
+              <input style={S.fi} value={changeForm.remarks} onChange={e=>setChangeForm(p=>({...p,remarks:e.target.value}))} placeholder="Optional"/>
             </div>
             <div style={{display:'flex',gap:8,marginTop:10}}>
               <button disabled={partSaving||!changeForm.reason||!changeForm.changed_by} onClick={async()=>{
                 setPartSaving(true)
-                const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'change_part',job_no:selected.code,mould_name:selected.name,part_id:showChangePart.id,part_name:showChangePart.part_name,part_type:showChangePart.part_type,old_spec:showChangePart.size_spec,...changeForm})}).then((r:any)=>r.json())
+                const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'change_part',job_no:selected.code,mould_name:selected.name,part_id:showChangePart.id,part_name:showChangePart.part_name,part_type:showChangePart.part_type,old_spec:showChangePart.size_spec,...changeForm})}).then(r=>r.json())
                 if(res.success){
-                  fetch('/api/mouldparts?job_no='+selected.code).then((r:any)=>r.json()).then((d:any)=>{setParts(d.parts||[]);setPartChanges(d.changes||[])})
+                  fetch('/api/mouldparts?job_no='+selected.code).then(r=>r.json()).then(d=>{setParts(d.parts||[]);setPartChanges(d.changes||[])})
                   setShowChangePart(null)
                   setChangeForm({reason:'',changed_by:'',changed_date:nd(),shots_at_change:'',new_spec:'',remarks:''})
                 }
@@ -6941,12 +6941,12 @@ function MouldHistoryTab() {
         :parts.length===0
           ?<div style={{textAlign:'center',padding:32,color:'#888',fontSize:12}}>Koi part add nahi hua — upar "+ Part Add Karo" click karo</div>
           :<div>
-            {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map((ptype:any)=>{
-              const typeParts=parts.filter((p:any)=>p.part_type===ptype)
+            {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map(ptype=>{
+              const typeParts=parts.filter(p=>p.part_type===ptype)
               if(typeParts.length===0) return null
               return <div key={ptype} style={{marginBottom:10}}>
                 <div style={{fontWeight:700,color:'#1F3864',fontSize:11,padding:'4px 8px',background:'#E8EDF5',borderRadius:6,marginBottom:4}}>🔩 {ptype} ({typeParts.length})</div>
-                {typeParts.map((p:any)=><div key={p.id} style={{background:'#fff',border:'1px solid #E0E0E0',borderRadius:8,padding:'8px 12px',marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                {typeParts.map(p=><div key={p.id} style={{background:'#fff',border:'1px solid #E0E0E0',borderRadius:8,padding:'8px 12px',marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <div style={{flex:1}}>
                     <div style={{fontWeight:600,fontSize:12}}>{p.part_name}</div>
                     <div style={{fontSize:10,color:'#666',marginTop:2}}>
@@ -6965,7 +6965,7 @@ function MouldHistoryTab() {
             })}
             {partChanges.length>0&&<div style={{marginTop:12}}>
               <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:6}}>🔄 Recent Part Changes</div>
-              {partChanges.slice(0,10).map((c:any,i:number)=><div key={i} style={{background:'#FFEBEE',border:'1px solid #C00000',borderRadius:6,padding:'6px 10px',marginBottom:4,fontSize:11}}>
+              {partChanges.slice(0,10).map((c,i)=><div key={i} style={{background:'#FFEBEE',border:'1px solid #C00000',borderRadius:6,padding:'6px 10px',marginBottom:4,fontSize:11}}>
                 <div style={{display:'flex',justifyContent:'space-between'}}>
                   <span style={{fontWeight:600}}>{c.part_name}</span>
                   <span style={{color:'#666',fontSize:10}}>{c.changed_date}</span>
@@ -6991,7 +6991,7 @@ function MouldHistoryTab() {
         </div>
 
         <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap' as const}}>
-          {[{key:'all',label:'All ('+stats.total+')',ac:'#1F3864',ic:'#E8EDF5'},{key:'PM',label:'🟢 PM ('+stats.pmCount+')',ac:'#276221',ic:'#E8F5E9'},{key:'BD',label:'🔴 BD ('+stats.bdCount+')',ac:'#C00000',ic:'#FFEBEE'},{key:'RM',label:'⚪ RM ('+stats.rmCount+')',ac:'#555',ic:'#F0F0F0'},{key:'MC',label:'🟡 MC ('+stats.mcCount+')',ac:'#854F0B',ic:'#FFF9E6'}].map((t:any)=>
+          {[{key:'all',label:'All ('+stats.total+')',ac:'#1F3864',ic:'#E8EDF5'},{key:'PM',label:'🟢 PM ('+stats.pmCount+')',ac:'#276221',ic:'#E8F5E9'},{key:'BD',label:'🔴 BD ('+stats.bdCount+')',ac:'#C00000',ic:'#FFEBEE'},{key:'RM',label:'⚪ RM ('+stats.rmCount+')',ac:'#555',ic:'#F0F0F0'},{key:'MC',label:'🟡 MC ('+stats.mcCount+')',ac:'#854F0B',ic:'#FFF9E6'}].map(t=>
             <button key={t.key} onClick={()=>setActiveTab(t.key)} style={{padding:'6px 14px',borderRadius:999,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,background:activeTab===t.key?t.ac:t.ic,color:activeTab===t.key?'#fff':t.ac}}>{t.label}</button>
           )}
         </div>
@@ -7002,7 +7002,7 @@ function MouldHistoryTab() {
             ?<div style={{textAlign:'center',color:'#888',padding:32,fontSize:12}}>Is filter mein koi record nahi!</div>
             :<div style={{position:'relative' as const}}>
               <div style={{position:'absolute' as const,left:19,top:4,bottom:4,width:2,background:'#E0E0E0',zIndex:0}}/>
-              {shownHistory.map((rec:any,i:number)=>{
+              {shownHistory.map((rec,i)=>{
                 const cfg=typeCfg[rec.record_type]||{color:'#666',bg:'#F5F5F5',border:'#ccc',icon:'📌'}
                 return <div key={rec.id||i} style={{display:'flex',gap:10,marginBottom:10,position:'relative' as const,zIndex:1}}>
                   <div style={{width:40,height:40,borderRadius:'50%',flexShrink:0,background:cfg.bg,border:'2px solid '+cfg.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,position:'relative' as const,zIndex:2}}>{cfg.icon}</div>
