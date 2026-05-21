@@ -3380,6 +3380,8 @@ function SparesTab({user}:{user:User}) {
         </div>
       }
     </div>}
+    </div>}
+    </div>}
   </div>
 }
 
@@ -7194,10 +7196,8 @@ function MouldHistoryTab() {
         }
       </div>
 
-    </div>}
-
       </div>}{/* close history tab */}
-    </div>}{/* close stats section */}
+    </div>}{/* close stats&&!loading */}
 
     {/* Empty state */}
     {!selected&&!loading&&<div style={{...S.card,textAlign:'center',color:'#888',padding:40}}>
@@ -7211,6 +7211,7 @@ function MouldHistoryTab() {
       </div>
     </div>}
   </div>
+</div>
 }
 
 
