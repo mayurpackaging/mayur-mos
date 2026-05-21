@@ -142,3 +142,40 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ success: true, msg: items.length + ' items saved!' })
 }
+
+export async function PUT(req: Request) {
+  const d = await req.json()
+  if (!d.id) return NextResponse.json({ success: false, msg: 'ID required' })
+
+  const status = parseFloat(d.current_stock)===0 ? 'Out of Stock' 
+    : parseFloat(d.current_stock) < parseFloat(d.min_qty||0) ? 'Low' : 'OK'
+
+  const { error } = await supabase.from('spares_master').update({
+    part_name: d.part_name,
+    category: d.category,
+    unit: d.unit,
+    current_stock: parseFloat(d.current_stock) || 0,
+    min_qty: parseFloat(d.min_qty) || 0,
+    last_price: parseFloat(d.last_price) || 0,
+    last_vendor: d.last_vendor || '',
+    plant: d.plant || '',
+    room: d.room || '',
+    almirah: d.almirah || '',
+    box_no: d.box_no || '',
+    storage_type: d.storage_type || 'Box',
+    status,
+    last_updated: new Date().toISOString()
+  }).eq('id', d.id)
+
+  if (error) return NextResponse.json({ success: false, msg: error.message })
+  return NextResponse.json({ success: true, msg: 'Spare updated!' })
+}
+
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const id = searchParams.get('id')
+  if (!id) return NextResponse.json({ success: false, msg: 'ID required' })
+  const { error } = await supabase.from('spares_master').delete().eq('id', id)
+  if (error) return NextResponse.json({ success: false, msg: error.message })
+  return NextResponse.json({ success: true, msg: 'Deleted!' })
+}
