@@ -3380,8 +3380,6 @@ function SparesTab({user}:{user:User}) {
         </div>
       }
     </div>}
-    </div>}
-    </div>}
   </div>
 }
 
