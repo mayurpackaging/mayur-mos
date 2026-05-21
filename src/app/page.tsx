@@ -2949,6 +2949,7 @@ function SparesTab({user}:{user:User}) {
   const [usedForMachine,setUsedForMachine]=useState('')
   const [usedForMould,setUsedForMould]=useState('')
   const [usedFor,setUsedFor]=useState('Machine')
+  const [spareView,setSpareView]=useState<'entry'|'stock'|'movements'>('entry')
 
   const load=useCallback(()=>{fetch('/api/spares').then(r=>r.json()).then(d=>{setSpares(d.spares||[]);setMovements(d.recentMovements||[]);setLoading(false)})},[])
   useEffect(()=>{load()},[load])
@@ -3037,9 +3038,22 @@ function SparesTab({user}:{user:User}) {
       })}
     </div>}
 
+    {/* ── Top Nav Tabs ── */}
+    <div style={{display:'flex',gap:6,marginBottom:8}}>
+      {[
+        {key:'entry',label:'➕ Entry',color:'#276221',bg:'#E8F5E9'},
+        {key:'stock',label:'📦 Stock Status',color:'#1F3864',bg:'#E8EDF5'},
+        {key:'movements',label:'🔄 Movements',color:'#854F0B',bg:'#FFF9E6'},
+      ].map((t:any)=><button key={t.key} onClick={()=>setSpareView(t.key as any)}
+        style={{flex:1,padding:'10px 6px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
+          background:spareView===t.key?t.color:'#F5F5F5',
+          color:spareView===t.key?'#fff':t.color,
+        }}>{t.label}</button>)}
+    </div>
+
     {/* Stock table */}
-    <div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:8}}>Spares Stock Status</div>
+    {spareView==='stock'&&<div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:8,color:'#1F3864',fontSize:13}}>📦 Spares Stock Status {canEdit&&<span style={{fontSize:10,color:'#854F0B',marginLeft:8}}>✏️ Edit rights: Sirf aapke paas</span>}</div>
       <div style={{overflowX:'auto'}}>
         {/* Edit Modal — sirf Admin/nitin ke liye */}
         {editSpare&&canEdit&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -3132,8 +3146,10 @@ function SparesTab({user}:{user:User}) {
           })}</tbody>
         </table>
       </div>
-    </div>
+    </div>}
 
+    {/* Entry form — shown when entry tab active */}
+    {spareView==='entry'&&<div>
     {/* Purchase / Movement form */}
     {/* Opening Stock Entry button */}
     <div style={{...S.card,background:'#FFF9E6',border:'1px solid #F4B942'}}>
@@ -3334,25 +3350,34 @@ function SparesTab({user}:{user:User}) {
       {toast&&<Toast {...toast}/>}
     </div>
 
-    {/* Recent movements */}
-    {movements.length>0&&<div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:8}}>Recent Movements</div>
-      <div style={{overflowX:'auto'}}>
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Date','Part','Action','Qty','Price','Vendor','By'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
-          <tbody>{movements.map((m:any,i:number)=>(
-            <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-              <td style={{padding:'6px 8px',fontSize:10}}>{m.date}</td>
-              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{m.part_name}</td>
-              <td style={{padding:'6px 8px'}}><span style={{background:m.action==='Stock In'?'#E8F5E9':'#FFEBEE',color:m.action==='Stock In'?'#276221':'#C00000',padding:'2px 7px',borderRadius:999,fontSize:10}}>{m.action}</span></td>
-              <td style={{padding:'6px 8px',fontWeight:700}}>{m.qty} {m.unit}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{m.price_per_pc?`₹${m.price_per_pc}`:'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{m.vendor||'--'}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{m.done_by}</td>
-            </tr>
-          ))}</tbody>
-        </table>
-      </div>
+    </div>}{/* close entry div */}
+
+    {/* Recent movements tab */}
+    {spareView==='movements'&&<div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:8,color:'#854F0B',fontSize:13}}>🔄 Recent Movements</div>
+      {movements.length===0
+        ? <div style={{textAlign:'center',color:'#888',padding:24,fontSize:12}}>Koi movement nahi abhi tak</div>
+        : <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr>{['Date','Part','Action','Qty','Machine/Mould','Vendor/By','Stock After'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+            <tbody>{movements.map((m:any,i:number)=>(
+              <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                <td style={{padding:'6px 8px',fontSize:10}}>{m.date}</td>
+                <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{m.part_name}</td>
+                <td style={{padding:'6px 8px'}}><span style={{background:m.action==='Stock In'?'#E8F5E9':'#FFEBEE',color:m.action==='Stock In'?'#276221':'#C00000',padding:'2px 7px',borderRadius:999,fontSize:10}}>{m.action}</span></td>
+                <td style={{padding:'6px 8px',fontWeight:700}}>{m.qty}</td>
+                <td style={{padding:'6px 8px',fontSize:10,color:'#1F3864'}}>
+                  {m.machine&&<div>⚙️ {m.machine}</div>}
+                  {m.mould_name&&<div>🔩 {m.mould_name}</div>}
+                  {!m.machine&&!m.mould_name&&'--'}
+                </td>
+                <td style={{padding:'6px 8px',fontSize:10}}>{m.vendor||m.done_by||'--'}</td>
+                <td style={{padding:'6px 8px',fontWeight:700,color:m.new_stock===0?'#C00000':'#276221'}}>{m.new_stock}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      }
     </div>}
   </div>
 }
