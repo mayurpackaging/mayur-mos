@@ -6696,9 +6696,9 @@ function MouldHistoryTab() {
   const [selected,setSelected]=useState<any>(null)
   const [loading,setLoading]=useState(false)
   const [history,setHistory]=useState<any[]>([])
-  const [activeTab,setActiveTab]=useState<'all'|'PM'|'BD'|'RM'|'MC'>('all')
+  const [activeTab,setActiveTab]=useState('all')
   const [stats,setStats]=useState<any>(null)
-  const [mainTab,setMainTab]=useState<'history'|'parts'>('history')
+  const [mainTab,setMainTab]=useState('history')
   const [parts,setParts]=useState<any[]>([])
   const [partChanges,setPartChanges]=useState<any[]>([])
   const [partsLoading,setPartsLoading]=useState(false)
@@ -6708,12 +6708,9 @@ function MouldHistoryTab() {
   const [changeForm,setChangeForm]=useState<any>({reason:'',changed_by:'',changed_date:nd(),shots_at_change:'',new_spec:'',remarks:''})
   const [partSaving,setPartSaving]=useState(false)
 
-  // Use MOULDS constant directly — no Supabase fetch needed for list
-  const filteredMoulds = MOULDS.filter(m=>
-    !search
-      ? false  // show nothing until user types
-      : m.name.toLowerCase().includes(search.toLowerCase()) ||
-        m.code.includes(search)
+  const filteredMoulds = MOULDS.filter((m:any)=>
+    !search ? false
+      : m.name.toLowerCase().includes(search.toLowerCase()) || m.code.includes(search)
   )
 
   const loadHistory=async(mould:any)=>{
@@ -6724,84 +6721,74 @@ function MouldHistoryTab() {
     setActiveTab('all')
     setSearch('')
     setMainTab('history')
-    // Load parts
     setPartsLoading(true)
-    fetch('/api/mouldparts?job_no='+mould.code).then(r=>r.json()).then(d=>{
+    fetch('/api/mouldparts?job_no='+mould.code).then((r:any)=>r.json()).then((d:any)=>{
       setParts(d.parts||[])
       setPartChanges(d.changes||[])
       setPartsLoading(false)
     }).catch(()=>setPartsLoading(false))
 
     try {
-      // Fetch via API route
-      const [histRes, pmRes, bdRes] = await Promise.all([
-        fetch('/api/mouldhistory?job_no='+mould.code).then(r=>r.json()).catch(()=>[]),
-        fetch('/api/mouldpm').then(r=>r.json()).catch(()=>({data:[]})),
-        fetch('/api/breakdown').then(r=>r.json()).catch(()=>({data:[]})),
+      const [histRes,pmRes,bdRes] = await Promise.all([
+        fetch('/api/mouldhistory?job_no='+mould.code).then((r:any)=>r.json()).catch(()=>[]),
+        fetch('/api/mouldpm').then((r:any)=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/breakdown').then((r:any)=>r.json()).catch(()=>({data:[]})),
       ])
 
-      // Historical logbook records
-      const logbookRows: any[] = Array.isArray(histRes) ? histRes : (histRes?.data||[])
+      const logbookRows:any[] = Array.isArray(histRes) ? histRes : (histRes?.data||[])
 
-      // Live PM records for this mould
       const livePM = (pmRes.data||[])
-        .filter((p:any)=> p.mould_code===mould.code || p.mould?.includes(mould.code))
+        .filter((p:any)=>p.mould_code===mould.code||p.mould?.includes(mould.code))
         .map((p:any)=>({
           id:'live_pm_'+p.id,
-          record_date: p.date||p.pm_date||'',
+          record_date:p.date||p.pm_date||'',
           record_type:'PM',
           issue:'Preventive Maintenance',
           work_done:'Shots at PM: '+(p.current_shots?.toLocaleString()||'--')+' | By: '+(p.done_by||'--'),
-          result: p.overall_result==='OK'?'OK':'NG',
+          result:p.overall_result==='OK'?'OK':'NG',
           machine_no:'--',
           parts_changed:'--',
-          remarks: p.remarks||'',
+          remarks:p.remarks||'',
           _live:true
         }))
 
-      // Live Breakdown records
       const mouldNameShort = mould.name.toLowerCase().slice(0,8)
       const liveBD = (bdRes.data||[])
-        .filter((b:any)=>
-          b.mould?.includes(mould.code) ||
-          b.problem?.toLowerCase().includes(mouldNameShort)
-        )
+        .filter((b:any)=>b.mould?.includes(mould.code)||b.problem?.toLowerCase().includes(mouldNameShort))
         .map((b:any)=>({
           id:'live_bd_'+b.id,
-          record_date: b.date||'',
+          record_date:b.date||'',
           record_type:'BD',
-          issue: b.problem||'Breakdown',
-          work_done: b.solution||b.analysis||'--',
+          issue:b.problem||'Breakdown',
+          work_done:b.solution||b.analysis||'--',
           result:'Fixed',
-          machine_no: b.machine||'--',
-          parts_changed: b.spares_used||'--',
+          machine_no:b.machine||'--',
+          parts_changed:b.spares_used||'--',
           remarks:'Downtime: '+(b.downtime_min||'--')+' min',
           _live:true
         }))
 
-      // Merge all — logbook + live, sort by date
-      const allRows = [...logbookRows, ...livePM, ...liveBD]
-        .sort((a,b)=>{
-          const da = new Date(a.record_date||'1900-01-01').getTime()
-          const db = new Date(b.record_date||'1900-01-01').getTime()
-          return da - db
-        })
+      const allRows = [...logbookRows,...livePM,...liveBD].sort((a:any,b:any)=>{
+        const da=new Date(a.record_date||'1900-01-01').getTime()
+        const db=new Date(b.record_date||'1900-01-01').getTime()
+        return da-db
+      })
 
-      const pmRows = allRows.filter(r=>r.record_type==='PM')
-      const bdRows = allRows.filter(r=>r.record_type==='BD')
-      const rmRows = allRows.filter(r=>r.record_type==='RM')
-      const mcRows = allRows.filter(r=>r.record_type==='MC')
+      const pmRows=allRows.filter((r:any)=>r.record_type==='PM')
+      const bdRows=allRows.filter((r:any)=>r.record_type==='BD')
+      const rmRows=allRows.filter((r:any)=>r.record_type==='RM')
+      const mcRows=allRows.filter((r:any)=>r.record_type==='MC')
 
       setStats({
-        total: allRows.length,
-        pmCount: pmRows.length,
-        bdCount: bdRows.length,
-        rmCount: rmRows.length,
-        mcCount: mcRows.length,
-        lastPM: pmRows[pmRows.length-1]||null,
-        lastBD: bdRows[bdRows.length-1]||null,
-        firstDate: allRows[0]?.record_date||'--',
-        lastDate: allRows[allRows.length-1]?.record_date||'--',
+        total:allRows.length,
+        pmCount:pmRows.length,
+        bdCount:bdRows.length,
+        rmCount:rmRows.length,
+        mcCount:mcRows.length,
+        lastPM:pmRows[pmRows.length-1]||null,
+        lastBD:bdRows[bdRows.length-1]||null,
+        firstDate:allRows[0]?.record_date||'--',
+        lastDate:allRows[allRows.length-1]?.record_date||'--',
       })
       setHistory(allRows)
     } catch(e) {
@@ -6810,84 +6797,49 @@ function MouldHistoryTab() {
     setLoading(false)
   }
 
-  const shownHistory = activeTab==='all' ? history : history.filter(r=>r.record_type===activeTab)
+  const shownHistory = activeTab==='all' ? history : history.filter((r:any)=>r.record_type===activeTab)
 
-  const typeCfg:Record<string,{color:string,bg:string,border:string,icon:string}> = {
-    PM: {color:'#276221',bg:'#E8F5E9',border:'#276221',icon:'🟢'},
-    BD: {color:'#C00000',bg:'#FFEBEE',border:'#C00000',icon:'🔴'},
-    RM: {color:'#555555',bg:'#F5F5F5',border:'#AAAAAA',icon:'⚪'},
-    MC: {color:'#854F0B',bg:'#FFF9E6',border:'#854F0B',icon:'🟡'},
+  const typeCfg:any = {
+    PM:{color:'#276221',bg:'#E8F5E9',border:'#276221',icon:'🟢'},
+    BD:{color:'#C00000',bg:'#FFEBEE',border:'#C00000',icon:'🔴'},
+    RM:{color:'#555555',bg:'#F5F5F5',border:'#AAAAAA',icon:'⚪'},
+    MC:{color:'#854F0B',bg:'#FFF9E6',border:'#854F0B',icon:'🟡'},
   }
 
   return <div>
-    {/* ── Search ── */}
     <div style={S.card}>
-      <div style={{fontWeight:700,color:'#1F3864',fontSize:14,marginBottom:8}}>
-        🔍 Mould History — Logbook (2022–2026)
-      </div>
-      <input
-        style={{...S.fi,marginBottom:4}}
-        value={search}
-        onChange={e=>setSearch(e.target.value)}
-        placeholder="Job No ya naam type karo — e.g. 6374 ya 750ml Tub"
-        autoComplete="off"
-      />
-      {/* Dropdown results */}
+      <div style={{fontWeight:700,color:'#1F3864',fontSize:14,marginBottom:8}}>🔍 Mould History — Logbook (2022–2026)</div>
+      <input style={{...S.fi,marginBottom:4}} value={search} onChange={(e:any)=>setSearch(e.target.value)}
+        placeholder="Job No ya naam type karo — e.g. 6374 ya 750ml Tub" autoComplete="off"/>
       {search.length>0&&<div style={{border:'1px solid #ddd',borderRadius:8,background:'#fff',maxHeight:200,overflowY:'auto',marginTop:2}}>
         {filteredMoulds.length===0
-          ? <div style={{padding:'10px 14px',color:'#888',fontSize:12}}>Koi mould nahi mila — dusra naam try karo</div>
-          : filteredMoulds.map(m=><div
-              key={m.code}
-              onClick={()=>loadHistory(m)}
-              style={{padding:'9px 14px',cursor:'pointer',borderBottom:'1px solid #F5F5F5',fontSize:12,
-                display:'flex',justifyContent:'space-between',alignItems:'center',
-                background:'#fff'
-              }}
-              onMouseEnter={e=>(e.currentTarget.style.background='#EEF4FF')}
-              onMouseLeave={e=>(e.currentTarget.style.background='#fff')}
-            >
+          ? <div style={{padding:'10px 14px',color:'#888',fontSize:12}}>Koi mould nahi mila</div>
+          : filteredMoulds.map((m:any)=><div key={m.code} onClick={()=>loadHistory(m)}
+              style={{padding:'9px 14px',cursor:'pointer',borderBottom:'1px solid #F5F5F5',fontSize:12,display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fff'}}
+              onMouseEnter={(e:any)=>(e.currentTarget.style.background='#EEF4FF')}
+              onMouseLeave={(e:any)=>(e.currentTarget.style.background='#fff')}>
               <span style={{fontWeight:600,color:'#1F3864'}}>{m.name}</span>
-              <span style={{color:'#888',fontSize:11,background:'#F0F0F0',padding:'2px 8px',borderRadius:4}}>
-                #{m.code}
-              </span>
+              <span style={{color:'#888',fontSize:11,background:'#F0F0F0',padding:'2px 8px',borderRadius:4}}>#{m.code}</span>
             </div>)
         }
       </div>}
-
-      {/* Selected pill */}
       {selected&&!search&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
         <div style={{background:'#1F3864',color:'#fff',borderRadius:999,padding:'5px 16px',fontSize:12,fontWeight:600}}>
           ⚙️ {selected.name} — #{selected.code}
         </div>
-        <button
-          onClick={()=>{setSelected(null);setHistory([]);setStats(null)}}
-          style={{background:'#f0f0f0',border:'none',borderRadius:999,width:26,height:26,cursor:'pointer',color:'#666',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}}
-        >✕</button>
+        <button onClick={()=>{setSelected(null);setHistory([]);setStats(null)}}
+          style={{background:'#f0f0f0',border:'none',borderRadius:999,width:26,height:26,cursor:'pointer',color:'#666',fontSize:14}}>✕</button>
       </div>}
     </div>
 
-    {/* ── Loading ── */}
-    {loading&&<div style={{textAlign:'center',padding:40,color:'#666',fontSize:13}}>
-      ⏳ Loading history...
-    </div>}
+    {loading&&<div style={{textAlign:'center',padding:40,color:'#666',fontSize:13}}>⏳ Loading history...</div>}
 
-    {/* ── Stats + Timeline ── */}
     {stats&&!loading&&<div>
-
-      {/* Header */}
       <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:16,marginBottom:8,color:'#fff'}}>
         <div style={{fontSize:17,fontWeight:700,marginBottom:2}}>⚙️ {selected?.name}</div>
-        <div style={{fontSize:11,opacity:0.75,marginBottom:12}}>
-          Job No: #{selected?.code} &nbsp;|&nbsp; {stats.firstDate} → {stats.lastDate}
-        </div>
+        <div style={{fontSize:11,opacity:0.75,marginBottom:12}}>Job No: #{selected?.code} | {stats.firstDate} → {stats.lastDate}</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6}}>
-          {[
-            {icon:'📋',label:'Total',val:stats.total},
-            {icon:'🟢',label:'PM',val:stats.pmCount},
-            {icon:'🔴',label:'Breakdown',val:stats.bdCount},
-            {icon:'⚪',label:'Routine',val:stats.rmCount},
-            {icon:'🟡',label:'MC',val:stats.mcCount},
-          ].map((k,i)=><div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
+          {[{icon:'📋',label:'Total',val:stats.total},{icon:'🟢',label:'PM',val:stats.pmCount},{icon:'🔴',label:'Breakdown',val:stats.bdCount},{icon:'⚪',label:'Routine',val:stats.rmCount},{icon:'🟡',label:'MC',val:stats.mcCount}].map((k:any,i:number)=><div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
             <div style={{fontSize:13}}>{k.icon}</div>
             <div style={{fontSize:20,fontWeight:700}}>{k.val}</div>
             <div style={{fontSize:9,opacity:0.8}}>{k.label}</div>
@@ -6895,121 +6847,84 @@ function MouldHistoryTab() {
         </div>
       </div>
 
-      {/* Main Tab — History | Parts */}
       <div style={{display:'flex',gap:6,marginBottom:8}}>
-        <button onClick={()=>setMainTab('history')} style={{flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
-          background:mainTab==='history'?'#1F3864':'#F0F0F0',color:mainTab==='history'?'#fff':'#444'}}>
-          📅 Maintenance History
-        </button>
-        <button onClick={()=>setMainTab('parts')} style={{flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
-          background:mainTab==='parts'?'#854F0B':'#F0F0F0',color:mainTab==='parts'?'#fff':'#444'}}>
-          🔩 Parts Register ({parts.length})
-        </button>
+        <button onClick={()=>setMainTab('history')} style={{flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,background:mainTab==='history'?'#1F3864':'#F0F0F0',color:mainTab==='history'?'#fff':'#444'}}>📅 Maintenance History</button>
+        <button onClick={()=>setMainTab('parts')} style={{flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,background:mainTab==='parts'?'#854F0B':'#F0F0F0',color:mainTab==='parts'?'#fff':'#444'}}>🔩 Parts Register ({parts.length})</button>
       </div>
 
-      {/* ── PARTS TAB ── */}
       {mainTab==='parts'&&<div>
-        {/* Add Part Button */}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <div style={{fontSize:12,color:'#666'}}>Mould ke saare parts — nipples, heaters, bolts, O-rings</div>
-          <button onClick={()=>setShowAddPart(!showAddPart)}
-            style={{background:'#854F0B',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
-            {showAddPart?'✕ Cancel':'+ Part Add Karo'}
-          </button>
+          <button onClick={()=>setShowAddPart(!showAddPart)} style={{background:'#854F0B',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,fontWeight:700,cursor:'pointer'}}>{showAddPart?'✕ Cancel':'+ Part Add Karo'}</button>
         </div>
 
-        {/* Add Part Form */}
         {showAddPart&&<div style={{...S.card,border:'2px solid #854F0B',marginBottom:8}}>
           <div style={{fontWeight:700,color:'#854F0B',fontSize:12,marginBottom:10}}>🔩 Naya Part Add Karo</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <div style={S.f}><label style={S.lbl}>Part Type</label>
-              <select style={S.fi} value={partForm.part_type} onChange={e=>setPartForm((p:any)=>({...p,part_type:e.target.value}))}>
-                {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map(t=><option key={t}>{t}</option>)}
+              <select style={S.fi} value={partForm.part_type} onChange={(e:any)=>setPartForm((p:any)=>({...p,part_type:e.target.value}))}>
+                {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map((t:any)=><option key={t}>{t}</option>)}
               </select>
             </div>
-            <div style={S.f}><label style={S.lbl}>Part Name / Description</label>
-              <input style={S.fi} value={partForm.part_name} onChange={e=>setPartForm((p:any)=>({...p,part_name:e.target.value}))} placeholder="e.g. Water Nipple 1/4 inch, Heater 500W"/>
+            <div style={S.f}><label style={S.lbl}>Part Name</label>
+              <input style={S.fi} value={partForm.part_name} onChange={(e:any)=>setPartForm((p:any)=>({...p,part_name:e.target.value}))} placeholder="e.g. Water Nipple 1/4 inch"/>
             </div>
             <div style={S.f}><label style={S.lbl}>Size / Spec</label>
-              <input style={S.fi} value={partForm.size_spec} onChange={e=>setPartForm((p:any)=>({...p,size_spec:e.target.value}))} placeholder="e.g. M6x20, 500W 240V, 12x2.5mm"/>
+              <input style={S.fi} value={partForm.size_spec} onChange={(e:any)=>setPartForm((p:any)=>({...p,size_spec:e.target.value}))} placeholder="e.g. M6x20, 500W 240V"/>
             </div>
             <div style={S.f}><label style={S.lbl}>Qty Installed</label>
-              <input type="number" style={S.fi} value={partForm.qty_installed} onChange={e=>setPartForm((p:any)=>({...p,qty_installed:e.target.value}))} min="1"/>
+              <input type="number" style={S.fi} value={partForm.qty_installed} onChange={(e:any)=>setPartForm((p:any)=>({...p,qty_installed:e.target.value}))} min="1"/>
             </div>
             <div style={S.f}><label style={S.lbl}>Installed Date</label>
-              <input type="date" style={S.fi} value={partForm.installed_date} onChange={e=>setPartForm((p:any)=>({...p,installed_date:e.target.value}))}/>
+              <input type="date" style={S.fi} value={partForm.installed_date} onChange={(e:any)=>setPartForm((p:any)=>({...p,installed_date:e.target.value}))}/>
             </div>
             <div style={S.f}><label style={S.lbl}>Added By</label>
-              <input style={S.fi} value={partForm.done_by} onChange={e=>setPartForm((p:any)=>({...p,done_by:e.target.value}))} placeholder="Naam"/>
-            </div>
-            <div style={{...S.f,gridColumn:'span 2'}}><label style={S.lbl}>Remarks</label>
-              <input style={S.fi} value={partForm.remarks} onChange={e=>setPartForm((p:any)=>({...p,remarks:e.target.value}))} placeholder="Optional notes"/>
+              <input style={S.fi} value={partForm.done_by} onChange={(e:any)=>setPartForm((p:any)=>({...p,done_by:e.target.value}))} placeholder="Naam"/>
             </div>
           </div>
           <button disabled={partSaving||!partForm.part_name} onClick={async()=>{
             setPartSaving(true)
-            const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({type:'add_part',job_no:selected.code,mould_name:selected.name,...partForm})
-            }).then(r=>r.json())
-            if(res.success){
-              setParts(p=>[...p,res.data])
-              setShowAddPart(false)
-              setPartForm({part_type:'Nipple',part_name:'',size_spec:'',qty_installed:1,installed_date:nd(),done_by:'',remarks:''})
-            }
+            const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'add_part',job_no:selected.code,mould_name:selected.name,...partForm})}).then((r:any)=>r.json())
+            if(res.success){setParts((p:any)=>[...p,res.data]);setShowAddPart(false);setPartForm({part_type:'Nipple',part_name:'',size_spec:'',qty_installed:1,installed_date:nd(),done_by:'',remarks:''})}
             setPartSaving(false)
           }} style={{...S.sb,background:'#854F0B',marginTop:10,opacity:!partForm.part_name?0.5:1}}>
             {partSaving?'Saving...':'✅ Part Add Karo'}
           </button>
         </div>}
 
-        {/* Change Part Modal */}
         {showChangePart&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
           <div style={{background:'#fff',borderRadius:12,padding:20,width:340,maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{fontWeight:700,color:'#C00000',fontSize:13,marginBottom:12}}>🔄 Part Change Record</div>
-            <div style={{background:'#FFF9E6',borderRadius:6,padding:'6px 10px',marginBottom:10,fontSize:11}}>
-              <b>{showChangePart.part_name}</b> — {showChangePart.size_spec||'--'}
-            </div>
+            <div style={{background:'#FFF9E6',borderRadius:6,padding:'6px 10px',marginBottom:10,fontSize:11}}><b>{showChangePart.part_name}</b> — {showChangePart.size_spec||'--'}</div>
             <div style={S.f}><label style={S.lbl}>Reason for Change</label>
-              <select style={S.fi} value={changeForm.reason} onChange={e=>setChangeForm((p:any)=>({...p,reason:e.target.value}))}>
+              <select style={S.fi} value={changeForm.reason} onChange={(e:any)=>setChangeForm((p:any)=>({...p,reason:e.target.value}))}>
                 <option value="">Select reason</option>
-                {['Damaged/Broken','Leakage','Worn Out','Preventive Change','Size Change','Upgrade','Other'].map(r=><option key={r}>{r}</option>)}
+                {['Damaged/Broken','Leakage','Worn Out','Preventive Change','Size Change','Upgrade','Other'].map((r:any)=><option key={r}>{r}</option>)}
               </select>
             </div>
             <div style={S.f}><label style={S.lbl}>New Spec (agar change hua)</label>
-              <input style={S.fi} value={changeForm.new_spec} onChange={e=>setChangeForm((p:any)=>({...p,new_spec:e.target.value}))} placeholder="Same rahega toh blank chhodo"/>
+              <input style={S.fi} value={changeForm.new_spec} onChange={(e:any)=>setChangeForm((p:any)=>({...p,new_spec:e.target.value}))} placeholder="Same rahega toh blank"/>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
               <div style={S.f}><label style={S.lbl}>Changed By</label>
-                <input style={S.fi} value={changeForm.changed_by} onChange={e=>setChangeForm((p:any)=>({...p,changed_by:e.target.value}))} placeholder="Naam"/>
+                <input style={S.fi} value={changeForm.changed_by} onChange={(e:any)=>setChangeForm((p:any)=>({...p,changed_by:e.target.value}))} placeholder="Naam"/>
               </div>
               <div style={S.f}><label style={S.lbl}>Date</label>
-                <input type="date" style={S.fi} value={changeForm.changed_date} onChange={e=>setChangeForm((p:any)=>({...p,changed_date:e.target.value}))}/>
-              </div>
-              <div style={{...S.f,gridColumn:'span 2'}}><label style={S.lbl}>Shots at Change (optional)</label>
-                <input type="number" style={S.fi} value={changeForm.shots_at_change} onChange={e=>setChangeForm((p:any)=>({...p,shots_at_change:e.target.value}))} placeholder="Kitne shots pe change kiya"/>
+                <input type="date" style={S.fi} value={changeForm.changed_date} onChange={(e:any)=>setChangeForm((p:any)=>({...p,changed_date:e.target.value}))}/>
               </div>
             </div>
+            <div style={S.f}><label style={S.lbl}>Shots at Change</label>
+              <input type="number" style={S.fi} value={changeForm.shots_at_change} onChange={(e:any)=>setChangeForm((p:any)=>({...p,shots_at_change:e.target.value}))} placeholder="Optional"/>
+            </div>
             <div style={S.f}><label style={S.lbl}>Remarks</label>
-              <input style={S.fi} value={changeForm.remarks} onChange={e=>setChangeForm((p:any)=>({...p,remarks:e.target.value}))} placeholder="Optional"/>
+              <input style={S.fi} value={changeForm.remarks} onChange={(e:any)=>setChangeForm((p:any)=>({...p,remarks:e.target.value}))} placeholder="Optional"/>
             </div>
             <div style={{display:'flex',gap:8,marginTop:10}}>
               <button disabled={partSaving||!changeForm.reason||!changeForm.changed_by} onClick={async()=>{
                 setPartSaving(true)
-                const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({
-                    type:'change_part',
-                    job_no:selected.code,
-                    mould_name:selected.name,
-                    part_id:showChangePart.id,
-                    part_name:showChangePart.part_name,
-                    part_type:showChangePart.part_type,
-                    old_spec:showChangePart.size_spec,
-                    ...changeForm
-                  })
-                }).then(r=>r.json())
+                const res=await fetch('/api/mouldparts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'change_part',job_no:selected.code,mould_name:selected.name,part_id:showChangePart.id,part_name:showChangePart.part_name,part_type:showChangePart.part_type,old_spec:showChangePart.size_spec,...changeForm})}).then((r:any)=>r.json())
                 if(res.success){
-                  // Reload parts
-                  fetch('/api/mouldparts?job_no='+selected.code).then(r=>r.json()).then(d=>{setParts(d.parts||[]);setPartChanges(d.changes||[])})
+                  fetch('/api/mouldparts?job_no='+selected.code).then((r:any)=>r.json()).then((d:any)=>{setParts(d.parts||[]);setPartChanges(d.changes||[])})
                   setShowChangePart(null)
                   setChangeForm({reason:'',changed_by:'',changed_date:nd(),shots_at_change:'',new_spec:'',remarks:''})
                 }
@@ -7022,30 +6937,24 @@ function MouldHistoryTab() {
           </div>
         </div>}
 
-        {/* Parts List */}
         {partsLoading?<div style={{textAlign:'center',padding:24,color:'#666'}}>Loading parts...</div>
         :parts.length===0
-          ?<div style={{textAlign:'center',padding:32,color:'#888',fontSize:12}}>
-              Koi part add nahi hua abhi — upar "+ Part Add Karo" click karo
-            </div>
+          ?<div style={{textAlign:'center',padding:32,color:'#888',fontSize:12}}>Koi part add nahi hua — upar "+ Part Add Karo" click karo</div>
           :<div>
-            {/* Group by part type */}
-            {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map(ptype=>{
-              const typeParts = parts.filter((p:any)=>p.part_type===ptype)
+            {['Nipple — Water','Nipple — Air','Heater','Thermocouple','O-Ring','Manifold','Bolt — Allen','Bolt — Cap','Bolt — Pressure Pad','Spring','Valve Pin','Torpedo','Hot Drop','Seal','Insulator','Guide Bush','Guide Pillar','Ejector Pin','Locating Ring','Other'].map((ptype:any)=>{
+              const typeParts=parts.filter((p:any)=>p.part_type===ptype)
               if(typeParts.length===0) return null
               return <div key={ptype} style={{marginBottom:10}}>
-                <div style={{fontWeight:700,color:'#1F3864',fontSize:11,padding:'4px 8px',background:'#E8EDF5',borderRadius:6,marginBottom:4}}>
-                  🔩 {ptype} ({typeParts.length})
-                </div>
+                <div style={{fontWeight:700,color:'#1F3864',fontSize:11,padding:'4px 8px',background:'#E8EDF5',borderRadius:6,marginBottom:4}}>🔩 {ptype} ({typeParts.length})</div>
                 {typeParts.map((p:any)=><div key={p.id} style={{background:'#fff',border:'1px solid #E0E0E0',borderRadius:8,padding:'8px 12px',marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <div style={{flex:1}}>
                     <div style={{fontWeight:600,fontSize:12}}>{p.part_name}</div>
                     <div style={{fontSize:10,color:'#666',marginTop:2}}>
                       {p.size_spec&&<span style={{marginRight:8}}>📐 {p.size_spec}</span>}
                       <span style={{marginRight:8}}>🔢 Qty: {p.qty_installed}</span>
-                      {p.last_changed_date&&<span style={{color:'#854F0B'}}>🔄 Last change: {p.last_changed_date}</span>}
+                      {p.last_changed_date&&<span style={{color:'#854F0B'}}>🔄 Last: {p.last_changed_date}</span>}
                     </div>
-                    {p.total_changes>0&&<div style={{fontSize:10,color:'#C00000',marginTop:2}}>Changed {p.total_changes} times | Last by: {p.last_changed_by}</div>}
+                    {p.total_changes>0&&<div style={{fontSize:10,color:'#C00000',marginTop:2}}>Changed {p.total_changes}x | By: {p.last_changed_by}</div>}
                   </div>
                   <button onClick={()=>{setShowChangePart(p);setChangeForm({reason:'',changed_by:'',changed_date:nd(),shots_at_change:'',new_spec:'',remarks:''})}}
                     style={{background:'#FFEBEE',border:'1px solid #C00000',color:'#C00000',borderRadius:6,padding:'4px 10px',fontSize:10,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap' as const}}>
@@ -7054,8 +6963,6 @@ function MouldHistoryTab() {
                 </div>)}
               </div>
             })}
-
-            {/* Recent Changes */}
             {partChanges.length>0&&<div style={{marginTop:12}}>
               <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:6}}>🔄 Recent Part Changes</div>
               {partChanges.slice(0,10).map((c:any,i:number)=><div key={i} style={{background:'#FFEBEE',border:'1px solid #C00000',borderRadius:6,padding:'6px 10px',marginBottom:4,fontSize:11}}>
@@ -7064,149 +6971,67 @@ function MouldHistoryTab() {
                   <span style={{color:'#666',fontSize:10}}>{c.changed_date}</span>
                 </div>
                 <div style={{color:'#444',marginTop:2}}>Reason: {c.reason} | By: {c.changed_by}</div>
-                {c.shots_at_change>0&&<div style={{color:'#854F0B',fontSize:10}}>Shots at change: {c.shots_at_change?.toLocaleString()}</div>}
+                {c.shots_at_change>0&&<div style={{color:'#854F0B',fontSize:10}}>Shots: {c.shots_at_change?.toLocaleString()}</div>}
               </div>)}
             </div>}
           </div>
         }
       </div>}
 
-      {/* ── HISTORY TAB ── */}
       {mainTab==='history'&&<div>
-      {/* Last PM + Last BD cards */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-        <div style={{background:'#E8F5E9',border:'2px solid #276221',borderRadius:10,padding:12}}>
-          <div style={{fontWeight:700,color:'#276221',fontSize:11,marginBottom:4}}>🟢 Last PM</div>
-          {stats.lastPM
-            ? <>
-                <div style={{fontWeight:700,fontSize:13}}>{stats.lastPM.record_date}</div>
-                <div style={{fontSize:11,color:'#444',marginTop:2,lineHeight:1.4}}>
-                  {stats.lastPM.work_done?.slice(0,70)}{stats.lastPM.work_done?.length>70?'...':''}
-                </div>
-              </>
-            : <div style={{fontSize:11,color:'#888'}}>Koi PM record nahi</div>
-          }
-        </div>
-        <div style={{background:'#FFEBEE',border:'2px solid #C00000',borderRadius:10,padding:12}}>
-          <div style={{fontWeight:700,color:'#C00000',fontSize:11,marginBottom:4}}>🔴 Last Breakdown</div>
-          {stats.lastBD
-            ? <>
-                <div style={{fontWeight:700,fontSize:13}}>{stats.lastBD.record_date}</div>
-                <div style={{fontSize:11,color:'#444',marginTop:2,lineHeight:1.4}}>
-                  {stats.lastBD.issue?.slice(0,70)}{stats.lastBD.issue?.length>70?'...':''}
-                </div>
-              </>
-            : <div style={{fontSize:11,color:'#888'}}>Koi breakdown nahi</div>
-          }
-        </div>
-      </div>
-
-      {/* Filter tabs */}
-      <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap' as const}}>
-        {([ 
-          {key:'all', label:'All ('+stats.total+')',       ac:'#1F3864', ic:'#E8EDF5'},
-          {key:'PM',  label:'🟢 PM ('+stats.pmCount+')',   ac:'#276221', ic:'#E8F5E9'},
-          {key:'BD',  label:'🔴 BD ('+stats.bdCount+')',   ac:'#C00000', ic:'#FFEBEE'},
-          {key:'RM',  label:'⚪ RM ('+stats.rmCount+')',   ac:'#555',    ic:'#F0F0F0'},
-          {key:'MC',  label:'🟡 MC ('+stats.mcCount+')',   ac:'#854F0B', ic:'#FFF9E6'},
-        ] as {key:any,label:string,ac:string,ic:string}[]).map(t=>
-          <button key={t.key} onClick={()=>setActiveTab(t.key)}
-            style={{padding:'6px 14px',borderRadius:999,border:'none',cursor:'pointer',
-              fontSize:11,fontWeight:600,
-              background: activeTab===t.key ? t.ac : t.ic,
-              color: activeTab===t.key ? '#fff' : t.ac,
-            }}>{t.label}</button>
-        )}
-      </div>
-
-      {/* Timeline */}
-      <div style={S.card}>
-        <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:12}}>
-          📅 History Timeline — {shownHistory.length} records
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+          <div style={{background:'#E8F5E9',border:'2px solid #276221',borderRadius:10,padding:12}}>
+            <div style={{fontWeight:700,color:'#276221',fontSize:11,marginBottom:4}}>🟢 Last PM</div>
+            {stats.lastPM?<><div style={{fontWeight:700,fontSize:13}}>{stats.lastPM.record_date}</div><div style={{fontSize:11,color:'#444',marginTop:2}}>{stats.lastPM.work_done?.slice(0,70)}</div></>:<div style={{fontSize:11,color:'#888'}}>Koi PM record nahi</div>}
+          </div>
+          <div style={{background:'#FFEBEE',border:'2px solid #C00000',borderRadius:10,padding:12}}>
+            <div style={{fontWeight:700,color:'#C00000',fontSize:11,marginBottom:4}}>🔴 Last Breakdown</div>
+            {stats.lastBD?<><div style={{fontWeight:700,fontSize:13}}>{stats.lastBD.record_date}</div><div style={{fontSize:11,color:'#444',marginTop:2}}>{stats.lastBD.issue?.slice(0,70)}</div></>:<div style={{fontSize:11,color:'#888'}}>Koi breakdown nahi</div>}
+          </div>
         </div>
 
-        {shownHistory.length===0
-          ? <div style={{textAlign:'center',color:'#888',padding:32,fontSize:12}}>
-              Is filter mein koi record nahi!
-            </div>
-          : <div style={{position:'relative' as const}}>
-              {/* vertical line */}
+        <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap' as const}}>
+          {[{key:'all',label:'All ('+stats.total+')',ac:'#1F3864',ic:'#E8EDF5'},{key:'PM',label:'🟢 PM ('+stats.pmCount+')',ac:'#276221',ic:'#E8F5E9'},{key:'BD',label:'🔴 BD ('+stats.bdCount+')',ac:'#C00000',ic:'#FFEBEE'},{key:'RM',label:'⚪ RM ('+stats.rmCount+')',ac:'#555',ic:'#F0F0F0'},{key:'MC',label:'🟡 MC ('+stats.mcCount+')',ac:'#854F0B',ic:'#FFF9E6'}].map((t:any)=>
+            <button key={t.key} onClick={()=>setActiveTab(t.key)} style={{padding:'6px 14px',borderRadius:999,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,background:activeTab===t.key?t.ac:t.ic,color:activeTab===t.key?'#fff':t.ac}}>{t.label}</button>
+          )}
+        </div>
+
+        <div style={S.card}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:12}}>📅 History Timeline — {shownHistory.length} records</div>
+          {shownHistory.length===0
+            ?<div style={{textAlign:'center',color:'#888',padding:32,fontSize:12}}>Is filter mein koi record nahi!</div>
+            :<div style={{position:'relative' as const}}>
               <div style={{position:'absolute' as const,left:19,top:4,bottom:4,width:2,background:'#E0E0E0',zIndex:0}}/>
-
               {shownHistory.map((rec:any,i:number)=>{
-                const cfg = typeCfg[rec.record_type] || {color:'#666',bg:'#F5F5F5',border:'#ccc',icon:'📌'}
+                const cfg=typeCfg[rec.record_type]||{color:'#666',bg:'#F5F5F5',border:'#ccc',icon:'📌'}
                 return <div key={rec.id||i} style={{display:'flex',gap:10,marginBottom:10,position:'relative' as const,zIndex:1}}>
-                  {/* Circle */}
-                  <div style={{width:40,height:40,borderRadius:'50%',flexShrink:0,
-                    background:cfg.bg,border:'2px solid '+cfg.border,
-                    display:'flex',alignItems:'center',justifyContent:'center',
-                    fontSize:14,position:'relative' as const,zIndex:2}}>
-                    {cfg.icon}
-                  </div>
-                  {/* Card */}
-                  <div style={{flex:1,background:cfg.bg,border:'1px solid '+cfg.border+'44',
-                    borderRadius:8,padding:'8px 12px',minWidth:0}}>
-                    {/* Top row */}
+                  <div style={{width:40,height:40,borderRadius:'50%',flexShrink:0,background:cfg.bg,border:'2px solid '+cfg.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,position:'relative' as const,zIndex:2}}>{cfg.icon}</div>
+                  <div style={{flex:1,background:cfg.bg,border:'1px solid '+cfg.border+'44',borderRadius:8,padding:'8px 12px',minWidth:0}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4,gap:8}}>
                       <div style={{fontWeight:700,fontSize:12,color:cfg.color,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap' as const}}>
-                        {rec.record_type==='PM' ? 'Preventive Maintenance' :
-                         rec.record_type==='BD' ? 'Breakdown' :
-                         rec.record_type==='RM' ? 'Routine Maintenance' :
-                         'Mould Change'}
-                        {rec.machine_no&&rec.machine_no!=='--'&&rec.machine_no!==''&&
-                          <span style={{fontWeight:400,color:'#777',fontSize:11}}>| {rec.machine_no}</span>}
-                        {rec._live&&<span style={{background:'#1F3864',color:'#fff',fontSize:9,
-                          padding:'1px 6px',borderRadius:3,fontWeight:600}}>LIVE</span>}
+                        {rec.record_type==='PM'?'Preventive Maintenance':rec.record_type==='BD'?'Breakdown':rec.record_type==='RM'?'Routine Maintenance':'Mould Change'}
+                        {rec.machine_no&&rec.machine_no!=='--'&&<span style={{fontWeight:400,color:'#777',fontSize:11}}>| {rec.machine_no}</span>}
+                        {rec._live&&<span style={{background:'#1F3864',color:'#fff',fontSize:9,padding:'1px 6px',borderRadius:3,fontWeight:600}}>LIVE</span>}
                       </div>
-                      <div style={{fontSize:10,color:'#666',whiteSpace:'nowrap' as const,fontWeight:600,flexShrink:0}}>
-                        {rec.record_date}
-                      </div>
+                      <div style={{fontSize:10,color:'#666',whiteSpace:'nowrap' as const,fontWeight:600,flexShrink:0}}>{rec.record_date}</div>
                     </div>
-
-                    {/* Issue */}
-                    {rec.issue&&rec.issue!=='--'&&rec.issue!==''&&
-                      <div style={{fontSize:11,color:'#333',marginBottom:3}}>
-                        <span style={{fontWeight:600,color:'#444'}}>Issue: </span>{rec.issue}
-                      </div>}
-
-                    {/* Work Done */}
-                    {rec.work_done&&rec.work_done!=='--'&&rec.work_done!==''&&
-                      <div style={{fontSize:11,color:'#444',marginBottom:3}}>
-                        <span style={{fontWeight:600,color:'#444'}}>Work: </span>{rec.work_done}
-                      </div>}
-
-                    {/* Parts Changed */}
-                    {rec.parts_changed&&rec.parts_changed!=='--'&&rec.parts_changed!==''&&
-                      <div style={{fontSize:11,color:'#5B2C8D',marginBottom:4}}>
-                        <span style={{fontWeight:600}}>Parts: </span>{rec.parts_changed}
-                      </div>}
-
-                    {/* Result badge */}
-                    {rec.result&&rec.result!=='--'&&rec.result!==''&&
-                      <span style={{
-                        background: ['Fixed','Done','Running','OK','Ready'].includes(rec.result) ? '#276221' : '#854F0B',
-                        color:'#fff',fontSize:9,padding:'2px 8px',borderRadius:999,fontWeight:600
-                      }}>{rec.result}</span>}
+                    {rec.issue&&rec.issue!=='--'&&<div style={{fontSize:11,color:'#333',marginBottom:3}}><span style={{fontWeight:600}}>Issue: </span>{rec.issue}</div>}
+                    {rec.work_done&&rec.work_done!=='--'&&<div style={{fontSize:11,color:'#444',marginBottom:3}}><span style={{fontWeight:600}}>Work: </span>{rec.work_done}</div>}
+                    {rec.parts_changed&&rec.parts_changed!=='--'&&rec.parts_changed!==''&&<div style={{fontSize:11,color:'#5B2C8D',marginBottom:4}}><span style={{fontWeight:600}}>Parts: </span>{rec.parts_changed}</div>}
+                    {rec.result&&rec.result!=='--'&&<span style={{background:['Fixed','Done','Running','OK','Ready'].includes(rec.result)?'#276221':'#854F0B',color:'#fff',fontSize:9,padding:'2px 8px',borderRadius:999,fontWeight:600}}>{rec.result}</span>}
                   </div>
                 </div>
               })}
             </div>
-        }
-      </div>
+          }
+        </div>
+      </div>}
+    </div>}
 
-      </div>}{/* close history tab */}
-    </div>}{/* close stats&&!loading */}
-
-    {/* Empty state */}
     {!selected&&!loading&&<div style={{...S.card,textAlign:'center',color:'#888',padding:40}}>
       <div style={{fontSize:32,marginBottom:8}}>🔍</div>
-      <div style={{fontSize:13,fontWeight:600,color:'#444',marginBottom:4}}>
-        Koi bhi mould search karo
-      </div>
-      <div style={{fontSize:11}}>
-        Job No ya naam type karo — poora logbook history dikhega<br/>
-        <span style={{color:'#aaa'}}>530+ records | Jun 2022 – May 2026 | 4 PDF logbooks</span>
-      </div>
+      <div style={{fontSize:13,fontWeight:600,color:'#444',marginBottom:4}}>Koi bhi mould search karo</div>
+      <div style={{fontSize:11}}>Job No ya naam type karo — poora logbook history dikhega<br/><span style={{color:'#aaa'}}>530+ records | Jun 2022 – May 2026 | 4 PDF logbooks</span></div>
     </div>}
   </div>
 </div>
