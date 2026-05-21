@@ -3411,6 +3411,7 @@ function QualityTab({user}:{user:User}) {
 
   const getCheck=(machine:string,type:string,idx:number)=>machineData[machine]?.[`${type}_${idx}`]||''
   const setProduct=(machine:string,val:string)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],product:val}}))
+  const setMould=(machine:string,val:string)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],mould:val}}))
 
   const copyM1ToAll=()=>{
     const m1=machines[0]
@@ -3431,7 +3432,7 @@ function QualityTab({user}:{user:User}) {
       const d=machineData[machine]||{}
       if(!d.product) return null
       return {
-        date,shift,machine:`${plant} - ${machine}`,part_name:d.product,qc_person:qcPerson,
+        date,shift,machine:plant+' - '+machine,part_name:d.product,qc_person:qcPerson,mould_code:d.mould?d.mould.split('(')[1]?.replace(')',''):'',mould_name:d.mould?d.mould.split('(')[0].trim():'',
         no_short_shots:getCheck(machine,'vis',0)||'N/A',
         no_flash:getCheck(machine,'vis',1)||'N/A',
         no_burn_marks:getCheck(machine,'vis',2)||'N/A',
@@ -3489,11 +3490,19 @@ function QualityTab({user}:{user:User}) {
           <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{machine}</span>
           {hasProduct&&<span style={{background:hasNG?'#FFEBEE':'#E8F5E9',color:hasNG?'#C00000':'#276221',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:600}}>{hasNG?'NG Found!':'OK'}</span>}
         </div>
-        <div style={S.f}><label style={S.lbl}>Product</label>
-          <select style={S.fi} value={d.product||''} onChange={e=>setProduct(machine,e.target.value)}>
-            <option value="">-- Select Product --</option>
-            {items.map(i=><option key={i.name}>{i.name}</option>)}
-          </select>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <div style={S.f}><label style={S.lbl}>Product</label>
+            <select style={S.fi} value={d.product||''} onChange={e=>setProduct(machine,e.target.value)}>
+              <option value="">-- Select Product --</option>
+              {items.map(i=><option key={i.name}>{i.name}</option>)}
+            </select>
+          </div>
+          <div style={S.f}><label style={S.lbl}>⚙️ Mould (Job No)</label>
+            <select style={S.fi} value={d.mould||''} onChange={e=>setMould(machine,e.target.value)}>
+              <option value="">-- Select Mould --</option>
+              {MOULDS.map(m=><option key={m.code} value={m.name+' ('+m.code+')'}>{m.name} ({m.code})</option>)}
+            </select>
+          </div>
         </div>
         {hasProduct&&<>
           <div style={{fontSize:11,fontWeight:600,color:'#1F3864',marginBottom:6}}>Visual Inspection</div>
