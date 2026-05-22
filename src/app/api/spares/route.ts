@@ -147,7 +147,22 @@ export async function PUT(req: Request) {
   const d = await req.json()
   if (!d.id) return NextResponse.json({ success: false, msg: 'ID required' })
 
-  const status = parseFloat(d.current_stock)===0 ? 'Out of Stock' 
+  // Movement edit
+  if (d._movement) {
+    const { error } = await supabase.from('spare_movements').update({
+      part_name: d.part_name,
+      date: d.date,
+      action: d.action,
+      qty: parseFloat(d.qty) || 0,
+      done_by: d.done_by || '',
+      vendor: d.vendor || '',
+    }).eq('id', d.id)
+    if (error) return NextResponse.json({ success: false, msg: error.message })
+    return NextResponse.json({ success: true, msg: 'Movement updated!' })
+  }
+
+  // Spare master edit
+  const status = parseFloat(d.current_stock)===0 ? 'Out of Stock'
     : parseFloat(d.current_stock) < parseFloat(d.min_qty||0) ? 'Low' : 'OK'
 
   const { error } = await supabase.from('spares_master').update({
@@ -174,6 +189,16 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
+  const movementId = searchParams.get('movement_id')
+
+  // Delete movement
+  if (movementId) {
+    const { error } = await supabase.from('spare_movements').delete().eq('id', movementId)
+    if (error) return NextResponse.json({ success: false, msg: error.message })
+    return NextResponse.json({ success: true, msg: 'Movement deleted!' })
+  }
+
+  // Delete spare master
   if (!id) return NextResponse.json({ success: false, msg: 'ID required' })
   const { error } = await supabase.from('spares_master').delete().eq('id', id)
   if (error) return NextResponse.json({ success: false, msg: error.message })
