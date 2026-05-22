@@ -59,6 +59,7 @@ export async function POST(req: Request) {
     material: d.material || '',
     good_parts: Math.round(totalGood),
     rejection: Math.round(totalRej),
+    rejection_weight: entries.reduce((s,e)=>s+(parseFloat(e.rejWeight)||0),0),
     downtime: Math.round(totalDown),
     shots_this_shift: shotsThisShift,
     machine_status: d.machineStatus || 'running',
