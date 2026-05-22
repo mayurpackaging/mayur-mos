@@ -863,6 +863,75 @@ function WeeklyReport() {
 
       </div>}
 
+      {/* Rejection Comparison */}
+      {wData&&!loading&&<div style={{...S.card,marginBottom:8}}>
+        <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:10}}>🔍 Rejection Comparison — Operator vs QC</div>
+        <RejectionComparison from={fromDate} to={toDate} plant=""/>
+      </div>}
+
+      {/* Quality + Production Correlation */}
+      {wData&&!loading&&<div style={{...S.card,marginBottom:8}}>
+        <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:10}}>📊 Quality vs Production Correlation</div>
+        {wData.qual.length===0
+          ?<div style={{color:'#888',fontSize:12,padding:8}}>Quality data nahi hai is period mein</div>
+          :<div>
+            {/* Machine wise quality + production combined */}
+            {(()=>{
+              // Group quality NG by machine+product
+              const qMap:{[k:string]:{total:number,ng:number,product:string,machine:string,mould:string}}={}
+              wData.qual.forEach((q:any)=>{
+                const k=(q.machine||'')+'||'+(q.part_name||'')
+                if(!qMap[k]) qMap[k]={total:0,ng:0,product:q.part_name||'',machine:q.machine||'',mould:q.mould_name||''}
+                qMap[k].total++
+                if(q.overall_result==='NG') qMap[k].ng++
+              })
+              // Group production rej by machine
+              const pMap:{[k:string]:{rej:number,good:number}}={}
+              wData.prod.forEach((p:any)=>{
+                const k=(p.machine||'')+'||'+(p.product||'')
+                if(!pMap[k]) pMap[k]={rej:0,good:0}
+                pMap[k].rej+=(p.rejection||0)
+                pMap[k].good+=(p.good_parts||0)
+              })
+              const rows=Object.entries(qMap).map(([k,q])=>{
+                const p=pMap[k]||{rej:0,good:0}
+                const qcNGPct=q.total>0?Math.round(q.ng/q.total*100):0
+                const prodRejPct=p.good+p.rej>0?Math.round(p.rej/(p.good+p.rej)*100):0
+                const correlated=qcNGPct>0&&prodRejPct>0
+                return {machine:q.machine,product:q.product,mould:q.mould,qcTotal:q.total,qcNG:q.ng,qcNGPct,prodRej:p.rej,prodRejPct,correlated}
+              }).sort((a,b)=>b.qcNGPct-a.qcNGPct)
+              return <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                  <thead><tr>
+                    {['Machine','Product','Mould','QC Checks','QC NG%','Prod Rej','Prod Rej%','Status'].map(h=>(
+                      <th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap'}}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {rows.map((r,i)=>(
+                      <tr key={i} style={{background:r.qcNGPct>20?'#FFEBEE':r.qcNGPct>10?'#FFF9E6':i%2===0?'#FAFAFA':'#fff'}}>
+                        <td style={{padding:'5px 8px',fontWeight:600,fontSize:11}}>{r.machine}</td>
+                        <td style={{padding:'5px 8px',color:'#854F0B'}}>{r.product}</td>
+                        <td style={{padding:'5px 8px',fontSize:10,color:'#555'}}>{r.mould||'--'}</td>
+                        <td style={{padding:'5px 8px',textAlign:'center'}}>{r.qcTotal}</td>
+                        <td style={{padding:'5px 8px',textAlign:'center',fontWeight:700,color:r.qcNGPct>20?'#C00000':r.qcNGPct>10?'#854F0B':'#276221'}}>{r.qcNGPct}%</td>
+                        <td style={{padding:'5px 8px',textAlign:'center',color:'#C00000',fontWeight:600}}>{r.prodRej.toLocaleString()}</td>
+                        <td style={{padding:'5px 8px',textAlign:'center',fontWeight:700,color:r.prodRejPct>3?'#C00000':'#276221'}}>{r.prodRejPct}%</td>
+                        <td style={{padding:'5px 8px'}}>
+                          <span style={{background:r.qcNGPct>20||r.prodRejPct>5?'#C00000':r.qcNGPct>10||r.prodRejPct>3?'#FF9800':'#276221',color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:700}}>
+                            {r.qcNGPct>20||r.prodRejPct>5?'🚨 HIGH':r.qcNGPct>10||r.prodRejPct>3?'⚠️ WATCH':'✅ OK'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            })()}
+          </div>
+        }
+      </div>}
+
       {!wData&&!loading&&<div style={{...S.card,textAlign:'center',color:'#888',padding:40}}>
         <div style={{fontSize:32,marginBottom:8}}>📅</div>
         <div style={{fontSize:13,fontWeight:600,color:'#444',marginBottom:4}}>Date range select karo</div>
