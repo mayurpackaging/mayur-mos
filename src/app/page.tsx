@@ -3693,6 +3693,16 @@ function SparesTab({user}:{user:User}) {
         </div>
       </div>}
 
+      {/* Plant field — Stock In mein bhi dikhao */}
+      {action==='Stock In'&&<div style={{marginBottom:8}}>
+        <div style={S.f}><label style={S.lbl}>Plant (Kahan aayi stock?)</label>
+          <select style={S.fi} value={usedForPlant} onChange={e=>setUsedForPlant(e.target.value)}>
+            <option value="">Select Plant</option>
+            <option>Plant 477</option><option>Plant 488</option><option>Plant 433</option><option>Main Store</option>
+          </select>
+        </div>
+      </div>}
+
       {/* Use Entry — Machine & Mould fields */}
       {action==='Used in Machine'&&<div style={{background:'#FFF9E6',border:'2px solid #854F0B',borderRadius:8,padding:12,marginBottom:10}}>
         <div style={{fontWeight:700,color:'#854F0B',fontSize:12,marginBottom:8}}>🔧 Kahan Use Hua?</div>
