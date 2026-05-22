@@ -46,6 +46,13 @@ export async function GET(req: Request) {
     }))
     return NextResponse.json({ success: true, data: enriched })
   }
+  if (searchParams.get('from') && searchParams.get('to')) {
+    const { data } = await supabase.from('mould_changes')
+      .select('*').gte('date', searchParams.get('from')!).lte('date', searchParams.get('to')!)
+      .order('date', { ascending: true })
+    return NextResponse.json({ success: true, data: data || [] })
+  }
+
   let q = supabase.from('mould_changes').select('*').order('created_at', { ascending: false }).limit(50)
   if (date) q = q.eq('date', date)
   const { data } = await q
