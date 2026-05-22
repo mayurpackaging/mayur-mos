@@ -613,6 +613,260 @@ function ProductionStatusReport({date,plant}:{date:string,plant:string}) {
   </div>
 }
 
+function WeeklyReport() {
+  const [wData,setWData]=useState(null)
+  const [loading,setLoading]=useState(false)
+  const [fromDate,setFromDate]=useState('')
+  const [toDate,setToDate]=useState('')
+
+  // Default: last 7 days
+  useEffect(()=>{
+    const today=new Date()
+    const weekAgo=new Date(today.getTime()-6*24*60*60*1000)
+    const fmt=d=>d.toISOString().split('T')[0]
+    setToDate(fmt(today))
+    setFromDate(fmt(weekAgo))
+  },[])
+
+  const load=async()=>{
+    if(!fromDate||!toDate) return
+    setLoading(true)
+    try {
+      const [prodRes,qualRes,bdRes,mcRes,pmRes] = await Promise.all([
+        fetch('/api/production?from='+fromDate+'&to='+toDate).then(r=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/quality?report=1&from='+fromDate+'&to='+toDate).then(r=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/breakdown?from='+fromDate+'&to='+toDate).then(r=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/mouldchange?from='+fromDate+'&to='+toDate).then(r=>r.json()).catch(()=>({data:[]})),
+        fetch('/api/mouldpm').then(r=>r.json()).catch(()=>({data:[]})),
+      ])
+
+      const prod=prodRes.data||[]
+      const qual=qualRes.data||[]
+      const bd=bdRes.data||[]
+      const mc=mcRes.data||[]
+
+      // Production summary
+      const totalGood=prod.reduce((s,r)=>s+(r.good_parts||0),0)
+      const totalRej=prod.reduce((s,r)=>s+(r.rejection||0),0)
+      const rejPct=totalGood+totalRej>0?((totalRej/(totalGood+totalRej))*100).toFixed(1):0
+
+      // Quality summary
+      const totalQC=qual.length
+      const ngQC=qual.filter(r=>r.overall_result==='NG').length
+      const ngPct=totalQC>0?Math.round(ngQC/totalQC*100):0
+
+      // Machine wise NG
+      const machNG={}
+      qual.filter(r=>r.overall_result==='NG').forEach(r=>{
+        machNG[r.machine]=(machNG[r.machine]||0)+1
+      })
+      const topNG=Object.entries(machNG).sort((a,b)=>(b[1] as number)-(a[1] as number)).slice(0,5)
+
+      // Breakdown summary
+      const bdTotal=bd.length
+      const bdPending=bd.filter(r=>r.status==='Pending'||r.status==='In Progress').length
+      const bdResolved=bd.filter(r=>r.status==='Resolved'||r.status?.includes('Resolved')).length
+      const totalDowntime=bd.reduce((s,r)=>s+(r.downtime_min||0),0)
+      const avgDowntime=bdResolved>0?Math.round(totalDowntime/bdResolved):0
+
+      // BD by machine
+      const bdByMach={}
+      bd.forEach(r=>{ bdByMach[r.machine]=(bdByMach[r.machine]||0)+1 })
+      const topBD=Object.entries(bdByMach).sort((a,b)=>(b[1] as number)-(a[1] as number)).slice(0,5)
+
+      // Mould changes
+      const mcTotal=mc.length
+      const mcAvgTime=mcTotal>0?Math.round(mc.filter(r=>r.total_minutes>0).reduce((s,r)=>s+(r.total_minutes||0),0)/(mc.filter(r=>r.total_minutes>0).length||1)):0
+
+      // Date wise production
+      const dayWise={}
+      prod.forEach(r=>{
+        if(!dayWise[r.date]) dayWise[r.date]={good:0,rej:0}
+        dayWise[r.date].good+=(r.good_parts||0)
+        dayWise[r.date].rej+=(r.rejection||0)
+      })
+
+      setWData({totalGood,totalRej,rejPct,totalQC,ngQC,ngPct,topNG,bdTotal,bdPending,bdResolved,totalDowntime,avgDowntime,topBD,mcTotal,mcAvgTime,dayWise,prod,qual,bd,mc})
+    } catch(e) { console.error(e) }
+    setLoading(false)
+  }
+
+  const downloadWeeklyCSV=()=>{
+    if(!wData) return
+    const rows=[
+      ['=== WEEKLY REPORT ===','','From: '+fromDate,'To: '+toDate],
+      [''],
+      ['--- PRODUCTION ---'],
+      ['Total Good Parts',wData.totalGood,'Total Rejection',wData.totalRej,'Rejection %',wData.rejPct+'%'],
+      [''],
+      ['Date','Good Parts','Rejection','Rej%'],
+      ...Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s])=>[dt,s.good,s.rej,s.good+s.rej>0?((s.rej/(s.good+s.rej))*100).toFixed(1)+'%':'0%']),
+      [''],
+      ['--- QUALITY ---'],
+      ['Total Checks',wData.totalQC,'NG Count',wData.ngQC,'NG %',wData.ngPct+'%'],
+      [''],
+      ['--- BREAKDOWNS ---'],
+      ['Total',wData.bdTotal,'Resolved',wData.bdResolved,'Pending',wData.bdPending,'Total Downtime',wData.totalDowntime+'min','Avg Downtime',wData.avgDowntime+'min'],
+      [''],
+      ['--- MOULD CHANGES ---'],
+      ['Total Changes',wData.mcTotal,'Avg Time',wData.mcAvgTime+'min'],
+    ]
+    const csv=rows.map(r=>r.join(',')).join('\n')
+    const blob=new Blob([csv],{type:'text/csv'})
+    const url=URL.createObjectURL(blob)
+    const a=document.createElement('a')
+    a.href=url
+    a.download='weekly_report_'+fromDate+'_to_'+toDate+'.csv'
+    a.click()
+  }
+
+  return (
+    <div>
+      {/* Date Range */}
+      <div style={S.card}>
+        <div style={{fontWeight:700,color:'#1F3864',fontSize:14,marginBottom:10}}>📅 Weekly Consolidated Report</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end'}}>
+          <div style={S.f}><label style={S.lbl}>From</label><input type="date" style={S.fi} value={fromDate} onChange={e=>setFromDate(e.target.value)}/></div>
+          <div style={S.f}><label style={S.lbl}>To</label><input type="date" style={S.fi} value={toDate} onChange={e=>setToDate(e.target.value)}/></div>
+          <button onClick={load} style={{...S.sb,margin:0,padding:'8px 20px'}}>Load</button>
+        </div>
+        <div style={{display:'flex',gap:6,marginTop:8}}>
+          {[{l:'This Week',d:6},{l:'Last 7 Days',d:6},{l:'Last 15 Days',d:14},{l:'Last 30 Days',d:29}].map(p=>(
+            <button key={p.l} onClick={()=>{
+              const t=new Date()
+              const f=new Date(t.getTime()-p.d*24*60*60*1000)
+              setToDate(t.toISOString().split('T')[0])
+              setFromDate(f.toISOString().split('T')[0])
+            }} style={{padding:'4px 10px',borderRadius:999,border:'1px solid #1F3864',background:'#E8EDF5',color:'#1F3864',fontSize:10,cursor:'pointer',fontWeight:600}}>{p.l}</button>
+          ))}
+        </div>
+      </div>
+
+      {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>⏳ Loading weekly data...</div>}
+
+      {wData&&!loading&&<div>
+        {/* Download button */}
+        <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+          <button onClick={downloadWeeklyCSV} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,fontWeight:700,cursor:'pointer'}}>⬇️ Download Weekly CSV</button>
+        </div>
+
+        {/* Summary Cards */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+
+          {/* Production */}
+          <div style={{background:'#E8F5E9',border:'2px solid #276221',borderRadius:12,padding:14}}>
+            <div style={{fontWeight:700,color:'#276221',fontSize:13,marginBottom:8}}>🏭 Production</div>
+            <div style={{fontSize:22,fontWeight:700,color:'#276221'}}>{(wData.totalGood/1000).toFixed(1)}K</div>
+            <div style={{fontSize:11,color:'#444'}}>Good parts produced</div>
+            <div style={{marginTop:6,fontSize:11}}>
+              <span style={{color:'#C00000',fontWeight:600}}>Rej: {wData.totalRej.toLocaleString()} pcs ({wData.rejPct}%)</span>
+            </div>
+          </div>
+
+          {/* Quality */}
+          <div style={{background:wData.ngPct>10?'#FFEBEE':'#FFF9E6',border:'2px solid '+(wData.ngPct>10?'#C00000':'#854F0B'),borderRadius:12,padding:14}}>
+            <div style={{fontWeight:700,color:wData.ngPct>10?'#C00000':'#854F0B',fontSize:13,marginBottom:8}}>✅ Quality</div>
+            <div style={{fontSize:22,fontWeight:700,color:wData.ngPct>10?'#C00000':'#276221'}}>{wData.ngPct}% NG</div>
+            <div style={{fontSize:11,color:'#444'}}>{wData.totalQC} checks | {wData.ngQC} NG</div>
+          </div>
+
+          {/* Breakdown */}
+          <div style={{background:'#FFEBEE',border:'2px solid #C00000',borderRadius:12,padding:14}}>
+            <div style={{fontWeight:700,color:'#C00000',fontSize:13,marginBottom:8}}>🔴 Breakdowns</div>
+            <div style={{fontSize:22,fontWeight:700,color:'#C00000'}}>{wData.bdTotal}</div>
+            <div style={{fontSize:11,color:'#444'}}>{wData.bdResolved} resolved | {wData.bdPending} pending</div>
+            <div style={{marginTop:6,fontSize:11,color:'#854F0B',fontWeight:600}}>
+              Total downtime: {Math.round(wData.totalDowntime/60)}h {wData.totalDowntime%60}m
+            </div>
+          </div>
+
+          {/* Mould Change */}
+          <div style={{background:'#F3E5F5',border:'2px solid #7B1FA2',borderRadius:12,padding:14}}>
+            <div style={{fontWeight:700,color:'#7B1FA2',fontSize:13,marginBottom:8}}>🔄 Mould Changes</div>
+            <div style={{fontSize:22,fontWeight:700,color:'#7B1FA2'}}>{wData.mcTotal}</div>
+            <div style={{fontSize:11,color:'#444'}}>Avg time: {wData.mcAvgTime} min</div>
+          </div>
+        </div>
+
+        {/* Day wise production */}
+        <div style={{...S.card,marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:8}}>📈 Day Wise Production</div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+              <thead><tr>
+                {['Date','Good Parts','Rejection','Rej %'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s],i)=>{
+                  const rp=s.good+s.rej>0?((s.rej/(s.good+s.rej))*100).toFixed(1):0
+                  return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                    <td style={{padding:'5px 8px',fontWeight:600}}>{dt}</td>
+                    <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{s.good.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',color:'#C00000'}}>{s.rej.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',color:Number(rp)>3?'#C00000':'#276221',fontWeight:700}}>{rp}%</td>
+                  </tr>
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Top NG Machines */}
+        {wData.topNG.length>0&&<div style={{...S.card,marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:8}}>🔴 Top NG Machines (Quality)</div>
+          {wData.topNG.map((m,i)=>(
+            <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #F5F5F5'}}>
+              <span style={{fontSize:12}}>{m[0]}</span>
+              <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>{m[1]} NG</span>
+            </div>
+          ))}
+        </div>}
+
+        {/* Top Breakdown Machines */}
+        {wData.topBD.length>0&&<div style={{...S.card,marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:8}}>⚙️ Top Breakdown Machines</div>
+          {wData.topBD.map((m,i)=>(
+            <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #F5F5F5'}}>
+              <span style={{fontSize:12}}>{m[0]}</span>
+              <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>{m[1]} BD</span>
+            </div>
+          ))}
+        </div>}
+
+        {/* Breakdown Detail */}
+        {wData.bd.length>0&&<div style={{...S.card,marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:8}}>🔴 Breakdown Details</div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+              <thead><tr>
+                {['Date','Machine','Problem','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {wData.bd.map((b,i)=>(
+                  <tr key={i} style={{background:i%2===0?'#FFF5F5':'#fff'}}>
+                    <td style={{padding:'5px 8px',fontWeight:600}}>{b.date}</td>
+                    <td style={{padding:'5px 8px'}}>{b.machine}</td>
+                    <td style={{padding:'5px 8px',maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.problem}</td>
+                    <td style={{padding:'5px 8px',color:'#854F0B',fontWeight:600}}>{b.downtime_min||0}m</td>
+                    <td style={{padding:'5px 8px'}}><span style={{background:b.status?.includes('Resolved')||b.status==='Resolved'?'#E8F5E9':'#FFEBEE',color:b.status?.includes('Resolved')||b.status==='Resolved'?'#276221':'#C00000',padding:'1px 6px',borderRadius:999,fontSize:10}}>{b.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>}
+
+      </div>}
+
+      {!wData&&!loading&&<div style={{...S.card,textAlign:'center',color:'#888',padding:40}}>
+        <div style={{fontSize:32,marginBottom:8}}>📅</div>
+        <div style={{fontSize:13,fontWeight:600,color:'#444',marginBottom:4}}>Date range select karo</div>
+        <div style={{fontSize:11}}>Ya upar quick buttons use karo — Last 7 Days etc.</div>
+      </div>}
+    </div>
+  )
+}
+
 function MISTab() {
   const [data,setData]=useState<any>(null)
   const [loading,setLoading]=useState(true)
@@ -631,6 +885,7 @@ function MISTab() {
 
   const SECTIONS=[
     {id:'overview',label:'Overview'},
+    {id:'weekly',label:'📅 Weekly'},
     {id:'production',label:'Production'},
     {id:'quality',label:'Quality'},
     {id:'mould',label:'Mould'},
@@ -644,6 +899,9 @@ function MISTab() {
     <div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto'}}>
       {SECTIONS.map(s=><button key={s.id} style={activeSection===s.id?S.nbA:S.nb} onClick={()=>setActiveSection(s.id)}>{s.label}</button>)}
     </div>
+
+    {/* WEEKLY SECTION */}
+    {activeSection==='weekly'&&<WeeklyReport/>}
 
     {/* OVERVIEW SECTION */}
     {activeSection==='overview'&&<div>
