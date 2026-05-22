@@ -798,7 +798,7 @@ function WeeklyReport() {
           <div style={{overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
               <thead><tr>
-                {['Date','Plant','Good Parts','Rejection','Rej %'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+                {['Date','Good Parts','Rejection','Rej %'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s],i)=>{
@@ -806,7 +806,6 @@ function WeeklyReport() {
                   const rp=sv.good+sv.rej>0?((sv.rej/(sv.good+sv.rej))*100).toFixed(1):0
                   return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
                     <td style={{padding:'5px 8px',fontWeight:600}}>{dt}</td>
-                    <td style={{padding:'5px 8px',fontSize:10,color:'#1F3864'}}>{(dayPlants[dt]||[]).join(', ')||'--'}</td>
                     <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{sv.good.toLocaleString()}</td>
                     <td style={{padding:'5px 8px',color:'#C00000'}}>{sv.rej.toLocaleString()}</td>
                     <td style={{padding:'5px 8px',color:Number(rp)>3?'#C00000':'#276221',fontWeight:700}}>{rp}%</td>
