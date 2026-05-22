@@ -191,11 +191,25 @@ export async function DELETE(req: Request) {
   const id = searchParams.get('id')
   const movementId = searchParams.get('movement_id')
 
-  // Delete movement
+  // Delete movement — stock bhi reverse karo
   if (movementId) {
+    // Pehle movement fetch karo
+    const { data: mov } = await supabase.from('spare_movements').select('*').eq('id', movementId).maybeSingle()
+    if (mov) {
+      // Stock reverse karo
+      const { data: spare } = await supabase.from('spares_master').select('*').ilike('part_name', mov.part_name).maybeSingle()
+      if (spare) {
+        let newStock = spare.current_stock || 0
+        if (mov.action === 'Stock In') newStock -= (mov.qty || 0)  // Stock In tha toh minus karo
+        else newStock += (mov.qty || 0)  // Used/Out tha toh wapas add karo
+        newStock = Math.max(0, newStock)
+        const status = newStock === 0 ? 'Out of Stock' : newStock < (spare.min_qty || 0) ? 'Low' : 'OK'
+        await supabase.from('spares_master').update({ current_stock: newStock, status }).eq('id', spare.id)
+      }
+    }
     const { error } = await supabase.from('spare_movements').delete().eq('id', movementId)
     if (error) return NextResponse.json({ success: false, msg: error.message })
-    return NextResponse.json({ success: true, msg: 'Movement deleted!' })
+    return NextResponse.json({ success: true, msg: 'Movement deleted & stock reversed!' })
   }
 
   // Delete spare master
