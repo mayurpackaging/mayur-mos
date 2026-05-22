@@ -1527,7 +1527,7 @@ function ProductionTab({user}:{user:User}) {
   const [products,setProducts]=useState([{
     id:1,product:'',mould:'',cavities:'',cycleTime:'',
     operator:'',operator2:'',material:'',
-    slots:DAY_SLOTS.map(s=>({slot:s,good:'',rejection:'',down:'',remarks:''}))
+    slots:DAY_SLOTS.map(s=>({slot:s,good:'',rejection:'',rejWeight:'',down:'',remarks:''}))
   }])
 
   useEffect(()=>{
@@ -1553,7 +1553,7 @@ function ProductionTab({user}:{user:User}) {
     setProducts(prev=>[...prev,{
       id:Date.now(),product:'',mould:'',cavities:'',cycleTime:'',
       operator:'',operator2:'',material:'',
-      slots:slotNames.map(s=>({slot:s,good:'',rejection:'',down:'',remarks:''}))
+      slots:slotNames.map(s=>({slot:s,good:'',rejection:'',rejWeight:'',down:'',remarks:''}))
     }])
   }
 
@@ -1842,6 +1842,7 @@ function ProductionTab({user}:{user:User}) {
                         </div>
                         <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Rejection</div>
                           <input type="number" min="0" value={slot.rejection} onChange={e=>updateSlot(prod.id,si,'rejection',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #C00000',borderRadius:6,textAlign:'center',fontSize:12}}/>
+                          <input type="number" min="0" step="0.01" value={slot.rejWeight||''} onChange={e=>updateSlot(prod.id,si,'rejWeight',e.target.value)} style={{width:'100%',padding:'3px',border:'1px solid #FF9800',borderRadius:6,textAlign:'center',fontSize:10,marginTop:2}} placeholder="kg"/>
                         </div>
                         <div><div style={{fontSize:9,color:'#666',textAlign:'center'}}>Downtime(min)</div>
                           <input type="number" min="0" value={slot.down} onChange={e=>updateSlot(prod.id,si,'down',e.target.value)} style={{width:'100%',padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12}}/>
@@ -1875,7 +1876,20 @@ function RejectionTab({user}:{user:User}) {
   const [items,setItems]=useState<any[]>([])
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
-  const [form,setForm]=useState({date:nd(),shift:'Day',plant:'',machine:'',product:'',rejectionQty:'',reason:'Short Shot',action:'Rework',notes:''})
+  const [form,setForm]=useState({date:nd(),shift:'Day',plant:'',machine:'',product:'',rejectionQty:'',rejectionWeight:'',reason:'Short Shot',action:'Rework',notes:''})
+  const [weights,setWeights]=useState([])
+  useEffect(()=>{
+    fetch('/api/weights').then(r=>r.json()).then(d=>setWeights(d.data||[])).catch(()=>{})
+  },[])
+  const getWeight=(product,qty)=>{
+    if(!product||!qty) return ''
+    const w=weights.find(w=>product.toLowerCase().includes(w.item_name.toLowerCase().replace(' container','').replace(' lid','').trim())||w.item_name.toLowerCase().includes(product.toLowerCase().split(' ').slice(0,3).join(' ')))
+    if(!w) return ''
+    const isLid=product.toLowerCase().includes('lid')
+    const gramsPerPc=isLid?w.lid_weight_g:w.container_weight_g
+    if(!gramsPerPc) return ''
+    return (gramsPerPc*parseFloat(qty)/1000).toFixed(2)
+  }
   useEffect(()=>{fetch('/api/ims').then(r=>r.json()).then(d=>setItems(d.items||[]))},[])
   const machines=MACH[form.plant]||[]
   const save=async()=>{
@@ -1899,10 +1913,19 @@ function RejectionTab({user}:{user:User}) {
       </select></div>
     </div>
     <div style={S.fr}>
-      <div style={S.f}><label style={S.lbl}>Product</label><select style={S.fi} value={form.product} onChange={e=>setForm(p=>({...p,product:e.target.value}))}>
+      <div style={S.f}><label style={S.lbl}>Product</label><select style={S.fi} value={form.product} onChange={e=>{const prod=e.target.value;const autoWt=getWeight(prod,form.rejectionQty);setForm(p=>({...p,product:prod,rejectionWeight:autoWt||p.rejectionWeight}))}}>
         <option value="">Select</option>{items.map(i=><option key={i.name}>{i.name}</option>)}
       </select></div>
-      <div style={S.f}><label style={S.lbl}>Rejection Qty (pcs)</label><input type="number" style={S.fi} value={form.rejectionQty} onChange={e=>setForm(p=>({...p,rejectionQty:e.target.value}))} placeholder="e.g. 250"/></div>
+      <div style={S.f}><label style={S.lbl}>Rejection Qty (pcs)</label>
+        <input type="number" style={S.fi} value={form.rejectionQty} onChange={e=>{
+          const qty=e.target.value
+          const autoWt=getWeight(form.product,qty)
+          setForm(p=>({...p,rejectionQty:qty,rejectionWeight:autoWt||p.rejectionWeight}))
+        }} placeholder="e.g. 250"/>
+      </div>
+      <div style={S.f}><label style={S.lbl}>Rejection Weight (kg) <span style={{fontSize:10,color:'#276221'}}>{form.rejectionWeight&&form.rejectionQty?'(auto calculated)':''}</span></label>
+        <input type="number" step="0.01" style={S.fi} value={form.rejectionWeight} onChange={e=>setForm(p=>({...p,rejectionWeight:e.target.value}))} placeholder="e.g. 2.5"/>
+      </div>
     </div>
     <div style={S.fr}>
       <div style={S.f}><label style={S.lbl}>Reason</label><select style={S.fi} value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))}>
@@ -2997,6 +3020,7 @@ function ReportsTab() {
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.machine}</td>
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.product}</td>
                           <td style={{ padding: '6px 8px', fontWeight: 700, color: '#C00000' }}>{(r.rejection_qty || 0).toLocaleString()}</td>
+                          <td style={{ padding: '6px 8px', color: '#854F0B', fontWeight: 600 }}>{r.rejection_weight ? r.rejection_weight+' kg' : '--'}</td>
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.reason}</td>
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.action_taken}</td>
                         </tr>
