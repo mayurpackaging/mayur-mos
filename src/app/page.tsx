@@ -2424,6 +2424,17 @@ function BreakdownTab({user}:{user:User}) {
   const [resolveForm,setResolveForm]=useState({solution:'',analysis:'',sparesUsed:'',remarks:''})
   const [resolveParts,setResolveParts]=useState<{partName:string,qty:string,category:string,stock:number}[]>([])
   const [spareSearch,setSpareSearch]=useState('')
+  const [selectedPart,setSelectedPart]=useState<any>(null)
+  const [partHistory,setPartHistory]=useState<any[]>([])
+  const [partHistoryLoading,setPartHistoryLoading]=useState(false)
+
+  const loadPartHistory=async(part:any)=>{
+    setSelectedPart(part)
+    setPartHistoryLoading(true)
+    const res=await fetch('/api/spares?part='+encodeURIComponent(part.part_name)).then(r=>r.json()).catch(()=>({movements:[]}))
+    setPartHistory(res.movements||[])
+    setPartHistoryLoading(false)
+  }
   const [sparesList,setSparesList]=useState<any[]>([])
   const [showSpareSearch,setShowSpareSearch]=useState(false)
 
@@ -3345,6 +3356,17 @@ function SparesTab({user}:{user:User}) {
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [editSpare,setEditSpare]=useState<any>(null)
   const [spareSearch,setSpareSearch]=useState('')
+  const [selectedPart,setSelectedPart]=useState<any>(null)
+  const [partHistory,setPartHistory]=useState<any[]>([])
+  const [partHistoryLoading,setPartHistoryLoading]=useState(false)
+
+  const loadPartHistory=async(part:any)=>{
+    setSelectedPart(part)
+    setPartHistoryLoading(true)
+    const res=await fetch('/api/spares?part='+encodeURIComponent(part.part_name)).then(r=>r.json()).catch(()=>({movements:[]}))
+    setPartHistory(res.movements||[])
+    setPartHistoryLoading(false)
+  }
   const [editForm,setEditForm]=useState<any>({})
   const [editSaving,setEditSaving]=useState(false)
   const [vendor,setVendor]=useState(()=>localStorage.getItem('lastVendor')||'')
@@ -3463,6 +3485,59 @@ function SparesTab({user}:{user:User}) {
     {spareView==='stock'&&<div style={S.card}>
       <div style={{fontWeight:700,marginBottom:8,color:'#1F3864',fontSize:13}}>📦 Spares Stock Status {canEdit&&<span style={{fontSize:10,color:'#854F0B',marginLeft:8}}>✏️ Edit rights: Sirf aapke paas</span>}</div>
       <div style={{overflowX:'auto'}}>
+        {/* Part History Modal */}
+        {selectedPart&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:12,padding:20,width:400,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+              <div style={{fontWeight:700,color:'#1F3864',fontSize:14}}>{selectedPart.part_name}</div>
+              <button onClick={()=>setSelectedPart(null)} style={{background:'#f0f0f0',border:'none',borderRadius:999,width:28,height:28,cursor:'pointer',fontSize:14}}>✕</button>
+            </div>
+
+            {/* Current Stock Summary */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
+              <div style={{background:'#E8F5E9',borderRadius:8,padding:8,textAlign:'center'}}>
+                <div style={{fontSize:18,fontWeight:700,color:'#276221'}}>{selectedPart.current_stock}</div>
+                <div style={{fontSize:10,color:'#276221'}}>Current Stock</div>
+              </div>
+              <div style={{background:'#FFF9E6',borderRadius:8,padding:8,textAlign:'center'}}>
+                <div style={{fontSize:18,fontWeight:700,color:'#854F0B'}}>{selectedPart.min_qty||0}</div>
+                <div style={{fontSize:10,color:'#854F0B'}}>Min Qty</div>
+              </div>
+              <div style={{background:selectedPart.status==='Out of Stock'?'#FFEBEE':selectedPart.status==='Low'?'#FFF3E0':'#E8F5E9',borderRadius:8,padding:8,textAlign:'center'}}>
+                <div style={{fontSize:11,fontWeight:700,color:selectedPart.status==='Out of Stock'?'#C00000':selectedPart.status==='Low'?'#854F0B':'#276221'}}>{selectedPart.status}</div>
+                <div style={{fontSize:10,color:'#666'}}>Status</div>
+              </div>
+            </div>
+
+            <div style={{fontSize:12,color:'#666',marginBottom:4}}>{selectedPart.plant||'--'} | {selectedPart.room||'--'} | {selectedPart.almirah||'--'}</div>
+            <div style={{fontSize:11,color:'#888',marginBottom:12}}>Last Vendor: {selectedPart.last_vendor||'--'} | Price: ₹{selectedPart.last_price||0}/{selectedPart.unit}</div>
+
+            {/* Movement History */}
+            <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:8}}>📋 Movement History</div>
+            {partHistoryLoading
+              ?<div style={{textAlign:'center',padding:16,color:'#666'}}>Loading...</div>
+              :partHistory.length===0
+                ?<div style={{textAlign:'center',color:'#888',padding:16,fontSize:11}}>Koi movement nahi</div>
+                :<div>
+                  {partHistory.map((m:any,i:number)=>(
+                    <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid #F5F5F5'}}>
+                      <div>
+                        <div style={{fontSize:11,fontWeight:600}}>{m.date}</div>
+                        <div style={{fontSize:10,color:'#666'}}>{m.done_by||m.vendor||'--'}{m.machine?' | '+m.machine:''}</div>
+                      </div>
+                      <div style={{textAlign:'right'}}>
+                        <span style={{background:m.action==='Stock In'?'#E8F5E9':'#FFEBEE',color:m.action==='Stock In'?'#276221':'#C00000',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>
+                          {m.action==='Stock In'?'+':'-'}{m.qty} {selectedPart.unit}
+                        </span>
+                        <div style={{fontSize:10,color:'#888',marginTop:2}}>Stock: {m.new_stock}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+            }
+          </div>
+        </div>}
+
         {/* Edit Modal — sirf Admin/nitin ke liye */}
         {editSpare&&canEdit&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
           <div style={{background:'#fff',borderRadius:12,padding:20,width:340,maxHeight:'90vh',overflowY:'auto'}}>
@@ -3541,7 +3616,10 @@ function SparesTab({user}:{user:User}) {
             const col=s.status==='Out of Stock'?'#C00000':s.status==='Low'?'#854F0B':'#276221'
             const bg=s.status==='Out of Stock'?'#FFEBEE':s.status==='Low'?'#FFF3E0':'#E8F5E9'
             return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{s.part_name}<div style={{fontSize:9,color:'#888',fontWeight:400}}>{s.room||''}{s.almirah?' | '+s.almirah:''}</div></td>
+              <td style={{padding:'6px 8px',fontWeight:600,fontSize:11,cursor:'pointer',color:'#1F3864',textDecoration:'underline'}} onClick={()=>loadPartHistory(s)}>
+                {s.part_name}
+                <div style={{fontSize:9,color:'#888',fontWeight:400,textDecoration:'none'}}>{s.room||''}{s.almirah?' | '+s.almirah:''}</div>
+              </td>
               <td style={{padding:'6px 8px',fontSize:10,fontWeight:600,color:'#1F3864'}}>{s.plant||'--'}</td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{s.category||'--'}</td>
               <td style={{padding:'6px 8px',fontWeight:700,color:col}}>{s.current_stock} {s.unit}</td>
