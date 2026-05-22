@@ -679,12 +679,15 @@ function WeeklyReport() {
       const mcAvgTime=mcTotal>0?Math.round(mc.filter(r=>r.total_minutes>0).reduce((s,r)=>s+(r.total_minutes||0),0)/(mc.filter(r=>r.total_minutes>0).length||1)):0
 
       // Date wise production
-      const dayWise:{[key:string]:{good:number,rej:number,plants:Set<string>}}={}
+      const dayWise:{[key:string]:{good:number,rej:number}}={}
+      const dayPlants:{[key:string]:string[]}={}
       prod.forEach(r=>{
-        if(!dayWise[r.date]) dayWise[r.date]={good:0,rej:0,plants:new Set()}
+        if(!dayWise[r.date]) dayWise[r.date]={good:0,rej:0}
         dayWise[r.date].good+=(r.good_parts||0)
         dayWise[r.date].rej+=(r.rejection||0)
-        if(r.plant) dayWise[r.date].plants.add(r.plant)
+        if(r.plant&&!( dayPlants[r.date]||[]).includes(r.plant)){
+          dayPlants[r.date]=[...(dayPlants[r.date]||[]),r.plant]
+        }
       })
 
       setWData({totalGood,totalRej,rejPct,totalQC,ngQC,ngPct,topNG,bdTotal,bdPending,bdResolved,totalDowntime,avgDowntime,topBD,mcTotal,mcAvgTime,dayWise,prod,qual,bd,mc})
@@ -803,7 +806,7 @@ function WeeklyReport() {
                   const rp=sv.good+sv.rej>0?((sv.rej/(sv.good+sv.rej))*100).toFixed(1):0
                   return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
                     <td style={{padding:'5px 8px',fontWeight:600}}>{dt}</td>
-                    <td style={{padding:'5px 8px',fontSize:10,color:'#1F3864'}}>{Array.from(sv.plants||[]).join(', ')||'--'}</td>
+                    <td style={{padding:'5px 8px',fontSize:10,color:'#1F3864'}}>{(dayPlants[dt]||[]).join(', ')||'--'}</td>
                     <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{sv.good.toLocaleString()}</td>
                     <td style={{padding:'5px 8px',color:'#C00000'}}>{sv.rej.toLocaleString()}</td>
                     <td style={{padding:'5px 8px',color:Number(rp)>3?'#C00000':'#276221',fontWeight:700}}>{rp}%</td>
