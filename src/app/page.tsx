@@ -1545,7 +1545,7 @@ function ProductionTab({user}:{user:User}) {
 
   const updateSlots=(shift:string)=>{
     const slotNames=shift==='night'?NIGHT_SLOTS:DAY_SLOTS
-    setProducts(prev=>prev.map(p=>({...p,slots:slotNames.map(s=>({slot:s,good:'',rejection:'',down:'',remarks:''}))})))
+    setProducts(prev=>prev.map(p=>({...p,slots:slotNames.map(s=>({slot:s,good:'',rejection:'',rejWeight:'',down:'',remarks:''}))})))
   }
 
   const addProduct=()=>{
@@ -1617,7 +1617,7 @@ function ProductionTab({user}:{user:User}) {
           cavities:prod.cavities||'0',cycleTime:prod.cycleTime||'0',
           material:prod.material,machineStatus:machForm.machineStatus,
           stopReason:machForm.stopReason||'',remarks:'',
-          slots:isRunning?prod.slots:prod.slots.map(s=>({...s,good:'0',rejection:'0',down:'180',remarks:machForm.machineStatus+' - '+machForm.stopReason})),
+          slots:isRunning?prod.slots:prod.slots.map(s=>({...s,good:'0',rejection:'0',rejWeight:'0',down:'180',remarks:machForm.machineStatus+' - '+machForm.stopReason})),
           enteredBy:user.name
         })
       }).then(r=>r.json())
