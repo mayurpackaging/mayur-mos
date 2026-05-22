@@ -3344,6 +3344,7 @@ function SparesTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [editSpare,setEditSpare]=useState<any>(null)
+  const [spareSearch,setSpareSearch]=useState('')
   const [editForm,setEditForm]=useState<any>({})
   const [editSaving,setEditSaving]=useState(false)
   const [vendor,setVendor]=useState(()=>localStorage.getItem('lastVendor')||'')
@@ -3532,9 +3533,11 @@ function SparesTab({user}:{user:User}) {
           </div>
         </div>}
 
+        {/* Search */}
+        <input style={{...S.fi,marginBottom:8}} placeholder="Part name search karo..." value={spareSearch||''} onChange={e=>setSpareSearch(e.target.value)}/>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>{['Part Name','Plant','Category','Stock','Min Qty','Status',canEdit?'Edit':''].filter(Boolean).map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
-          <tbody>{spares.length===0?<tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>Koi spare nahi — neeche add karo!</td></tr>:spares.map((s:any,i:number)=>{
+          <tbody>{spares.filter((s:any)=>!spareSearch||s.part_name?.toLowerCase().includes(spareSearch.toLowerCase())).length===0?<tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>Koi spare nahi mila!</td></tr>:spares.filter((s:any)=>!spareSearch||s.part_name?.toLowerCase().includes(spareSearch.toLowerCase())).map((s:any,i:number)=>{
             const col=s.status==='Out of Stock'?'#C00000':s.status==='Low'?'#854F0B':'#276221'
             const bg=s.status==='Out of Stock'?'#FFEBEE':s.status==='Low'?'#FFF3E0':'#E8F5E9'
             return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
