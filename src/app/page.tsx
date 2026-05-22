@@ -3524,6 +3524,7 @@ function SparesTab({user}:{user:User}) {
                       <div>
                         <div style={{fontSize:11,fontWeight:600}}>{m.date}</div>
                         <div style={{fontSize:10,color:'#666'}}>{m.done_by||m.vendor||'--'}{m.machine?' | '+m.machine:''}</div>
+                        {m.plant&&<div style={{fontSize:10,color:'#1F3864',fontWeight:600}}>{m.plant}</div>}
                       </div>
                       <div style={{textAlign:'right'}}>
                         <span style={{background:m.action==='Stock In'?'#E8F5E9':'#FFEBEE',color:m.action==='Stock In'?'#276221':'#C00000',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>
