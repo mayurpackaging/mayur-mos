@@ -3753,11 +3753,61 @@ function SparesTab({user}:{user:User}) {
     {/* Recent movements tab */}
     {spareView==='movements'&&<div style={S.card}>
       <div style={{fontWeight:700,marginBottom:8,color:'#854F0B',fontSize:13}}>🔄 Recent Movements</div>
+
+      {/* Edit Movement Modal */}
+      {editSpare&&editSpare._movement&&canEdit&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <div style={{background:'#fff',borderRadius:12,padding:20,width:320,maxHeight:'90vh',overflowY:'auto'}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:14,marginBottom:12}}>✏️ Edit Movement</div>
+          <div style={S.f}><label style={S.lbl}>Part Name</label>
+            <input style={S.fi} value={editForm.part_name||''} onChange={e=>setEditForm((p:any)=>({...p,part_name:e.target.value}))}/>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <div style={S.f}><label style={S.lbl}>Date</label>
+              <input type="date" style={S.fi} value={editForm.date||''} onChange={e=>setEditForm((p:any)=>({...p,date:e.target.value}))}/>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Action</label>
+              <select style={S.fi} value={editForm.action||''} onChange={e=>setEditForm((p:any)=>({...p,action:e.target.value}))}>
+                <option>Stock In</option><option>Used in Machine</option><option>Stock Out</option>
+              </select>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Qty</label>
+              <input type="number" style={S.fi} value={editForm.qty||''} onChange={e=>setEditForm((p:any)=>({...p,qty:e.target.value}))}/>
+            </div>
+            <div style={S.f}><label style={S.lbl}>Done By</label>
+              <input style={S.fi} value={editForm.done_by||''} onChange={e=>setEditForm((p:any)=>({...p,done_by:e.target.value}))}/>
+            </div>
+          </div>
+          <div style={S.f}><label style={S.lbl}>Vendor</label>
+            <input style={S.fi} value={editForm.vendor||''} onChange={e=>setEditForm((p:any)=>({...p,vendor:e.target.value}))}/>
+          </div>
+          <div style={{display:'flex',gap:8,marginTop:12}}>
+            <button onClick={async()=>{
+              setEditSaving(true)
+              await fetch('/api/spares',{method:'PUT',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({id:editSpare.id,_movement:true,...editForm,updatedBy:user.name})
+              }).then(r=>r.json())
+              setEditSaving(false)
+              setEditSpare(null)
+              load()
+            }} style={{flex:1,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+              {editSaving?'Saving...':'✅ Save'}
+            </button>
+            <button onClick={async()=>{
+              if(!confirm('Delete karo yeh movement?')) return
+              await fetch('/api/spares?movement_id='+editSpare.id,{method:'DELETE'}).then(r=>r.json())
+              setEditSpare(null)
+              load()
+            }} style={{background:'#FFEBEE',border:'1px solid #C00000',color:'#C00000',borderRadius:6,padding:'8px 12px',fontSize:12,fontWeight:700,cursor:'pointer'}}>🗑️</button>
+            <button onClick={()=>setEditSpare(null)} style={{background:'#f0f0f0',border:'none',borderRadius:6,padding:'8px 12px',cursor:'pointer',fontSize:12}}>Cancel</button>
+          </div>
+        </div>
+      </div>}
+
       {movements.length===0
         ? <div style={{textAlign:'center',color:'#888',padding:24,fontSize:12}}>Koi movement nahi abhi tak</div>
         : <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-            <thead><tr>{['Date','Part','Action','Qty','Machine/Mould','Vendor/By','Stock After'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+            <thead><tr>{['Date','Part','Action','Qty','Machine/Mould','Vendor/By','Stock After',canEdit?'Edit':''].filter(Boolean).map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
             <tbody>{movements.map((m:any,i:number)=>(
               <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
                 <td style={{padding:'6px 8px',fontSize:10}}>{m.date}</td>
@@ -3771,6 +3821,12 @@ function SparesTab({user}:{user:User}) {
                 </td>
                 <td style={{padding:'6px 8px',fontSize:10}}>{m.vendor||m.done_by||'--'}</td>
                 <td style={{padding:'6px 8px',fontWeight:700,color:m.new_stock===0?'#C00000':'#276221'}}>{m.new_stock}</td>
+                {canEdit&&<td style={{padding:'4px 8px'}}>
+                  <button onClick={()=>{setEditSpare({...m,_movement:true});setEditForm({part_name:m.part_name,date:m.date,action:m.action,qty:m.qty,done_by:m.done_by||'',vendor:m.vendor||''})}}
+                    style={{background:'#E8EDF5',border:'1px solid #1F3864',borderRadius:4,padding:'2px 8px',fontSize:10,cursor:'pointer',color:'#1F3864',fontWeight:600}}>
+                    ✏️
+                  </button>
+                </td>}
               </tr>
             ))}</tbody>
           </table>
