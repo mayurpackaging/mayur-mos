@@ -921,7 +921,7 @@ function WeeklyReport() {
 
         {/* Quality + Production Correlation — sirf issues dikhao */}
         {(()=>{
-          const qMap:{[k:string]:{total:number,ng:number,product:string,machine:string,mould:string}}={}
+          const qMap:{[k:string]:{total:number,ng:number,product:string,machine:string,mould:string,lastDate:string}}={}
           wData.qual.forEach(q=>{
             const k=(q.machine||'')+'|'+(q.part_name||'')
             if(!qMap[k]) qMap[k]={total:0,ng:0,product:q.part_name||'',machine:q.machine||'',mould:q.mould_name||'',lastDate:q.date||''}
