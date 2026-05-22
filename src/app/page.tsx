@@ -201,6 +201,13 @@ export default function MOS() {
   const [screen,setScreen] = useState<'login'|'main'>('login')
   const [user,setUser] = useState<User|null>(null)
   const [tab,setTab] = useState('')
+  const [pmAlertCount,setPmAlertCount]=useState(0)
+  useEffect(()=>{
+    fetch('/api/mouldpm').then(r=>r.json()).then(d=>{
+      const moulds=d.moulds||[]
+      setPmAlertCount(moulds.filter((m:any)=>m.pct>=80).length)
+    }).catch(()=>{})
+  },[])
   const [username,setUsername] = useState('')
   const [password,setPassword] = useState('')
   const [loginErr,setLoginErr] = useState('')
@@ -245,7 +252,10 @@ export default function MOS() {
         </div>
       </div>
       <div style={S.nav}>
-        {modules.map((m:string)=><button key={m} style={tab===m?S.nbA:S.nb} onClick={()=>setTab(m)}>{ML[m]||m}</button>)}
+        {modules.map((m:string)=><button key={m} style={{...(tab===m?S.nbA:S.nb),position:'relative'}} onClick={()=>setTab(m)}>
+            {ML[m]||m}
+            {m==='mouldpm'&&pmAlertCount>0&&<span style={{position:'absolute',top:-4,right:-4,background:'#C00000',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,lineHeight:'16px'}}>{pmAlertCount}</span>}
+          </button>)}
       </div>
       <TodaysPlanBanner/>
       <div style={{padding:12}}>
