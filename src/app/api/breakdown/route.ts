@@ -21,6 +21,15 @@ function extractMouldName(mouldRunning: string): string {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get('date') || ''
+  const from = searchParams.get('from') || ''
+  const to = searchParams.get('to') || ''
+
+  if (from && to) {
+    const { data } = await supabase.from('breakdowns')
+      .select('*').gte('date', from).lte('date', to)
+      .order('date', { ascending: true })
+    return NextResponse.json({ success: true, data: data || [] })
+  }
 
   let q = supabase.from('breakdowns').select('*').order('created_at', { ascending: false }).limit(100)
   if (date) q = q.eq('date', date)
