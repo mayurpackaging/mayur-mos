@@ -700,7 +700,7 @@ function WeeklyReport() {
       ['Total Good Parts',wData.totalGood,'Total Rejection',wData.totalRej,'Rejection %',wData.rejPct+'%'],
       [''],
       ['Date','Good Parts','Rejection','Rej%'],
-      ...Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s])=>[dt,s.good,s.rej,s.good+s.rej>0?((s.rej/(s.good+s.rej))*100).toFixed(1)+'%':'0%']),
+      ...Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s])=>{const sv=s as {good:number,rej:number};return [dt,sv.good,sv.rej,sv.good+sv.rej>0?((sv.rej/(sv.good+sv.rej))*100).toFixed(1)+'%':'0%']}),
       [''],
       ['--- QUALITY ---'],
       ['Total Checks',wData.totalQC,'NG Count',wData.ngQC,'NG %',wData.ngPct+'%'],
@@ -798,11 +798,12 @@ function WeeklyReport() {
               </tr></thead>
               <tbody>
                 {Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s],i)=>{
-                  const rp=s.good+s.rej>0?((s.rej/(s.good+s.rej))*100).toFixed(1):0
+                  const sv=s as {good:number,rej:number}
+                  const rp=sv.good+sv.rej>0?((sv.rej/(sv.good+sv.rej))*100).toFixed(1):0
                   return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
                     <td style={{padding:'5px 8px',fontWeight:600}}>{dt}</td>
-                    <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{s.good.toLocaleString()}</td>
-                    <td style={{padding:'5px 8px',color:'#C00000'}}>{s.rej.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{sv.good.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',color:'#C00000'}}>{sv.rej.toLocaleString()}</td>
                     <td style={{padding:'5px 8px',color:Number(rp)>3?'#C00000':'#276221',fontWeight:700}}>{rp}%</td>
                   </tr>
                 })}
