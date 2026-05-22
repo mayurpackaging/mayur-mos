@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       machine: d.machine || '',
       product: d.product || '',
       rejection_qty: parseFloat(d.rejectionQty) || 0,
+      rejection_weight: parseFloat(d.rejectionWeight) || 0,
       reason: d.reason || '',
       action_taken: d.action || '',
       notes: d.notes || '',
