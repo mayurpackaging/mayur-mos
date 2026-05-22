@@ -919,60 +919,56 @@ function WeeklyReport() {
           <RejectionComparison from={fromDate} to={toDate} plant=""/>
         </div>
 
-        {/* Quality + Production Correlation */}
-        <div style={{...S.card,marginBottom:8}}>
-          <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:10}}>Quality vs Production Correlation</div>
-          {wData.qual.length===0
-            ?<div style={{color:'#888',fontSize:12}}>Quality data nahi hai</div>
-            :<div style={{overflowX:'auto'}}>
-              {(()=>{
-                const qMap:{[k:string]:{total:number,ng:number,product:string,machine:string,mould:string}}={}
-                wData.qual.forEach(q=>{
-                  const k=(q.machine||'')+'|'+(q.part_name||'')
-                  if(!qMap[k]) qMap[k]={total:0,ng:0,product:q.part_name||'',machine:q.machine||'',mould:q.mould_name||''}
-                  qMap[k].total++
-                  if(q.overall_result==='NG') qMap[k].ng++
-                })
-                const pMap:{[k:string]:{rej:number,good:number}}={}
-                wData.prod.forEach(p=>{
-                  const k=(p.machine||'')+'|'+(p.product||'')
-                  if(!pMap[k]) pMap[k]={rej:0,good:0}
-                  pMap[k].rej+=(p.rejection||0)
-                  pMap[k].good+=(p.good_parts||0)
-                })
-                const rows=Object.entries(qMap).map(([k,q])=>{
-                  const p=pMap[k]||{rej:0,good:0}
-                  const qcNGPct=q.total>0?Math.round(q.ng/q.total*100):0
-                  const prodRejPct=p.good+p.rej>0?Math.round(p.rej/(p.good+p.rej)*100):0
-                  return {machine:q.machine,product:q.product,mould:q.mould,qcTotal:q.total,qcNG:q.ng,qcNGPct,prodRej:p.rej,prodRejPct}
-                }).sort((a,b)=>b.qcNGPct-a.qcNGPct)
-                return <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-                  <thead><tr>
-                    {['Machine','Product','Mould','QC NG%','Prod Rej%','Status'].map(h=>(
-                      <th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap'}}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    {rows.map((r,i)=>(
-                      <tr key={i} style={{background:r.qcNGPct>20?'#FFF5F5':i%2===0?'#FAFAFA':'#fff'}}>
-                        <td style={{padding:'5px 8px',fontSize:11,fontWeight:600}}>{r.machine}</td>
-                        <td style={{padding:'5px 8px',color:'#854F0B'}}>{r.product}</td>
-                        <td style={{padding:'5px 8px',fontSize:10,color:'#555'}}>{r.mould||'--'}</td>
-                        <td style={{padding:'5px 8px',textAlign:'center',fontWeight:700,color:r.qcNGPct>20?'#C00000':r.qcNGPct>10?'#854F0B':'#276221'}}>{r.qcNGPct}%</td>
-                        <td style={{padding:'5px 8px',textAlign:'center',fontWeight:700,color:r.prodRejPct>3?'#C00000':'#276221'}}>{r.prodRejPct}%</td>
-                        <td style={{padding:'5px 8px'}}>
-                          <span style={{background:r.qcNGPct>20||r.prodRejPct>5?'#C00000':r.qcNGPct>10||r.prodRejPct>3?'#FF9800':'#276221',color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:700}}>
-                            {r.qcNGPct>20||r.prodRejPct>5?'HIGH':r.qcNGPct>10||r.prodRejPct>3?'WATCH':'OK'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              })()}
-            </div>
-          }
-        </div>
+        {/* Quality + Production Correlation — sirf issues dikhao */}
+        {(()=>{
+          const qMap:{[k:string]:{total:number,ng:number,product:string,machine:string,mould:string}}={}
+          wData.qual.forEach(q=>{
+            const k=(q.machine||'')+'|'+(q.part_name||'')
+            if(!qMap[k]) qMap[k]={total:0,ng:0,product:q.part_name||'',machine:q.machine||'',mould:q.mould_name||'',lastDate:q.date||''}
+            qMap[k].total++
+            if(q.overall_result==='NG'){qMap[k].ng++;qMap[k].lastDate=q.date||qMap[k].lastDate}
+          })
+          const pMap:{[k:string]:{rej:number,good:number}}={}
+          wData.prod.forEach(p=>{
+            const k=(p.machine||'')+'|'+(p.product||'')
+            if(!pMap[k]) pMap[k]={rej:0,good:0}
+            pMap[k].rej+=(p.rejection||0)
+            pMap[k].good+=(p.good_parts||0)
+          })
+          const issues=Object.entries(qMap).map(([k,q])=>{
+            const p=pMap[k]||{rej:0,good:0}
+            const qcNGPct=q.total>0?Math.round(q.ng/q.total*100):0
+            const prodRejPct=p.good+p.rej>0?Math.round(p.rej/(p.good+p.rej)*100):0
+            return {machine:q.machine,product:q.product,mould:q.mould,date:q.lastDate||'',qcTotal:q.total,qcNG:q.ng,qcNGPct,prodRej:p.rej,prodRejPct}
+          }).filter(r=>r.qcNGPct>0||r.prodRejPct>3).sort((a,b)=>b.qcNGPct-a.qcNGPct)
+
+          if(issues.length===0) return null
+          return <div style={{...S.card,marginBottom:8,border:'2px solid #C00000'}}>
+            <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:10}}>Issues needing attention ({issues.length})</div>
+            {issues.map((r,i)=>(
+              <div key={i} style={{background:i%2===0?'#FFF5F5':'#fff',borderRadius:6,padding:'8px 10px',marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:'#1F3864'}}>{r.machine}</div>
+                  <div style={{fontSize:11,color:'#666'}}>{r.product} {r.mould?'· '+r.mould:''}</div>
+                {r.date&&<div style={{fontSize:10,color:'#888'}}>{fmtDate(r.date)}</div>}
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  {r.qcNGPct>0&&<div style={{textAlign:'center'}}>
+                    <div style={{fontSize:16,fontWeight:700,color:r.qcNGPct>20?'#C00000':'#854F0B'}}>{r.qcNGPct}%</div>
+                    <div style={{fontSize:9,color:'#666'}}>QC NG</div>
+                  </div>}
+                  {r.prodRejPct>0&&<div style={{textAlign:'center'}}>
+                    <div style={{fontSize:16,fontWeight:700,color:r.prodRejPct>5?'#C00000':'#854F0B'}}>{r.prodRejPct}%</div>
+                    <div style={{fontSize:9,color:'#666'}}>Prod Rej</div>
+                  </div>}
+                  <span style={{background:r.qcNGPct>20||r.prodRejPct>5?'#C00000':'#FF9800',color:'#fff',padding:'3px 10px',borderRadius:999,fontSize:10,fontWeight:700}}>
+                    {r.qcNGPct>20||r.prodRejPct>5?'HIGH':'WATCH'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        })()}
 
       </div>}
 
