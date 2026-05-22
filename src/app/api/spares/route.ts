@@ -6,7 +6,18 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const part = searchParams.get('part') || ''
+
+  if (part) {
+    const { data: movements } = await supabase
+      .from('spare_movements').select('*')
+      .ilike('part_name', part)
+      .order('created_at', { ascending: false }).limit(50)
+    return NextResponse.json({ success: true, movements: movements || [] })
+  }
+
   const { data: spares } = await supabase.from('spares_master').select('*').order('part_name')
   const { data: movements } = await supabase.from('spare_movements').select('*').order('created_at', { ascending: false }).limit(20)
 
