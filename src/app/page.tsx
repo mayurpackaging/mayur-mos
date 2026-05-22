@@ -363,36 +363,77 @@ function RejectionComparison({from,to,plant}:{from:string,to:string,plant:string
     </button>
 
     {data.length>0&&<div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:10}}>🔍 Operator vs QC Rejection Comparison</div>
+      <div style={{fontWeight:700,marginBottom:4}}>🔍 Operator vs QC Rejection</div>
+      <div style={{fontSize:11,color:'#854F0B',background:'#FFF9E6',borderRadius:6,padding:'6px 10px',marginBottom:10}}>
+        ⚠️ Note: Product naam alag hone se mismatch dikhta hai — same date + machine dekho
+      </div>
+
+      {/* Plant wise summary */}
+      {(()=>{
+        const plantSummary:{[k:string]:{opRej:number,qcRej:number}}={}
+        data.forEach((r:any)=>{
+          const p=r.plant||r.machine?.split('-')[0]||'Unknown'
+          if(!plantSummary[p]) plantSummary[p]={opRej:0,qcRej:0}
+          plantSummary[p].opRej+=r.operatorRej||0
+          plantSummary[p].qcRej+=r.qcRej||0
+        })
+        return <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+          {Object.entries(plantSummary).map(([plant,s],i)=>(
+            <div key={i} style={{background:'#F0F4FF',borderRadius:8,padding:10,border:'1px solid #1F3864'}}>
+              <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:6}}>{plant}</div>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                <span style={{fontSize:11,color:'#854F0B'}}>Operator dala:</span>
+                <span style={{fontWeight:700,color:'#854F0B'}}>{(s.opRej as number).toLocaleString()}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                <span style={{fontSize:11,color:'#1F3864'}}>QC ne daala:</span>
+                <span style={{fontWeight:700,color:'#1F3864'}}>{(s.qcRej as number).toLocaleString()}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',paddingTop:4,borderTop:'1px solid #ddd'}}>
+                <span style={{fontSize:11,color:'#666'}}>Difference:</span>
+                <span style={{fontWeight:700,color:Math.abs((s.opRej as number)-(s.qcRej as number))>200?'#C00000':'#276221'}}>
+                  {((s.qcRej as number)-(s.opRej as number)).toLocaleString()} pcs
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      })()}
+
+      {/* Detail table — only show where BOTH have data */}
+      <div style={{fontWeight:600,color:'#1F3864',fontSize:11,marginBottom:6}}>Detail — sirf woh records jahan dono ne entry ki:</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['Date','Machine','Product','Shift','Operator Rej','QC Actual Rej','Difference','Diff %','Status'].map(h=>
-              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
+            {['Date','Machine','Operator Rej','QC Rej','Diff','Status'].map(h=>(
+              <th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>
+            ))}
           </tr></thead>
-          <tbody>{data.map((r:any,i:number)=>{
-            const bg=r.isAlert?'#FFEBEE':r.isWarning?'#FFF3E0':'#fff'
-            const col=r.isAlert?'#C00000':r.isWarning?'#E65100':'#276221'
-            return <tr key={i} style={{background:bg}}>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.date}</td>
-              <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{r.machine}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.product}</td>
-              <td style={{padding:'6px 8px',fontSize:10}}>{r.shift?.includes('Day')?'☀️':'🌙'}</td>
-              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#854F0B'}}>{r.operatorRej.toLocaleString()}</td>
-              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#1F3864'}}>{r.qcRej.toLocaleString()}</td>
-              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>{r.diff>0?'+':''}{(r.qcRej-r.operatorRej).toLocaleString()}</td>
-              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>{r.diffPct}%</td>
-              <td style={{padding:'6px 8px'}}>
-                <span style={{background:r.isAlert?'#C00000':r.isWarning?'#FF9800':'#276221',color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:600}}>
-                  {r.isAlert?'🚨 ALERT':r.isWarning?'⚠️ WARNING':'✅ OK'}
-                </span>
-              </td>
-            </tr>
-          })}</tbody>
+          <tbody>
+            {data.filter((r:any)=>r.operatorRej>0&&r.qcRej>0).map((r:any,i:number)=>{
+              const diff=r.qcRej-r.operatorRej
+              const pct=r.operatorRej>0?Math.round(Math.abs(diff)/r.operatorRej*100):0
+              const isHigh=Math.abs(diff)>50&&pct>10
+              return <tr key={i} style={{background:isHigh?'#FFEBEE':i%2===0?'#FAFAFA':'#fff'}}>
+                <td style={{padding:'5px 8px',fontWeight:600}}>{r.date}</td>
+                <td style={{padding:'5px 8px'}}>{r.machine}</td>
+                <td style={{padding:'5px 8px',color:'#854F0B',fontWeight:700}}>{r.operatorRej.toLocaleString()}</td>
+                <td style={{padding:'5px 8px',color:'#1F3864',fontWeight:700}}>{r.qcRej.toLocaleString()}</td>
+                <td style={{padding:'5px 8px',fontWeight:700,color:isHigh?'#C00000':'#276221'}}>{diff>0?'+':''}{diff.toLocaleString()}</td>
+                <td style={{padding:'5px 8px'}}>
+                  <span style={{background:isHigh?'#C00000':'#276221',color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:600}}>
+                    {isHigh?'⚠️ CHECK':'✅ OK'}
+                  </span>
+                </td>
+              </tr>
+            })}
+            {data.filter((r:any)=>r.operatorRej>0&&r.qcRej>0).length===0&&
+              <tr><td colSpan={6} style={{textAlign:'center',color:'#888',padding:16,fontSize:11}}>
+                Koi matching record nahi — product names alag hain operator aur QC mein
+              </td></tr>
+            }
+          </tbody>
         </table>
-      </div>
-      <div style={{marginTop:8,fontSize:11,color:'#666',background:'#F5F5F5',padding:'8px 12px',borderRadius:6}}>
-        📋 Rule: Diff {">"} 50 pcs AND {">"} 10% → 🚨 Alert | Diff {">"} 5 pcs AND {">"} 5% → ⚠️ Warning
       </div>
     </div>}
   </div>
@@ -619,7 +660,6 @@ function WeeklyReport() {
   const [fromDate,setFromDate]=useState('')
   const [toDate,setToDate]=useState('')
 
-  // Default: last 7 days
   useEffect(()=>{
     const today=new Date()
     const weekAgo=new Date(today.getTime()-6*24*60*60*1000)
@@ -628,16 +668,29 @@ function WeeklyReport() {
     setFromDate(fmt(weekAgo))
   },[])
 
+  const setQuick=(days)=>{
+    const t=new Date()
+    const f=new Date(t.getTime()-days*24*60*60*1000)
+    setToDate(t.toISOString().split('T')[0])
+    setFromDate(f.toISOString().split('T')[0])
+  }
+
+  const fmtDate=d=>{
+    if(!d) return '--'
+    const parts=d.split('-')
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    return parts[2]+' '+months[parseInt(parts[1])-1]
+  }
+
   const load=async()=>{
     if(!fromDate||!toDate) return
     setLoading(true)
     try {
-      const [prodRes,qualRes,bdRes,mcRes,pmRes] = await Promise.all([
+      const [prodRes,qualRes,bdRes,mcRes] = await Promise.all([
         fetch('/api/production?from='+fromDate+'&to='+toDate).then(r=>r.json()).catch(()=>({data:[]})),
         fetch('/api/quality?report=1&from='+fromDate+'&to='+toDate).then(r=>r.json()).catch(()=>({data:[]})),
         fetch('/api/breakdown?from='+fromDate+'&to='+toDate).then(r=>r.json()).catch(()=>({data:[]})),
         fetch('/api/mouldchange?from='+fromDate+'&to='+toDate).then(r=>r.json()).catch(()=>({data:[]})),
-        fetch('/api/mouldpm').then(r=>r.json()).catch(()=>({data:[]})),
       ])
 
       const prod=prodRes.data||[]
@@ -645,170 +698,176 @@ function WeeklyReport() {
       const bd=bdRes.data||[]
       const mc=mcRes.data||[]
 
-      // Production summary
+      // Production — plant wise + day wise
       const totalGood=prod.reduce((s,r)=>s+(r.good_parts||0),0)
       const totalRej=prod.reduce((s,r)=>s+(r.rejection||0),0)
       const rejPct=totalGood+totalRej>0?((totalRej/(totalGood+totalRej))*100).toFixed(1):0
 
-      // Quality summary
+      // Plant wise
+      const plantWise={}
+      prod.forEach(r=>{
+        const p=r.plant||'Unknown'
+        if(!plantWise[p]) plantWise[p]={good:0,rej:0}
+        plantWise[p].good+=(r.good_parts||0)
+        plantWise[p].rej+=(r.rejection||0)
+      })
+
+      // Day wise with plant breakdown
+      const dayWise={}
+      prod.forEach(r=>{
+        if(!dayWise[r.date]) dayWise[r.date]={total_good:0,total_rej:0,plants:{}}
+        dayWise[r.date].total_good+=(r.good_parts||0)
+        dayWise[r.date].total_rej+=(r.rejection||0)
+        const p=r.plant||'Unknown'
+        if(!dayWise[r.date].plants[p]) dayWise[r.date].plants[p]={good:0,rej:0}
+        dayWise[r.date].plants[p].good+=(r.good_parts||0)
+        dayWise[r.date].plants[p].rej+=(r.rejection||0)
+      })
+
+      // Quality
       const totalQC=qual.length
       const ngQC=qual.filter(r=>r.overall_result==='NG').length
       const ngPct=totalQC>0?Math.round(ngQC/totalQC*100):0
-
-      // Machine wise NG
       const machNG={}
       qual.filter(r=>r.overall_result==='NG').forEach(r=>{
-        machNG[r.machine]=(machNG[r.machine]||0)+1
+        const k=r.machine||'Unknown'
+        if(!machNG[k]) machNG[k]={count:0,product:r.part_name||'',mould:r.mould_name||''}
+        machNG[k].count++
       })
-      const topNG=Object.entries(machNG).sort((a,b)=>(b[1] as number)-(a[1] as number)).slice(0,5)
+      const topNG=Object.entries(machNG).sort((a,b)=>(b[1] as any).count-(a[1] as any).count).slice(0,5)
 
-      // Breakdown summary
+      // Breakdown
       const bdTotal=bd.length
       const bdPending=bd.filter(r=>r.status==='Pending'||r.status==='In Progress').length
-      const bdResolved=bd.filter(r=>r.status==='Resolved'||r.status?.includes('Resolved')).length
+      const bdResolved=bd.filter(r=>r.status?.includes('Resolved')).length
       const totalDowntime=bd.reduce((s,r)=>s+(r.downtime_min||0),0)
-      const avgDowntime=bdResolved>0?Math.round(totalDowntime/bdResolved):0
-
-      // BD by machine
-      const bdByMach={}
-      bd.forEach(r=>{ bdByMach[r.machine]=(bdByMach[r.machine]||0)+1 })
-      const topBD=Object.entries(bdByMach).sort((a,b)=>(b[1] as number)-(a[1] as number)).slice(0,5)
-
-      // Mould changes
-      const mcTotal=mc.length
-      const mcAvgTime=mcTotal>0?Math.round(mc.filter(r=>r.total_minutes>0).reduce((s,r)=>s+(r.total_minutes||0),0)/(mc.filter(r=>r.total_minutes>0).length||1)):0
-
-      // Date wise production
-      const dayWise:{[key:string]:{good:number,rej:number}}={}
-      const dayPlants:{[key:string]:string[]}={}
-      prod.forEach(r=>{
-        if(!dayWise[r.date]) dayWise[r.date]={good:0,rej:0}
-        dayWise[r.date].good+=(r.good_parts||0)
-        dayWise[r.date].rej+=(r.rejection||0)
-        if(r.plant&&!( dayPlants[r.date]||[]).includes(r.plant)){
-          dayPlants[r.date]=[...(dayPlants[r.date]||[]),r.plant]
-        }
+      const machBD={}
+      bd.forEach(r=>{
+        const k=r.machine||'Unknown'
+        if(!machBD[k]) machBD[k]={count:0,downtime:0}
+        machBD[k].count++
+        machBD[k].downtime+=(r.downtime_min||0)
       })
+      const topBD=Object.entries(machBD).sort((a,b)=>(b[1] as any).downtime-(a[1] as any).downtime).slice(0,5)
 
-      setWData({totalGood,totalRej,rejPct,totalQC,ngQC,ngPct,topNG,bdTotal,bdPending,bdResolved,totalDowntime,avgDowntime,topBD,mcTotal,mcAvgTime,dayWise,prod,qual,bd,mc})
-    } catch(e) { console.error(e) }
+      // Mould change
+      const mcTotal=mc.length
+      const mcWithTime=mc.filter(r=>r.total_minutes>0)
+      const mcAvgTime=mcWithTime.length>0?Math.round(mcWithTime.reduce((s,r)=>s+(r.total_minutes||0),0)/mcWithTime.length):0
+
+      setWData({totalGood,totalRej,rejPct,plantWise,dayWise,totalQC,ngQC,ngPct,topNG,bdTotal,bdPending,bdResolved,totalDowntime,mcTotal,mcAvgTime,topBD,prod,qual,bd,mc})
+    } catch(e){console.error(e)}
     setLoading(false)
   }
 
-  const downloadWeeklyCSV=()=>{
+  const downloadCSV=()=>{
     if(!wData) return
     const rows=[
-      ['=== WEEKLY REPORT ===','','From: '+fromDate,'To: '+toDate],
+      ['Weekly Report','From: '+fromDate,'To: '+toDate],
       [''],
-      ['--- PRODUCTION ---'],
-      ['Total Good Parts',wData.totalGood,'Total Rejection',wData.totalRej,'Rejection %',wData.rejPct+'%'],
+      ['=== PRODUCTION ==='],
+      ['Total Good',wData.totalGood,'Total Rejection',wData.totalRej,'Rej%',wData.rejPct+'%'],
       [''],
-      ['Date','Good Parts','Rejection','Rej%'],
-      ...Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s])=>{const sv=s as {good:number,rej:number};return [dt,sv.good,sv.rej,sv.good+sv.rej>0?((sv.rej/(sv.good+sv.rej))*100).toFixed(1)+'%':'0%']}),
+      ['Date','Plant 477 Good','Plant 477 Rej','Plant 488 Good','Plant 488 Rej','Total Good','Total Rej','Rej%'],
+      ...Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s])=>{
+        const sv=s as any
+        const p477=sv.plants['Plant 477']||{good:0,rej:0}
+        const p488=sv.plants['Plant 488']||{good:0,rej:0}
+        const rp=sv.total_good+sv.total_rej>0?((sv.total_rej/(sv.total_good+sv.total_rej))*100).toFixed(1):0
+        return [dt,p477.good,p477.rej,p488.good,p488.rej,sv.total_good,sv.total_rej,rp+'%']
+      }),
       [''],
-      ['--- QUALITY ---'],
-      ['Total Checks',wData.totalQC,'NG Count',wData.ngQC,'NG %',wData.ngPct+'%'],
+      ['=== QUALITY ==='],
+      ['Total Checks',wData.totalQC,'NG',wData.ngQC,'NG%',wData.ngPct+'%'],
       [''],
-      ['--- BREAKDOWNS ---'],
-      ['Total',wData.bdTotal,'Resolved',wData.bdResolved,'Pending',wData.bdPending,'Total Downtime',wData.totalDowntime+'min','Avg Downtime',wData.avgDowntime+'min'],
+      ['=== BREAKDOWNS ==='],
+      ['Total',wData.bdTotal,'Resolved',wData.bdResolved,'Pending',wData.bdPending,'Total Downtime(min)',wData.totalDowntime],
       [''],
-      ['--- MOULD CHANGES ---'],
-      ['Total Changes',wData.mcTotal,'Avg Time',wData.mcAvgTime+'min'],
+      ['=== MOULD CHANGES ==='],
+      ['Total',wData.mcTotal,'Avg Time(min)',wData.mcAvgTime],
     ]
     const csv=rows.map(r=>r.join(',')).join('\n')
     const blob=new Blob([csv],{type:'text/csv'})
     const url=URL.createObjectURL(blob)
     const a=document.createElement('a')
     a.href=url
-    a.download='weekly_report_'+fromDate+'_to_'+toDate+'.csv'
+    a.download='weekly_'+fromDate+'_to_'+toDate+'.csv'
     a.click()
   }
 
   return (
     <div>
-      {/* Date Range */}
+      {/* Header + Date Range */}
       <div style={S.card}>
-        <div style={{fontWeight:700,color:'#1F3864',fontSize:14,marginBottom:10}}>📅 Weekly Consolidated Report</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:14}}>Weekly Consolidated Report</div>
+          {wData&&<button onClick={downloadCSV} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>Download CSV</button>}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end',marginBottom:10}}>
           <div style={S.f}><label style={S.lbl}>From</label><input type="date" style={S.fi} value={fromDate} onChange={e=>setFromDate(e.target.value)}/></div>
           <div style={S.f}><label style={S.lbl}>To</label><input type="date" style={S.fi} value={toDate} onChange={e=>setToDate(e.target.value)}/></div>
           <button onClick={load} style={{...S.sb,margin:0,padding:'8px 20px'}}>Load</button>
         </div>
-        <div style={{display:'flex',gap:6,marginTop:8}}>
-          {[{l:'This Week',d:6},{l:'Last 7 Days',d:6},{l:'Last 15 Days',d:14},{l:'Last 30 Days',d:29}].map(p=>(
-            <button key={p.l} onClick={()=>{
-              const t=new Date()
-              const f=new Date(t.getTime()-p.d*24*60*60*1000)
-              setToDate(t.toISOString().split('T')[0])
-              setFromDate(f.toISOString().split('T')[0])
-            }} style={{padding:'4px 10px',borderRadius:999,border:'1px solid #1F3864',background:'#E8EDF5',color:'#1F3864',fontSize:10,cursor:'pointer',fontWeight:600}}>{p.l}</button>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {[{l:'Last 7 Days',d:6},{l:'Last 15 Days',d:14},{l:'Last 30 Days',d:29}].map(p=>(
+            <button key={p.l} onClick={()=>setQuick(p.d)} style={{padding:'4px 12px',borderRadius:999,border:'1px solid #1F3864',background:'#E8EDF5',color:'#1F3864',fontSize:11,cursor:'pointer',fontWeight:600}}>{p.l}</button>
           ))}
         </div>
       </div>
 
-      {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>⏳ Loading weekly data...</div>}
+      {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>}
 
       {wData&&!loading&&<div>
-        {/* Download button */}
-        <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
-          <button onClick={downloadWeeklyCSV} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontSize:11,fontWeight:700,cursor:'pointer'}}>⬇️ Download Weekly CSV</button>
+        {/* Date range banner */}
+        <div style={{background:'#1F3864',color:'#fff',borderRadius:8,padding:'8px 14px',marginBottom:8,fontSize:12,fontWeight:600}}>
+          {fmtDate(fromDate)} – {fmtDate(toDate)} &nbsp;|&nbsp; {Object.keys(wData.dayWise).length} days
         </div>
 
         {/* Summary Cards */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-
-          {/* Production */}
-          <div style={{background:'#E8F5E9',border:'2px solid #276221',borderRadius:12,padding:14}}>
-            <div style={{fontWeight:700,color:'#276221',fontSize:13,marginBottom:8}}>🏭 Production</div>
-            <div style={{fontSize:22,fontWeight:700,color:'#276221'}}>{(wData.totalGood/1000).toFixed(1)}K</div>
-            <div style={{fontSize:11,color:'#444'}}>Good parts produced</div>
-            <div style={{marginTop:6,fontSize:11}}>
-              <span style={{color:'#C00000',fontWeight:600}}>Rej: {wData.totalRej.toLocaleString()} pcs ({wData.rejPct}%)</span>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:8}}>
+          {[
+            {label:'Production',val:(wData.totalGood/1000).toFixed(1)+'K',sub:'Rej: '+wData.rejPct+'%',bg:'#E8F5E9',color:'#276221'},
+            {label:'Quality NG',val:wData.ngPct+'%',sub:wData.totalQC+' checks | '+wData.ngQC+' NG',bg:wData.ngPct>10?'#FFEBEE':'#FFF9E6',color:wData.ngPct>10?'#C00000':'#854F0B'},
+            {label:'Breakdowns',val:String(wData.bdTotal),sub:Math.round(wData.totalDowntime/60)+'h '+wData.totalDowntime%60+'m down',bg:'#FFEBEE',color:'#C00000'},
+            {label:'Mould Changes',val:String(wData.mcTotal),sub:'Avg '+wData.mcAvgTime+' min',bg:'#F3E5F5',color:'#7B1FA2'},
+          ].map((k,i)=>(
+            <div key={i} style={{background:k.bg,borderRadius:10,padding:12,textAlign:'center'}}>
+              <div style={{fontSize:11,color:k.color,marginBottom:4}}>{k.label}</div>
+              <div style={{fontSize:22,fontWeight:700,color:k.color}}>{k.val}</div>
+              <div style={{fontSize:10,color:k.color,marginTop:2,opacity:0.8}}>{k.sub}</div>
             </div>
-          </div>
-
-          {/* Quality */}
-          <div style={{background:wData.ngPct>10?'#FFEBEE':'#FFF9E6',border:'2px solid '+(wData.ngPct>10?'#C00000':'#854F0B'),borderRadius:12,padding:14}}>
-            <div style={{fontWeight:700,color:wData.ngPct>10?'#C00000':'#854F0B',fontSize:13,marginBottom:8}}>✅ Quality</div>
-            <div style={{fontSize:22,fontWeight:700,color:wData.ngPct>10?'#C00000':'#276221'}}>{wData.ngPct}% NG</div>
-            <div style={{fontSize:11,color:'#444'}}>{wData.totalQC} checks | {wData.ngQC} NG</div>
-          </div>
-
-          {/* Breakdown */}
-          <div style={{background:'#FFEBEE',border:'2px solid #C00000',borderRadius:12,padding:14}}>
-            <div style={{fontWeight:700,color:'#C00000',fontSize:13,marginBottom:8}}>🔴 Breakdowns</div>
-            <div style={{fontSize:22,fontWeight:700,color:'#C00000'}}>{wData.bdTotal}</div>
-            <div style={{fontSize:11,color:'#444'}}>{wData.bdResolved} resolved | {wData.bdPending} pending</div>
-            <div style={{marginTop:6,fontSize:11,color:'#854F0B',fontWeight:600}}>
-              Total downtime: {Math.round(wData.totalDowntime/60)}h {wData.totalDowntime%60}m
-            </div>
-          </div>
-
-          {/* Mould Change */}
-          <div style={{background:'#F3E5F5',border:'2px solid #7B1FA2',borderRadius:12,padding:14}}>
-            <div style={{fontWeight:700,color:'#7B1FA2',fontSize:13,marginBottom:8}}>🔄 Mould Changes</div>
-            <div style={{fontSize:22,fontWeight:700,color:'#7B1FA2'}}>{wData.mcTotal}</div>
-            <div style={{fontSize:11,color:'#444'}}>Avg time: {wData.mcAvgTime} min</div>
-          </div>
+          ))}
         </div>
 
-        {/* Day wise production */}
+        {/* Day wise production — Plant wise */}
         <div style={{...S.card,marginBottom:8}}>
-          <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:8}}>📈 Day Wise Production</div>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:10}}>Production — Day wise (Plant wise)</div>
           <div style={{overflowX:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,tableLayout:'fixed'}}>
               <thead><tr>
-                {['Date','Good Parts','Rejection','Rej %'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+                <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',width:70}}>Date</th>
+                <th style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'right'}}>P-477 Good</th>
+                <th style={{background:'#276221',color:'#fff',padding:'6px 8px',textAlign:'right'}}>P-477 Rej</th>
+                <th style={{background:'#1F5E8C',color:'#fff',padding:'6px 8px',textAlign:'right'}}>P-488 Good</th>
+                <th style={{background:'#1F5E8C',color:'#fff',padding:'6px 8px',textAlign:'right'}}>P-488 Rej</th>
+                <th style={{background:'#444',color:'#fff',padding:'6px 8px',textAlign:'right'}}>Total</th>
+                <th style={{background:'#C00000',color:'#fff',padding:'6px 8px',textAlign:'right'}}>Rej%</th>
               </tr></thead>
               <tbody>
                 {Object.entries(wData.dayWise).sort((a,b)=>a[0].localeCompare(b[0])).map(([dt,s],i)=>{
-                  const sv=s as {good:number,rej:number}
-                  const rp=sv.good+sv.rej>0?((sv.rej/(sv.good+sv.rej))*100).toFixed(1):0
-                  return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-                    <td style={{padding:'5px 8px',fontWeight:600}}>{dt}</td>
-                    <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{sv.good.toLocaleString()}</td>
-                    <td style={{padding:'5px 8px',color:'#C00000'}}>{sv.rej.toLocaleString()}</td>
-                    <td style={{padding:'5px 8px',color:Number(rp)>3?'#C00000':'#276221',fontWeight:700}}>{rp}%</td>
+                  const sv=s as any
+                  const p477=sv.plants['Plant 477']||{good:0,rej:0}
+                  const p488=sv.plants['Plant 488']||{good:0,rej:0}
+                  const rp=sv.total_good+sv.total_rej>0?((sv.total_rej/(sv.total_good+sv.total_rej))*100).toFixed(1):0
+                  const isHigh=Number(rp)>3
+                  return <tr key={i} style={{background:isHigh?'#FFF5F5':i%2===0?'#FAFAFA':'#fff'}}>
+                    <td style={{padding:'5px 8px',fontWeight:600}}>{fmtDate(dt)}</td>
+                    <td style={{padding:'5px 8px',textAlign:'right',color:'#276221'}}>{p477.good.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',textAlign:'right',color:'#C00000'}}>{p477.rej.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',textAlign:'right',color:'#1F5E8C'}}>{p488.good.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',textAlign:'right',color:'#C00000'}}>{p488.rej.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',textAlign:'right',fontWeight:600}}>{sv.total_good.toLocaleString()}</td>
+                    <td style={{padding:'5px 8px',textAlign:'right',fontWeight:700,color:isHigh?'#C00000':'#276221'}}>{rp}%</td>
                   </tr>
                 })}
               </tbody>
@@ -816,130 +875,116 @@ function WeeklyReport() {
           </div>
         </div>
 
-        {/* Top NG Machines */}
-        {wData.topNG.length>0&&<div style={{...S.card,marginBottom:8}}>
-          <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:8}}>🔴 Top NG Machines (Quality)</div>
-          {wData.topNG.map((m,i)=>(
-            <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #F5F5F5'}}>
-              <span style={{fontSize:12}}>{m[0]}</span>
-              <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>{m[1]} NG</span>
-            </div>
-          ))}
-        </div>}
-
-        {/* Top Breakdown Machines */}
-        {wData.topBD.length>0&&<div style={{...S.card,marginBottom:8}}>
-          <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:8}}>⚙️ Top Breakdown Machines</div>
-          {wData.topBD.map((m,i)=>(
-            <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #F5F5F5'}}>
-              <span style={{fontSize:12}}>{m[0]}</span>
-              <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>{m[1]} BD</span>
-            </div>
-          ))}
-        </div>}
-
-        {/* Breakdown Detail */}
-        {wData.bd.length>0&&<div style={{...S.card,marginBottom:8}}>
-          <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:8}}>🔴 Breakdown Details</div>
-          <div style={{overflowX:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-              <thead><tr>
-                {['Date','Machine','Problem','Downtime','Status'].map(h=><th key={h} style={{background:'#C00000',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {wData.bd.map((b,i)=>(
-                  <tr key={i} style={{background:i%2===0?'#FFF5F5':'#fff'}}>
-                    <td style={{padding:'5px 8px',fontWeight:600}}>{b.date}</td>
-                    <td style={{padding:'5px 8px'}}>{b.machine}</td>
-                    <td style={{padding:'5px 8px',maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.problem}</td>
-                    <td style={{padding:'5px 8px',color:'#854F0B',fontWeight:600}}>{b.downtime_min||0}m</td>
-                    <td style={{padding:'5px 8px'}}><span style={{background:b.status?.includes('Resolved')||b.status==='Resolved'?'#E8F5E9':'#FFEBEE',color:b.status?.includes('Resolved')||b.status==='Resolved'?'#276221':'#C00000',padding:'1px 6px',borderRadius:999,fontSize:10}}>{b.status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Two column — Quality + Breakdown */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+          <div style={S.card}>
+            <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:8}}>Top NG Machines (Quality)</div>
+            {wData.topNG.length===0
+              ?<div style={{color:'#888',fontSize:11}}>Koi NG nahi</div>
+              :wData.topNG.map((m,i)=>{
+                const mv=m[1] as any
+                return <div key={i} style={{padding:'5px 0',borderBottom:'0.5px solid #F5F5F5'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600}}>{m[0]}</div>
+                      <div style={{fontSize:10,color:'#666'}}>{mv.product}{mv.mould?' · '+mv.mould:''}</div>
+                    </div>
+                    <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 8px',borderRadius:999,fontSize:11,fontWeight:700}}>{mv.count} NG</span>
+                  </div>
+                </div>
+              })
+            }
           </div>
-        </div>}
-
-      </div>}
-
-      {/* Rejection Comparison */}
-      {wData&&!loading&&<div style={{...S.card,marginBottom:8}}>
-        <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:10}}>🔍 Rejection Comparison — Operator vs QC</div>
-        <RejectionComparison from={fromDate} to={toDate} plant=""/>
-      </div>}
-
-      {/* Quality + Production Correlation */}
-      {wData&&!loading&&<div style={{...S.card,marginBottom:8}}>
-        <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:10}}>📊 Quality vs Production Correlation</div>
-        {wData.qual.length===0
-          ?<div style={{color:'#888',fontSize:12,padding:8}}>Quality data nahi hai is period mein</div>
-          :<div>
-            {/* Machine wise quality + production combined */}
-            {(()=>{
-              // Group quality NG by machine+product
-              const qMap:{[k:string]:{total:number,ng:number,product:string,machine:string,mould:string}}={}
-              wData.qual.forEach((q:any)=>{
-                const k=(q.machine||'')+'||'+(q.part_name||'')
-                if(!qMap[k]) qMap[k]={total:0,ng:0,product:q.part_name||'',machine:q.machine||'',mould:q.mould_name||''}
-                qMap[k].total++
-                if(q.overall_result==='NG') qMap[k].ng++
+          <div style={S.card}>
+            <div style={{fontWeight:700,color:'#854F0B',fontSize:12,marginBottom:8}}>Top Breakdown Machines</div>
+            {wData.topBD.length===0
+              ?<div style={{color:'#888',fontSize:11}}>Koi breakdown nahi</div>
+              :wData.topBD.map((m,i)=>{
+                const mv=m[1] as any
+                return <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'0.5px solid #F5F5F5'}}>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:600}}>{m[0]}</div>
+                    <div style={{fontSize:10,color:'#666'}}>{mv.downtime} min downtime</div>
+                  </div>
+                  <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 8px',borderRadius:999,fontSize:11,fontWeight:700}}>{mv.count} BD</span>
+                </div>
               })
-              // Group production rej by machine
-              const pMap:{[k:string]:{rej:number,good:number}}={}
-              wData.prod.forEach((p:any)=>{
-                const k=(p.machine||'')+'||'+(p.product||'')
-                if(!pMap[k]) pMap[k]={rej:0,good:0}
-                pMap[k].rej+=(p.rejection||0)
-                pMap[k].good+=(p.good_parts||0)
-              })
-              const rows=Object.entries(qMap).map(([k,q])=>{
-                const p=pMap[k]||{rej:0,good:0}
-                const qcNGPct=q.total>0?Math.round(q.ng/q.total*100):0
-                const prodRejPct=p.good+p.rej>0?Math.round(p.rej/(p.good+p.rej)*100):0
-                const correlated=qcNGPct>0&&prodRejPct>0
-                return {machine:q.machine,product:q.product,mould:q.mould,qcTotal:q.total,qcNG:q.ng,qcNGPct,prodRej:p.rej,prodRejPct,correlated}
-              }).sort((a,b)=>b.qcNGPct-a.qcNGPct)
-              return <div style={{overflowX:'auto'}}>
-                <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            }
+          </div>
+        </div>
+
+        {/* Rejection Comparison */}
+        <div style={{...S.card,marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:10}}>Rejection — Operator vs QC (Plant wise)</div>
+          <RejectionComparison from={fromDate} to={toDate} plant=""/>
+        </div>
+
+        {/* Quality + Production Correlation */}
+        <div style={{...S.card,marginBottom:8}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:10}}>Quality vs Production Correlation</div>
+          {wData.qual.length===0
+            ?<div style={{color:'#888',fontSize:12}}>Quality data nahi hai</div>
+            :<div style={{overflowX:'auto'}}>
+              {(()=>{
+                const qMap:{[k:string]:{total:number,ng:number,product:string,machine:string,mould:string}}={}
+                wData.qual.forEach(q=>{
+                  const k=(q.machine||'')+'|'+(q.part_name||'')
+                  if(!qMap[k]) qMap[k]={total:0,ng:0,product:q.part_name||'',machine:q.machine||'',mould:q.mould_name||''}
+                  qMap[k].total++
+                  if(q.overall_result==='NG') qMap[k].ng++
+                })
+                const pMap:{[k:string]:{rej:number,good:number}}={}
+                wData.prod.forEach(p=>{
+                  const k=(p.machine||'')+'|'+(p.product||'')
+                  if(!pMap[k]) pMap[k]={rej:0,good:0}
+                  pMap[k].rej+=(p.rejection||0)
+                  pMap[k].good+=(p.good_parts||0)
+                })
+                const rows=Object.entries(qMap).map(([k,q])=>{
+                  const p=pMap[k]||{rej:0,good:0}
+                  const qcNGPct=q.total>0?Math.round(q.ng/q.total*100):0
+                  const prodRejPct=p.good+p.rej>0?Math.round(p.rej/(p.good+p.rej)*100):0
+                  return {machine:q.machine,product:q.product,mould:q.mould,qcTotal:q.total,qcNG:q.ng,qcNGPct,prodRej:p.rej,prodRejPct}
+                }).sort((a,b)=>b.qcNGPct-a.qcNGPct)
+                return <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
                   <thead><tr>
-                    {['Machine','Product','Mould','QC Checks','QC NG%','Prod Rej','Prod Rej%','Status'].map(h=>(
+                    {['Machine','Product','Mould','QC NG%','Prod Rej%','Status'].map(h=>(
                       <th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap'}}>{h}</th>
                     ))}
                   </tr></thead>
                   <tbody>
                     {rows.map((r,i)=>(
-                      <tr key={i} style={{background:r.qcNGPct>20?'#FFEBEE':r.qcNGPct>10?'#FFF9E6':i%2===0?'#FAFAFA':'#fff'}}>
-                        <td style={{padding:'5px 8px',fontWeight:600,fontSize:11}}>{r.machine}</td>
+                      <tr key={i} style={{background:r.qcNGPct>20?'#FFF5F5':i%2===0?'#FAFAFA':'#fff'}}>
+                        <td style={{padding:'5px 8px',fontSize:11,fontWeight:600}}>{r.machine}</td>
                         <td style={{padding:'5px 8px',color:'#854F0B'}}>{r.product}</td>
                         <td style={{padding:'5px 8px',fontSize:10,color:'#555'}}>{r.mould||'--'}</td>
-                        <td style={{padding:'5px 8px',textAlign:'center'}}>{r.qcTotal}</td>
                         <td style={{padding:'5px 8px',textAlign:'center',fontWeight:700,color:r.qcNGPct>20?'#C00000':r.qcNGPct>10?'#854F0B':'#276221'}}>{r.qcNGPct}%</td>
-                        <td style={{padding:'5px 8px',textAlign:'center',color:'#C00000',fontWeight:600}}>{r.prodRej.toLocaleString()}</td>
                         <td style={{padding:'5px 8px',textAlign:'center',fontWeight:700,color:r.prodRejPct>3?'#C00000':'#276221'}}>{r.prodRejPct}%</td>
                         <td style={{padding:'5px 8px'}}>
                           <span style={{background:r.qcNGPct>20||r.prodRejPct>5?'#C00000':r.qcNGPct>10||r.prodRejPct>3?'#FF9800':'#276221',color:'#fff',padding:'2px 8px',borderRadius:999,fontSize:9,fontWeight:700}}>
-                            {r.qcNGPct>20||r.prodRejPct>5?'🚨 HIGH':r.qcNGPct>10||r.prodRejPct>3?'⚠️ WATCH':'✅ OK'}
+                            {r.qcNGPct>20||r.prodRejPct>5?'HIGH':r.qcNGPct>10||r.prodRejPct>3?'WATCH':'OK'}
                           </span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            })()}
-          </div>
-        }
+              })()}
+            </div>
+          }
+        </div>
+
       </div>}
 
       {!wData&&!loading&&<div style={{...S.card,textAlign:'center',color:'#888',padding:40}}>
         <div style={{fontSize:32,marginBottom:8}}>📅</div>
         <div style={{fontSize:13,fontWeight:600,color:'#444',marginBottom:4}}>Date range select karo</div>
-        <div style={{fontSize:11}}>Ya upar quick buttons use karo — Last 7 Days etc.</div>
+        <div style={{fontSize:11}}>Ya quick buttons use karo</div>
       </div>}
     </div>
   )
 }
+
 
 function MISTab() {
   const [data,setData]=useState<any>(null)
