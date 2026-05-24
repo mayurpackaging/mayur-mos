@@ -2730,7 +2730,7 @@ function BreakdownTab({user}:{user:User}) {
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['BD ID','Machine','⚙️ Mould','Category','Problem','Analysis','Solution','Parts Used','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
+            {['BD ID','Machine','Plant','⚙️ Mould','Category','Problem','Analysis','Solution','Parts Used','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
           </tr></thead>
           <tbody>{resolved.map((b:any,i:number)=>{
@@ -2740,6 +2740,7 @@ function BreakdownTab({user}:{user:User}) {
             return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666',whiteSpace:'nowrap' as const}}>{b.bd_id||b.id?.slice(0,8)}</td>
               <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864',whiteSpace:'nowrap' as const}}>{b.machine}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#555',whiteSpace:'nowrap' as const}}>{b.plant||'--'}</td>
               <td style={{padding:'6px 8px',fontSize:10,fontWeight:600,color:'#854F0B',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.mould_running||'--'}>{b.mould_running||'--'}</td>
               <td style={{padding:'6px 8px',fontSize:10}}><span style={{background:'#E6F1FB',color:'#1F3864',padding:'2px 6px',borderRadius:4,fontSize:9}}>{b.category}</span></td>
               <td style={{padding:'6px 8px',fontSize:10,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.problem}>{b.problem}</td>
