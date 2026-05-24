@@ -2511,7 +2511,7 @@ function BreakdownTab({user}:{user:User}) {
         type:'resolve',id,
         solution:resolveForm.solution,
         analysis:resolveForm.analysis,
-        sparesUsed:resolveParts.length>0 ? resolveParts.map(p=>p.partName+' x'+p.qty).join(', ') : resolveForm.sparesUsed,
+        sparesUsed:resolveParts.length>0 ? resolveParts.map(p=>p.partName+' x'+p.qty+(p.source==='purchased'?' [Purchased]':' [Factory]')).join(', ') : resolveForm.sparesUsed,
         remarks:resolveForm.remarks,
         resolvedParts:resolveParts,
         resolvedTime:new Date().toISOString(),
@@ -2667,15 +2667,29 @@ function BreakdownTab({user}:{user:User}) {
               
               {/* Added parts list */}
               {resolveParts.length>0&&<div style={{marginBottom:8}}>
-                {resolveParts.map((p,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:6,marginBottom:4,background:'#fff',borderRadius:6,padding:'4px 8px',border:'1px solid #ddd'}}>
-                  <span style={{flex:1,fontSize:11,fontWeight:600}}>{p.partName}</span>
-                  <span style={{fontSize:10,color:'#666',background:'#F0F0F0',padding:'1px 6px',borderRadius:4}}>{p.category?.includes('Mould')?'🔩 Mould':'⚙️ Machine'}</span>
-                  <span style={{fontSize:11,color:'#276221',fontWeight:700}}>Stock: {p.stock}</span>
-                  <input type="number" min="1" max={p.stock} value={p.qty}
-                    onChange={e=>setResolveParts(prev=>prev.map((x,j)=>j===i?{...x,qty:e.target.value}:x))}
-                    style={{width:50,padding:'2px 4px',border:'1px solid #ccc',borderRadius:4,fontSize:11,textAlign:'center'}}/>
-                  <button onClick={()=>setResolveParts(prev=>prev.filter((_,j)=>j!==i))}
-                    style={{background:'#FFEBEE',border:'none',borderRadius:4,padding:'2px 6px',cursor:'pointer',color:'#C00000',fontSize:12}}>✕</button>
+                {resolveParts.map((p,i)=><div key={i} style={{background:'#fff',borderRadius:6,padding:'6px 8px',border:'1px solid #ddd',marginBottom:4}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                    <span style={{flex:1,fontSize:11,fontWeight:600}}>{p.partName}</span>
+                    <span style={{fontSize:10,color:'#666',background:'#F0F0F0',padding:'1px 6px',borderRadius:4}}>{p.category?.includes('Mould')?'🔩 Mould':'⚙️ Machine'}</span>
+                    <input type="number" min="1" value={p.qty}
+                      onChange={e=>setResolveParts(prev=>prev.map((x,j)=>j===i?{...x,qty:e.target.value}:x))}
+                      style={{width:50,padding:'2px 4px',border:'1px solid #ccc',borderRadius:4,fontSize:11,textAlign:'center'}}/>
+                    <button onClick={()=>setResolveParts(prev=>prev.filter((_,j)=>j!==i))}
+                      style={{background:'#FFEBEE',border:'none',borderRadius:4,padding:'2px 6px',cursor:'pointer',color:'#C00000',fontSize:12}}>✕</button>
+                  </div>
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    <span style={{fontSize:10,color:'#666'}}>Source:</span>
+                    <button onClick={()=>setResolveParts(prev=>prev.map((x,j)=>j===i?{...x,source:'factory'}:x))}
+                      style={{padding:'2px 10px',fontSize:10,fontWeight:600,border:'1px solid '+(p.source==='purchased'?'#ddd':'#276221'),borderRadius:999,background:p.source==='purchased'?'#fff':'#E8F5E9',color:p.source==='purchased'?'#888':'#276221',cursor:'pointer'}}>
+                      🏭 Factory Stock
+                    </button>
+                    <button onClick={()=>setResolveParts(prev=>prev.map((x,j)=>j===i?{...x,source:'purchased'}:x))}
+                      style={{padding:'2px 10px',fontSize:10,fontWeight:600,border:'1px solid '+(p.source==='purchased'?'#C00000':'#ddd'),borderRadius:999,background:p.source==='purchased'?'#FFEBEE':'#fff',color:p.source==='purchased'?'#C00000':'#888',cursor:'pointer'}}>
+                      🛒 Bahar se Mangwaya
+                    </button>
+                    {p.source!=='purchased'&&<span style={{fontSize:10,color:'#276221'}}>Stock: {p.stock}</span>}
+                    {p.source==='purchased'&&<span style={{fontSize:10,color:'#C00000',fontWeight:600}}>⚠️ Purchase required</span>}
+                  </div>
                 </div>)}
               </div>}
               
