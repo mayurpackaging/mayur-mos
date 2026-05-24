@@ -7,7 +7,11 @@ const supabase = createClient(
 )
 
 export async function GET() {
-  const today = new Date().toISOString().split('T')[0]
+  // IST timezone fix — UTC+5:30
+  const now = new Date()
+  const istOffset = 5.5 * 60 * 60 * 1000
+  const istDate = new Date(now.getTime() + istOffset)
+  const today = istDate.toISOString().split('T')[0]
 
   // Production today
   const { data: prodData } = await supabase.from('production').select('*').eq('date', today)
@@ -128,7 +132,7 @@ export async function GET() {
 
   // 7-day trend
   const { data: trendData } = await supabase.from('production').select('date,good_parts,rejection')
-    .gte('date', new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0]).order('date')
+    .gte('date', new Date(now.getTime() + istOffset - 7*24*60*60*1000).toISOString().split('T')[0]).order('date')
   const trendMap: Record<string,any> = {}
   trendData?.forEach(r => {
     if (!trendMap[r.date]) trendMap[r.date]={date:r.date,good:0,rej:0}
