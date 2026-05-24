@@ -20,7 +20,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const d = await req.json()
-    const today = new Date().toISOString().split('T')[0]
+    // IST timezone fix — UTC+5:30
+  const now = new Date()
+  const istOffset = 5.5 * 60 * 60 * 1000
+  const istDate = new Date(now.getTime() + istOffset)
+  const today = istDate.toISOString().split('T')[0]
 
     const { error } = await supabase.from('rejections').insert({
       date: d.date || today,
