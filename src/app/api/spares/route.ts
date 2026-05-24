@@ -30,7 +30,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const d = await req.json()
-  const today = new Date().toISOString().split('T')[0]
+  // IST timezone fix — UTC+5:30
+  const now = new Date()
+  const istOffset = 5.5 * 60 * 60 * 1000
+  const istDate = new Date(now.getTime() + istOffset)
+  const today = istDate.toISOString().split('T')[0]
   const items = d.items || []
 
   if (items.length === 0) return NextResponse.json({ success: false, msg: 'Koi item nahi!' })
