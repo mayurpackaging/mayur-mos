@@ -2421,6 +2421,7 @@ function BreakdownTab({user}:{user:User}) {
   const [showForm,setShowForm]=useState(false)
   const [form,setForm]=useState({date:nd(),plant:'',machine:'',mouldRunning:'',problem:'',category:'Mechanical',operator:user.name,remarks:''})
   const [resolveId,setResolveId]=useState<string|null>(null)
+  const [selectedBD,setSelectedBD]=useState<any>(null)
   const [resolveForm,setResolveForm]=useState({solution:'',analysis:'',sparesUsed:'',remarks:''})
   const [resolveParts,setResolveParts]=useState<{partName:string,qty:string,category:string,stock:number}[]>([])
   const [spareSearch,setSpareSearch]=useState('')
@@ -2726,6 +2727,63 @@ function BreakdownTab({user}:{user:User}) {
 
     {/* Resolved History */}
     {resolved.length>0&&<div style={S.card}>
+      {/* BD Detail Modal */}
+      {selectedBD&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <div style={{background:'#fff',borderRadius:12,padding:20,width:400,maxHeight:'90vh',overflowY:'auto'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div style={{fontWeight:700,color:'#C00000',fontSize:14}}>{(selectedBD as any).bd_id||(selectedBD as any).id?.slice(0,8)}</div>
+            <button onClick={()=>setSelectedBD(null)} style={{background:'#f0f0f0',border:'none',borderRadius:999,width:28,height:28,cursor:'pointer',fontSize:14}}>✕</button>
+          </div>
+
+          {/* Summary */}
+          <div style={{background:'#FFEBEE',borderRadius:8,padding:10,marginBottom:12}}>
+            <div style={{fontWeight:700,fontSize:13,color:'#1F3864',marginBottom:2}}>{(selectedBD as any).machine} — {(selectedBD as any).plant}</div>
+            {(selectedBD as any).mould_running&&<div style={{fontSize:11,color:'#854F0B',fontWeight:600}}>⚙️ {(selectedBD as any).mould_running}</div>}
+            <div style={{fontSize:11,color:'#666',marginTop:4}}>{(selectedBD as any).category} | {(selectedBD as any).date}</div>
+          </div>
+
+          {/* Details */}
+          {[
+            {label:'Problem',val:(selectedBD as any).problem},
+            {label:'Analysis',val:(selectedBD as any).analysis},
+            {label:'Solution',val:(selectedBD as any).solution},
+            {label:'Parts Used',val:(selectedBD as any).spares_used},
+            {label:'Reported By',val:(selectedBD as any).reported_by},
+            {label:'Resolved By',val:(selectedBD as any).resolved_by},
+            {label:'Remarks',val:(selectedBD as any).remarks},
+          ].filter(f=>f.val&&f.val!=='--').map((f,i)=>(
+            <div key={i} style={{marginBottom:8,borderBottom:'1px solid #F5F5F5',paddingBottom:6}}>
+              <div style={{fontSize:10,color:'#888',fontWeight:600,marginBottom:2}}>{f.label}</div>
+              <div style={{fontSize:12,color:'#333'}}>{f.val}</div>
+            </div>
+          ))}
+
+          {/* Timing */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginTop:8}}>
+            <div style={{background:'#FFEBEE',borderRadius:6,padding:6,textAlign:'center'}}>
+              <div style={{fontSize:10,color:'#666'}}>Reported</div>
+              <div style={{fontSize:11,fontWeight:600}}>{(selectedBD as any).reported_time?new Date((selectedBD as any).reported_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'--'}</div>
+            </div>
+            <div style={{background:'#FFF9E6',borderRadius:6,padding:6,textAlign:'center'}}>
+              <div style={{fontSize:10,color:'#666'}}>Work Start</div>
+              <div style={{fontSize:11,fontWeight:600}}>{(selectedBD as any).work_started_time?new Date((selectedBD as any).work_started_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'--'}</div>
+            </div>
+            <div style={{background:'#E8F5E9',borderRadius:6,padding:6,textAlign:'center'}}>
+              <div style={{fontSize:10,color:'#666'}}>Resolved</div>
+              <div style={{fontSize:11,fontWeight:600}}>{(selectedBD as any).resolved_time?new Date((selectedBD as any).resolved_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'--'}</div>
+            </div>
+          </div>
+          <div style={{textAlign:'center',marginTop:8,fontSize:13,fontWeight:700,color:(selectedBD as any).downtime_min>180?'#C00000':(selectedBD as any).downtime_min>60?'#854F0B':'#276221'}}>
+            ⏱️ Downtime: {(selectedBD as any).downtime_min||0} min
+          </div>
+
+          {/* Mould History link */}
+          {(selectedBD as any).mould_running&&<div style={{marginTop:10,background:'#E8EDF5',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#1F3864',fontWeight:600}}>
+            📋 Mould History mein check karo: {(selectedBD as any).mould_running}
+          </div>}
+        </div>
+      </div>}
+
       <div style={{fontWeight:700,marginBottom:8,color:'#276221'}}>✅ Resolved Breakdowns</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
@@ -2737,7 +2795,7 @@ function BreakdownTab({user}:{user:User}) {
             const downtime=b.reported_time&&b.resolved_time?calcDowntime(b.reported_time,b.resolved_time):b.downtime_min?`${b.downtime_min}m`:'--'
             const dtMins=b.reported_time&&b.resolved_time?Math.round((new Date(b.resolved_time).getTime()-new Date(b.reported_time).getTime())/60000):0
             const dtCol=dtMins>0?(dtMins<=60?'#276221':dtMins<=180?'#854F0B':'#C00000'):'#666'
-            return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
+            return <tr key={i} onClick={()=>setSelectedBD(b)} style={{background:i%2===0?'#F8FFF8':'#fff',cursor:'pointer'}} onMouseEnter={e=>(e.currentTarget.style.background='#E8EDF5')} onMouseLeave={e=>(e.currentTarget.style.background=i%2===0?'#F8FFF8':'#fff')}>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666',whiteSpace:'nowrap' as const}}>{b.bd_id||b.id?.slice(0,8)}</td>
               <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864',whiteSpace:'nowrap' as const}}>{b.machine}</td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#555',whiteSpace:'nowrap' as const}}>{b.plant||'--'}</td>
@@ -7295,7 +7353,7 @@ function DailyReportTab({user}:{user:User}) {
               })
               return byMachine.map((m:any,i:number)=>{
                 const effCol=m.eff>=90?'#276221':m.eff>=75?'#854F0B':'#C00000'
-                return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
+                return <tr key={i} onClick={()=>setSelectedBD(b)} style={{background:i%2===0?'#F8FFF8':'#fff',cursor:'pointer'}} onMouseEnter={e=>(e.currentTarget.style.background='#E8EDF5')} onMouseLeave={e=>(e.currentTarget.style.background=i%2===0?'#F8FFF8':'#fff')}>
                   <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{m.machine}</td>
                   <td style={{padding:'6px 8px',fontSize:10}}>{m.product}</td>
                   <td style={{padding:'6px 8px',textAlign:'center',fontSize:10}}>{m.shift?.includes('Day')?'☀️':'🌙'}</td>
