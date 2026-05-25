@@ -2423,7 +2423,7 @@ function BreakdownTab({user}:{user:User}) {
   const [resolveId,setResolveId]=useState<string|null>(null)
   const [selectedBD,setSelectedBD]=useState<any>(null)
   const [resolveForm,setResolveForm]=useState({solution:'',analysis:'',sparesUsed:'',remarks:''})
-  const [resolveParts,setResolveParts]=useState<{partName:string,qty:string,category:string,stock:number}[]>([])
+  const [resolveParts,setResolveParts]=useState<{partName:string,qty:string,category:string,stock:number,source:string}[]>([])
   const [spareSearch,setSpareSearch]=useState('')
   const [selectedPart,setSelectedPart]=useState<any>(null)
   const [partHistory,setPartHistory]=useState<any[]>([])
@@ -2705,7 +2705,7 @@ function BreakdownTab({user}:{user:User}) {
                     key={s.id}
                     onClick={()=>{
                       if(!resolveParts.find(p=>p.partName===s.part_name)){
-                        setResolveParts(prev=>[...prev,{partName:s.part_name,qty:'1',category:s.category||'',stock:s.current_stock||0}])
+                        setResolveParts(prev=>[...prev,{partName:s.part_name,qty:'1',category:s.category||'',stock:s.current_stock||0,source:'factory'}])
                       }
                       setSpareSearch('')
                       setShowSpareSearch(false)
