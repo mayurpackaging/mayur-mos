@@ -7367,7 +7367,7 @@ function DailyReportTab({user}:{user:User}) {
               })
               return byMachine.map((m:any,i:number)=>{
                 const effCol=m.eff>=90?'#276221':m.eff>=75?'#854F0B':'#C00000'
-                return <tr key={i} onClick={()=>setSelectedBD(b)} style={{background:i%2===0?'#F8FFF8':'#fff',cursor:'pointer'}} onMouseEnter={e=>(e.currentTarget.style.background='#E8EDF5')} onMouseLeave={e=>(e.currentTarget.style.background=i%2===0?'#F8FFF8':'#fff')}>
+                return <tr key={i} style={{background:i%2===0?'#F8FFF8':'#fff'}}>
                   <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864'}}>{m.machine}</td>
                   <td style={{padding:'6px 8px',fontSize:10}}>{m.product}</td>
                   <td style={{padding:'6px 8px',textAlign:'center',fontSize:10}}>{m.shift?.includes('Day')?'☀️':'🌙'}</td>
