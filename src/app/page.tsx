@@ -1517,6 +1517,62 @@ function IMSTab({user}:{user:User}) {
   </div>
 }
 
+function QCAlertBanner({user}:{user:User}) {
+  const [alerts,setAlerts]=useState([])
+  const [resolveId,setResolveId]=useState(null)
+  const [resolution,setResolution]=useState('')
+  const [saving,setSaving]=useState(false)
+
+  const load=()=>{
+    const plant=user?.modules?.includes('Plant 488')?'Plant 488':user?.modules?.includes('Plant 477')?'Plant 477':''
+    fetch('/api/qcalerts?status=Pending'+(plant?'&plant='+plant:'')).then(r=>r.json()).then(d=>setAlerts(d.data||[])).catch(()=>{})
+  }
+
+  useEffect(()=>{ load() },[])
+
+  if(alerts.length===0) return null
+
+  return <div style={{marginBottom:8}}>
+    {alerts.map((a:any)=><div key={a.id} style={{background:'#FFEBEE',border:'2px solid #C00000',borderRadius:10,padding:12,marginBottom:6}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+        <div>
+          <div style={{fontWeight:700,color:'#C00000',fontSize:13}}>QC Alert — Action Required!</div>
+          <div style={{fontSize:11,color:'#1F3864',fontWeight:600,marginTop:2}}>{a.machine} | {a.date} {a.check_time}</div>
+          <div style={{fontSize:11,color:'#854F0B',marginTop:1}}>{a.product} {a.mould_name?'· '+a.mould_name:''}</div>
+        </div>
+        <span style={{background:'#C00000',color:'#fff',fontSize:9,padding:'2px 8px',borderRadius:999,fontWeight:700}}>PENDING</span>
+      </div>
+      <div style={{background:'#fff',borderRadius:6,padding:'6px 10px',marginBottom:8,fontSize:11}}>
+        <div style={{fontWeight:600,color:'#C00000',marginBottom:3}}>Issues:</div>
+        <div style={{color:'#333'}}>{a.issues}</div>
+        {a.weight_actual&&a.weight_standard&&<div style={{color:'#C00000',marginTop:3}}>Weight: {a.weight_actual}g (std: {a.weight_standard}g)</div>}
+        {a.remarks&&<div style={{color:'#666',marginTop:3,fontStyle:'italic'}}>QC remarks: {a.remarks}</div>}
+      </div>
+      {resolveId===a.id
+        ?<div>
+          <textarea style={{...S.fi,height:60,resize:'none' as const,marginBottom:6}} value={resolution} onChange={e=>setResolution(e.target.value)} placeholder="Kya kiya — e.g. cavity 13 polish done, speed adjust ki, mould clean kiya..."/>
+          <div style={{display:'flex',gap:6}}>
+            <button disabled={saving||!resolution} onClick={async()=>{
+              setSaving(true)
+              await fetch('/api/qcalerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'resolve',id:a.id,resolution,resolvedBy:user.name})}).then(r=>r.json())
+              setSaving(false)
+              setResolveId(null)
+              setResolution('')
+              load()
+            }} style={{flex:1,background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer',opacity:!resolution?0.5:1}}>
+              {saving?'Saving...':'Mark as Resolved'}
+            </button>
+            <button onClick={()=>{setResolveId(null);setResolution('')}} style={{background:'#f0f0f0',border:'none',borderRadius:6,padding:'8px 14px',cursor:'pointer',fontSize:12}}>Cancel</button>
+          </div>
+        </div>
+        :<button onClick={()=>setResolveId(a.id)} style={{width:'100%',background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'8px',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+          Action Karo + Resolve Karo
+        </button>
+      }
+    </div>)}
+  </div>
+}
+
 function ProductionTab({user}:{user:User}) {
   const [items,setItems]=useState<any[]>([])
   const [loading,setLoading]=useState(true)
@@ -1644,6 +1700,7 @@ function ProductionTab({user}:{user:User}) {
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
   return <div>
+    <QCAlertBanner user={user}/>
     {/* Today's entries summary */}
     {todayEntries.length>0&&<div style={{...S.card,border:'1px solid #276221',background:'#F0FFF4',marginBottom:8}}>
       <div style={{fontWeight:700,color:'#276221',marginBottom:8}}>📋 Aaj Ki Entries ({nd()})</div>
@@ -4014,6 +4071,7 @@ function SparesTab({user}:{user:User}) {
 // ─── Quality Tab ──────────────────────────────────────────────
 function QualityTab({user}:{user:User}) {
   const [items,setItems]=useState([])
+  const [weights,setWeights]=useState([])
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState(null)
@@ -4041,12 +4099,30 @@ function QualityTab({user}:{user:User}) {
   const [checkTime,setCheckTime]=useState(getCurrentSlot())
 
   useEffect(()=>{
-    fetch('/api/ims').then(r=>r.json()).then(d=>{setItems(d.items||[]);setLoading(false)})
+    Promise.all([
+      fetch('/api/ims').then(r=>r.json()).catch(()=>({items:[]})),
+      fetch('/api/weights').then(r=>r.json()).catch(()=>({data:[]}))
+    ]).then(([imsRes,wtRes])=>{
+      setItems(imsRes.items||[])
+      setWeights(wtRes.data||[])
+      setLoading(false)
+    })
   },[])
+
+  const getStdWeight=(product)=>{
+    if(!product) return null
+    const w=weights.find(w=>
+      product.toLowerCase().includes(w.item_name.toLowerCase().split(' container')[0].split(' lid')[0].trim())||
+      w.item_name.toLowerCase().includes(product.toLowerCase().split(' ').slice(0,3).join(' '))
+    )
+    if(!w) return null
+    const isLid=product.toLowerCase().includes('lid')
+    return isLid?w.lid_weight_g:w.container_weight_g
+  }
 
   const machines=MACH[plant]||[]
   const VIS=['No short shots','No flash','No burn marks','No flow marks','No sink marks','Uniform color','No contamination']
-  const DIM=['Wall thickness','Height','Diameter','Lid fit','Stack ability','Drop test','Weight check']
+  const DIM=['Wall thickness','Height','Diameter','Lid fit','Stack ability','Drop test']
 
   const setCheck=(machine,type,idx,val)=>setMachineData(prev=>({...prev,[machine]:{...prev[machine],[type+'_'+idx]:val}}))
   const getCheck=(machine,type,idx)=>machineData[machine]?.[type+'_'+idx]||''
@@ -4062,10 +4138,19 @@ function QualityTab({user}:{user:User}) {
   const save=async()=>{
     if(!plant){setToast({msg:'Plant select karo!',ok:false});return}
     const submittedAt=new Date().toISOString()
-    const entries=machines.map(machine=>{
+    const entries=[]
+    const alerts=[]
+
+    for(const machine of machines){
       const d=machineData[machine]||{}
-      if(!d.product) return null
-      return {
+      if(!d.product) continue
+
+      const stdWt=getStdWeight(d.product)
+      const actualWt=parseFloat(d.weightActual||'0')||0
+      const wtNG=stdWt&&actualWt>0?Math.abs(actualWt-stdWt)>0.3:false
+      const hasNG=Object.entries(d).some(([k,v])=>v==='NG')||wtNG
+
+      entries.push({
         date,shift,
         machine:plant+' - '+machine,
         part_name:d.product,
@@ -4087,56 +4172,67 @@ function QualityTab({user}:{user:User}) {
         lid_fit:getCheck(machine,'dim',3)||'N/A',
         stack_ability:getCheck(machine,'dim',4)||'N/A',
         drop_test:getCheck(machine,'dim',5)||'N/A',
-        weight_check:getCheck(machine,'dim',6)||'N/A',
-        overall_result:Object.values(d).some(v=>v==='NG')?'NG':'OK',
+        weight_check:actualWt>0?(wtNG?'NG':'OK'):'N/A',
+        overall_result:hasNG?'NG':'OK',
         remarks:d.remarks||''
+      })
+
+      // Create alert if NG
+      if(hasNG){
+        const issueList=[]
+        VIS.forEach((v,i)=>{ if(getCheck(machine,'vis',i)==='NG') issueList.push(v) })
+        DIM.forEach((v,i)=>{ if(getCheck(machine,'dim',i)==='NG') issueList.push(v) })
+        if(wtNG) issueList.push('Weight: '+actualWt+'g (std: '+stdWt+'g)')
+        alerts.push({
+          date,check_time:checkTime,
+          machine:plant+' - '+machine,
+          plant,
+          product:d.product,
+          mould_name:d.mould?d.mould.split('(')[0].trim():'',
+          mould_code:d.mould?d.mould.split('(')[1]?.replace(')',''):'',
+          issues:issueList.join(', '),
+          weight_actual:actualWt||null,
+          weight_standard:stdWt||null,
+          remarks:d.remarks||'',
+          qc_person:qcPerson,
+          status:'Pending'
+        })
       }
-    }).filter(Boolean)
+    }
+
     if(entries.length===0){setToast({msg:'Koi machine ka product select nahi!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/quality',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries})}).then(r=>r.json())
+
+    // Save quality checks
+    await fetch('/api/quality',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries})}).then(r=>r.json())
+
+    // Save alerts
+    if(alerts.length>0){
+      await fetch('/api/qcalerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alerts})}).then(r=>r.json()).catch(()=>{})
+    }
+
     setSaving(false)
-    setToast({msg:res.msg,ok:res.success})
-    if(res.success) setMachineData({})
+    setToast({msg:entries.length+' machines saved!'+(alerts.length>0?' | '+alerts.length+' NG alerts sent!':''),ok:true})
+    if(true) setMachineData({})
   }
 
   const completedCount=machines.filter(m=>machineData[m]?.product).length
+  const ngCount=machines.filter(m=>{
+    const d=machineData[m]||{}
+    const stdWt=getStdWeight(d.product)
+    const actualWt=parseFloat(d.weightActual||'0')||0
+    const wtNG=stdWt&&actualWt>0?Math.abs(actualWt-stdWt)>0.3:false
+    return Object.values(d).some(v=>v==='NG')||wtNG
+  }).length
 
-  // Download CSV
-  const downloadCSV=()=>{
-    const headers=['Date','Check Time','Machine','Product','Mould','QC Person','Short Shots','Flash','Burn Marks','Flow Marks','Sink Marks','Uniform Color','Contamination','Wall Thickness','Height','Diameter','Lid Fit','Stack Ability','Drop Test','Weight Check','Overall','Remarks','Submitted At']
-    const rows=reportData.map(r=>[
-      r.date,r.check_time||'',r.machine,r.part_name,r.mould_name||'',r.qc_person,
-      r.no_short_shots,r.no_flash,r.no_burn_marks,r.no_flow_marks,r.no_sink_marks,r.uniform_color,r.no_contamination,
-      r.wall_thickness,r.height,r.diameter,r.lid_fit,r.stack_ability,r.drop_test,r.weight_check,
-      r.overall_result,r.remarks||'',r.submitted_at||''
-    ])
-    const csv=[headers,...rows].map(r=>r.join(',')).join('\n')
-    const blob=new Blob([csv],{type:'text/csv'})
-    const url=URL.createObjectURL(blob)
-    const a=document.createElement('a')
-    a.href=url
-    a.download='quality_report_'+reportFrom+'_to_'+reportTo+'.csv'
-    a.click()
-  }
-
-  // Report stats
   const totalChecks=reportData.length
   const ngChecks=reportData.filter(r=>r.overall_result==='NG').length
   const okChecks=reportData.filter(r=>r.overall_result==='OK').length
   const ngPct=totalChecks>0?Math.round(ngChecks/totalChecks*100):0
-
-  // Machine wise NG count
-  const machineNG:{[key:string]:number}={}
-  reportData.forEach(r=>{
-    if(r.overall_result==='NG'){
-      machineNG[r.machine]=(machineNG[r.machine]||0)+1
-    }
-  })
-  const topNG=Object.entries(machineNG).sort((a,b)=>(b[1] as number)-(a[1] as number)).slice(0,5)
-
-  // Date wise summary
-  const dateWise:{[key:string]:{total:number,ng:number,ok:number}}={}
+  const machineNG:{[k:string]:{count:number}}={}
+  reportData.filter(r=>r.overall_result==='NG').forEach(r=>{ machineNG[r.machine]={count:(machineNG[r.machine]?.count||0)+1} })
+  const topNG=Object.entries(machineNG).sort((a,b)=>b[1].count-a[1].count).slice(0,5)
+  const dateWise:{[k:string]:{total:number,ng:number,ok:number}}={}
   reportData.forEach(r=>{
     if(!dateWise[r.date]) dateWise[r.date]={total:0,ng:0,ok:0}
     dateWise[r.date].total++
@@ -4144,13 +4240,24 @@ function QualityTab({user}:{user:User}) {
     else dateWise[r.date].ok++
   })
 
+  const downloadCSV=()=>{
+    const headers=['Date','Check Time','Machine','Product','Mould','QC Person','Weight Actual','Weight Std','Short Shots','Flash','Burn','Flow','Sink','Color','Contamination','Wall','Height','Diameter','Lid Fit','Stack','Drop','Weight Check','Overall','Remarks']
+    const rows=reportData.map(r=>[r.date,r.check_time||'',r.machine,r.part_name,r.mould_name||'',r.qc_person,r.weight_actual||'',r.weight_standard||'',r.no_short_shots,r.no_flash,r.no_burn_marks,r.no_flow_marks,r.no_sink_marks,r.uniform_color,r.no_contamination,r.wall_thickness,r.height,r.diameter,r.lid_fit,r.stack_ability,r.drop_test,r.weight_check,r.overall_result,r.remarks||''])
+    const csv=[headers,...rows].map(r=>r.join(',')).join('\n')
+    const blob=new Blob([csv],{type:'text/csv'})
+    const url=URL.createObjectURL(blob)
+    const a=document.createElement('a')
+    a.href=url
+    a.download='quality_'+reportFrom+'_to_'+reportTo+'.csv'
+    a.click()
+  }
+
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
   return (
     <div>
-      {/* Tabs */}
       <div style={{display:'flex',gap:6,marginBottom:8}}>
-        {[{k:'entry',l:'✍️ Entry'},{k:'today',l:'📋 Aaj ki Report'},{k:'report',l:'📊 Date Range Report'}].map(t=>(
+        {[{k:'entry',l:'Entry'},{k:'today',l:'Aaj ki Report'},{k:'report',l:'Date Range'}].map(t=>(
           <button key={t.k} onClick={()=>{setQualityView(t.k);if(t.k==='today'){setReportFrom(nd());setReportTo(nd());setTimeout(()=>loadReport(),100)}}}
             style={{flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
               background:qualityView===t.k?'#1F3864':'#F0F0F0',color:qualityView===t.k?'#fff':'#444'}}>
@@ -4159,7 +4266,6 @@ function QualityTab({user}:{user:User}) {
         ))}
       </div>
 
-      {/* ── ENTRY TAB ── */}
       {qualityView==='entry'&&<div>
         <div style={S.card}>
           <div style={{fontWeight:700,marginBottom:10,fontSize:14,color:'#1F3864'}}>Quality Check — Every 3 Hours</div>
@@ -4189,14 +4295,18 @@ function QualityTab({user}:{user:User}) {
               <input style={S.fi} value={qcPerson} onChange={e=>setQcPerson(e.target.value)}/>
             </div>
           </div>
-          {plant&&<div style={{background:'#FFF9E6',border:'1px solid #854F0B',borderRadius:6,padding:'6px 12px',fontSize:11,color:'#854F0B',fontWeight:600}}>
-            ⏰ Slot: {checkTime} | {completedCount}/{machines.length} machines complete
+          {plant&&<div style={{display:'flex',justifyContent:'space-between',background:ngCount>0?'#FFEBEE':'#FFF9E6',border:'1px solid '+(ngCount>0?'#C00000':'#854F0B'),borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:600}}>
+            <span style={{color:ngCount>0?'#C00000':'#854F0B'}}>Slot: {checkTime} | {completedCount}/{machines.length} complete</span>
+            {ngCount>0&&<span style={{color:'#C00000'}}>NG: {ngCount} machines</span>}
           </div>}
         </div>
 
         {machines.map(machine=>{
           const d=machineData[machine]||{}
-          const hasNG=Object.values(d).some(v=>v==='NG')
+          const stdWt=getStdWeight(d.product)
+          const actualWt=parseFloat(d.weightActual||'0')||0
+          const wtNG=stdWt&&actualWt>0?Math.abs(actualWt-stdWt)>0.3:false
+          const hasNG=Object.values(d).some(v=>v==='NG')||wtNG
           const hasProduct=!!d.product
           return (
             <div key={machine} style={{...S.card,marginBottom:8,border:hasNG?'2px solid #C00000':'1px solid #E0E0E0'}}>
@@ -4248,9 +4358,24 @@ function QualityTab({user}:{user:User}) {
                     </div>
                   </div>
                 ))}
+
+                {/* Weight Check */}
+                <div style={{background:wtNG?'#FFEBEE':'#F0F7FF',border:'1px solid '+(wtNG?'#C00000':'#1F3864'),borderRadius:8,padding:10,marginTop:8}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'#1F3864'}}>Weight Check</div>
+                    {stdWt&&<div style={{fontSize:10,color:'#666'}}>Standard: {stdWt}g | Tolerance: ±0.3g</div>}
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <input type="number" step="0.1" style={{...S.fi,flex:1,marginBottom:0}} value={d.weightActual||''} onChange={e=>setField(machine,'weightActual',e.target.value)} placeholder="Actual weight (grams)"/>
+                    <span style={{fontSize:12,color:'#666',whiteSpace:'nowrap'}}>g</span>
+                    {d.weightActual&&stdWt&&<span style={{background:wtNG?'#FFEBEE':'#E8F5E9',color:wtNG?'#C00000':'#276221',padding:'3px 10px',borderRadius:999,fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>{wtNG?'NG':'OK'}</span>}
+                  </div>
+                  {wtNG&&<div style={{fontSize:10,color:'#C00000',marginTop:4}}>Diff: {Math.abs(actualWt-(stdWt||0)).toFixed(1)}g — tolerance exceeded!</div>}
+                </div>
+
                 <div style={{marginTop:8}}>
-                  <label style={S.lbl}>Remarks</label>
-                  <input style={S.fi} value={d.remarks||''} onChange={e=>setField(machine,'remarks',e.target.value)} placeholder="Any observations..."/>
+                  <label style={S.lbl}>Remarks (cavity no., issue details)</label>
+                  <textarea style={{...S.fi,height:50,resize:'none' as const}} value={d.remarks||''} onChange={e=>setField(machine,'remarks',e.target.value)} placeholder="e.g. Cavity 13 flash, cavity 9 dhaga aa rha..."/>
                 </div>
               </>}
             </div>
@@ -4258,15 +4383,14 @@ function QualityTab({user}:{user:User}) {
         })}
 
         {plant&&machines.length>0&&<>
-          <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Quality Check — '+checkTime}</button>
+          <button style={S.sb} onClick={save} disabled={saving}>{saving?'Saving...':'Save Quality Check — '+checkTime+(ngCount>0?' ('+ngCount+' NG alerts jayenge)':'')}</button>
           {toast&&<Toast {...toast}/>}
         </>}
       </div>}
 
-      {/* ── TODAY / REPORT TAB ── */}
       {(qualityView==='today'||qualityView==='report')&&<div>
         {qualityView==='report'&&<div style={S.card}>
-          <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:10}}>📊 Date Range Select</div>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:10}}>Date Range</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end'}}>
             <div style={S.f}><label style={S.lbl}>From</label><input type="date" style={S.fi} value={reportFrom} onChange={e=>setReportFrom(e.target.value)}/></div>
             <div style={S.f}><label style={S.lbl}>To</label><input type="date" style={S.fi} value={reportTo} onChange={e=>setReportTo(e.target.value)}/></div>
@@ -4275,95 +4399,72 @@ function QualityTab({user}:{user:User}) {
         </div>}
 
         {qualityView==='today'&&<div style={{...S.card,background:'#E8EDF5',marginBottom:8}}>
-          <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>📋 Aaj ki Quality Report — {nd()}</div>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>Aaj ki Quality Report — {nd()}</div>
           <button onClick={loadReport} style={{marginTop:6,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'4px 12px',fontSize:11,cursor:'pointer'}}>Refresh</button>
         </div>}
 
         {reportLoading&&<div style={{textAlign:'center',padding:24,color:'#666'}}>Loading...</div>}
 
         {!reportLoading&&reportData.length>0&&<>
-          {/* Summary Stats */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:8}}>
-            {[
-              {label:'Total Checks',val:totalChecks,bg:'#E8EDF5',color:'#1F3864'},
-              {label:'OK',val:okChecks,bg:'#E8F5E9',color:'#276221'},
-              {label:'NG',val:ngChecks,bg:'#FFEBEE',color:'#C00000'},
-              {label:'NG %',val:ngPct+'%',bg:'#FFF9E6',color:'#854F0B'},
-            ].map((s,i)=>(
+            {[{label:'Total',val:totalChecks,bg:'#E8EDF5',color:'#1F3864'},{label:'OK',val:okChecks,bg:'#E8F5E9',color:'#276221'},{label:'NG',val:ngChecks,bg:'#FFEBEE',color:'#C00000'},{label:'NG%',val:ngPct+'%',bg:'#FFF9E6',color:'#854F0B'}].map((s,i)=>(
               <div key={i} style={{background:s.bg,borderRadius:8,padding:10,textAlign:'center'}}>
                 <div style={{fontSize:20,fontWeight:700,color:s.color}}>{s.val}</div>
                 <div style={{fontSize:10,color:s.color,marginTop:2}}>{s.label}</div>
               </div>
             ))}
           </div>
-
-          {/* Machine wise NG */}
           {topNG.length>0&&<div style={{...S.card,marginBottom:8}}>
-            <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:8}}>🔴 Machine Wise NG Count</div>
+            <div style={{fontWeight:700,color:'#C00000',fontSize:12,marginBottom:8}}>Top NG Machines</div>
             {topNG.map((m,i)=>(
-              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid #F5F5F5'}}>
-                <span style={{fontSize:12,fontWeight:600}}>{m[0]}</span>
-                <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>{m[1]} NG</span>
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #F5F5F5'}}>
+                <span style={{fontSize:12}}>{m[0]}</span>
+                <span style={{background:'#FFEBEE',color:'#C00000',padding:'2px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>{m[1].count} NG</span>
               </div>
             ))}
           </div>}
-
-          {/* Date Wise Summary */}
-          {qualityView==='report'&&Object.keys(dateWise).length>0&&<div style={{...S.card,marginBottom:8}}>
-            <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:8}}>📅 Date Wise Summary</div>
+          {qualityView==='report'&&<div style={{...S.card,marginBottom:8}}>
+            <div style={{fontWeight:700,color:'#1F3864',fontSize:12,marginBottom:8}}>Date Wise</div>
             <div style={{overflowX:'auto'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-                <thead><tr>
-                  {['Date','Total','OK','NG','NG%'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {Object.entries(dateWise).sort((a,b)=>b[0].localeCompare(a[0])).map(([dt,s],i)=>(
-                    <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-                      <td style={{padding:'5px 8px',fontWeight:600}}>{dt}</td>
-                      <td style={{padding:'5px 8px'}}>{s.total}</td>
-                      <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{s.ok}</td>
-                      <td style={{padding:'5px 8px',color:'#C00000',fontWeight:600}}>{s.ng}</td>
-                      <td style={{padding:'5px 8px',color:s.ng>0?'#C00000':'#276221',fontWeight:700}}>{s.total>0?Math.round(s.ng/s.total*100):0}%</td>
-                    </tr>
-                  ))}
-                </tbody>
+                <thead><tr>{['Date','Total','OK','NG','NG%'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+                <tbody>{Object.entries(dateWise).sort((a,b)=>b[0].localeCompare(a[0])).map(([dt,s],i)=>(
+                  <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                    <td style={{padding:'5px 8px',fontWeight:600}}>{dt}</td>
+                    <td style={{padding:'5px 8px'}}>{s.total}</td>
+                    <td style={{padding:'5px 8px',color:'#276221',fontWeight:600}}>{s.ok}</td>
+                    <td style={{padding:'5px 8px',color:'#C00000',fontWeight:600}}>{s.ng}</td>
+                    <td style={{padding:'5px 8px',color:s.ng>0?'#C00000':'#276221',fontWeight:700}}>{s.total>0?Math.round(s.ng/s.total*100):0}%</td>
+                  </tr>
+                ))}</tbody>
               </table>
             </div>
           </div>}
-
-          {/* Detail Table */}
           <div style={S.card}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontWeight:700,color:'#1F3864',fontSize:12}}>Detail Records ({reportData.length})</div>
-              <button onClick={downloadCSV} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>⬇️ CSV Download</button>
+              <div style={{fontWeight:700,color:'#1F3864',fontSize:12}}>Detail ({reportData.length})</div>
+              <button onClick={downloadCSV} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>CSV Download</button>
             </div>
             <div style={{overflowX:'auto'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-                <thead><tr>
-                  {['Date','Slot','Machine','Product','Mould','QC By','Overall','Remarks'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left',whiteSpace:'nowrap'}}>{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {reportData.map((r,i)=>(
-                    <tr key={i} style={{background:r.overall_result==='NG'?'#FFF5F5':i%2===0?'#FAFAFA':'#fff'}}>
-                      <td style={{padding:'5px 8px',fontWeight:600,whiteSpace:'nowrap'}}>{r.date}</td>
-                      <td style={{padding:'5px 8px',color:'#854F0B',fontWeight:600}}>{r.check_time||'--'}</td>
-                      <td style={{padding:'5px 8px',whiteSpace:'nowrap'}}>{r.machine}</td>
-                      <td style={{padding:'5px 8px',color:'#854F0B'}}>{r.part_name}</td>
-                      <td style={{padding:'5px 8px',fontSize:10,color:'#555'}}>{r.mould_name||'--'}</td>
-                      <td style={{padding:'5px 8px'}}>{r.qc_person}</td>
-                      <td style={{padding:'5px 8px'}}><span style={{background:r.overall_result==='NG'?'#FFEBEE':'#E8F5E9',color:r.overall_result==='NG'?'#C00000':'#276221',padding:'2px 8px',borderRadius:999,fontWeight:700,fontSize:10}}>{r.overall_result}</span></td>
-                      <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>{r.remarks||'--'}</td>
-                    </tr>
-                  ))}
-                </tbody>
+                <thead><tr>{['Date','Slot','Machine','Product','Mould','Weight','Overall','Remarks'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+                <tbody>{reportData.map((r,i)=>(
+                  <tr key={i} style={{background:r.overall_result==='NG'?'#FFF5F5':i%2===0?'#FAFAFA':'#fff'}}>
+                    <td style={{padding:'5px 8px',fontWeight:600}}>{r.date}</td>
+                    <td style={{padding:'5px 8px',color:'#854F0B'}}>{r.check_time||'--'}</td>
+                    <td style={{padding:'5px 8px'}}>{r.machine}</td>
+                    <td style={{padding:'5px 8px',color:'#854F0B'}}>{r.part_name}</td>
+                    <td style={{padding:'5px 8px',fontSize:10}}>{r.mould_name||'--'}</td>
+                    <td style={{padding:'5px 8px',fontSize:10,color:r.weight_check==='NG'?'#C00000':'#276221'}}>{r.weight_check||'--'}</td>
+                    <td style={{padding:'5px 8px'}}><span style={{background:r.overall_result==='NG'?'#FFEBEE':'#E8F5E9',color:r.overall_result==='NG'?'#C00000':'#276221',padding:'2px 8px',borderRadius:999,fontSize:10,fontWeight:700}}>{r.overall_result}</span></td>
+                    <td style={{padding:'5px 8px',fontSize:10,color:'#666',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.remarks||'--'}</td>
+                  </tr>
+                ))}</tbody>
               </table>
             </div>
           </div>
         </>}
-
-        {!reportLoading&&reportData.length===0&&<div style={{...S.card,textAlign:'center',color:'#888',padding:32}}>
-          Koi data nahi — date range select karke Load karo
-        </div>}
+        {!reportLoading&&reportData.length===0&&<div style={{...S.card,textAlign:'center',color:'#888',padding:32}}>Koi data nahi</div>}
       </div>}
     </div>
   )
