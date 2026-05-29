@@ -12,12 +12,14 @@ export async function GET(req: Request) {
   const from = searchParams.get('from') || ''
   const to = searchParams.get('to') || ''
   const status = searchParams.get('status') || ''
+  const plant = searchParams.get('plant') || ''
 
   if (from && to) {
     let q = supabase.from('qc_alerts')
       .select('*').gte('date', from).lte('date', to)
       .order('date', { ascending: false })
     if (status) q = q.eq('status', status)
+    if (plant) q = q.eq('plant', plant)
     const { data } = await q
     return NextResponse.json({ success: true, data: data || [] })
   }
@@ -26,7 +28,7 @@ export async function GET(req: Request) {
     .order('created_at', { ascending: false }).limit(100)
   if (date) q = q.eq('date', date)
   if (status) q = q.eq('status', status)
-
+  if (plant) q = q.eq('plant', plant)
   const { data } = await q
   return NextResponse.json({ success: true, data: data || [] })
 }
@@ -39,7 +41,32 @@ export async function POST(req: Request) {
   const istDate = new Date(now.getTime() + istOffset)
   const today = istDate.toISOString().split('T')[0]
 
-  // QC person reports a new alert
+  // ✅ QualityTab se aaya — array of alerts (NG mile toh)
+  if (Array.isArray(d.alerts)) {
+    if (d.alerts.length === 0) return NextResponse.json({ success: true, msg: 'No alerts' })
+
+    const rows = d.alerts.map((a: any) => ({
+      date: a.date || today,
+      check_time: a.check_time || '',
+      machine: a.machine || '',
+      plant: a.plant || '',
+      product: a.product || '',
+      mould_name: a.mould_name || '',
+      mould_code: a.mould_code || '',
+      issues: a.issues || '',
+      weight_actual: a.weight_actual != null && a.weight_actual !== '' ? Number(a.weight_actual) : null,
+      weight_standard: a.weight_standard != null && a.weight_standard !== '' ? Number(a.weight_standard) : null,
+      remarks: a.remarks || '',
+      qc_person: a.qc_person || '',
+      status: a.status || 'Pending'
+    }))
+
+    const { error } = await supabase.from('qc_alerts').insert(rows)
+    if (error) return NextResponse.json({ success: false, msg: error.message })
+    return NextResponse.json({ success: true, msg: rows.length + ' QC alerts saved!' })
+  }
+
+  // QC person reports a single alert
   if (d.type === 'report') {
     const { data: alert, error } = await supabase.from('qc_alerts').insert({
       date: d.date || today,
@@ -56,10 +83,8 @@ export async function POST(req: Request) {
       qc_person: d.qcPerson || '',
       status: 'Pending'
     }).select().single()
-
     if (error) return NextResponse.json({ success: false, msg: error.message })
 
-    // Send alert email if configured
     try {
       await fetch((process.env.NEXT_PUBLIC_SITE_URL || '') + '/api/alerts', {
         method: 'POST',
@@ -79,12 +104,11 @@ export async function POST(req: Request) {
       resolved_at: new Date().toISOString(),
       resolution: d.resolution || ''
     }).eq('id', d.id)
-
     if (error) return NextResponse.json({ success: false, msg: error.message })
     return NextResponse.json({ success: true, msg: 'Resolved! Action save ho gaya.' })
   }
 
-  // Re-open a resolved alert (optional)
+  // Re-open a resolved alert
   if (d.type === 'reopen') {
     const { error } = await supabase.from('qc_alerts').update({
       status: 'Pending',
@@ -92,7 +116,6 @@ export async function POST(req: Request) {
       resolved_at: null,
       resolution: null
     }).eq('id', d.id)
-
     if (error) return NextResponse.json({ success: false, msg: error.message })
     return NextResponse.json({ success: true, msg: 'Alert dobara open kar diya.' })
   }
