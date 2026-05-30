@@ -9,6 +9,11 @@ const supabase = createClient(
 const PLANTS = ['Plant 477', 'Plant 488', 'Plant 433']
 const DAY_SLOTS = ['8am-11am', '11am-2pm', '2pm-5pm', '5pm-8pm']
 const NIGHT_SLOTS = ['8pm-11pm', '11pm-2am', '2am-5am', '5am-8am']
+const MACH: Record<string, string[]> = {
+  'Plant 477': ['M1-Sumitomo 180T','M2-Sumitomo 180T','M3-Sumitomo 180T','M4-Sumitomo 280T','M5-JSW 180T','M6-Sumitomo 180T'],
+  'Plant 488': ['M1-Sumitomo 180T','M2-Sumitomo 180T','M3-JSW 350T','M4-Sumitomo 180T','M5-Sumitomo 350T','M6-JSW 350T','M7-JSW 350T'],
+  'Plant 433': ['M1-Milacron N200T','M2-Milacron N200T'],
+}
 
 function istToday() {
   const now = new Date()
@@ -29,7 +34,7 @@ export async function GET(req: Request) {
   // Fetch all data for the date in parallel.
   // Quality & spares use their own API routes (avoids table-name mismatch).
   const [prodRes, qualApi, bdRes, imsRes, rejRes, sparesApi, mouldRes] = await Promise.all([
-    supabase.from('production').select('plant,machine,shift,production_slots,good_parts,entered_by').eq('date', date),
+    supabase.from('production').select('plant,machine,shift,good_parts,rejection,entered_by').eq('date', date),
     fetch(`${base}/api/quality?report=1&from=${date}&to=${date}`).then(r => r.json()).catch(() => ({ data: [] })),
     supabase.from('breakdowns').select('id,machine,plant,problem,analysis,solution,status,reported_time,downtime_min').eq('date', date),
     supabase.from('ims_stock').select('plant,item_name,entered_by').eq('date', date),
@@ -46,20 +51,33 @@ export async function GET(req: Request) {
   const spares = (sparesApi.recentMovements || sparesApi.movements || []).filter((s: any) => (s.date || '').slice(0, 10) === date)
   const moulds = mouldRes.data || []
 
-  // ── PRODUCTION (plant-wise, slot-wise) ──
+  // Total machines per plant (from MACH config mirrored here)
+  const PLANT_MACHINES: Record<string, number> = {
+    'Plant 477': 6,
+    'Plant 488': 7,
+    'Plant 433': 2,
+  }
+
+  // ── PRODUCTION (plant-wise, machine-based) ──
   const production = PLANTS.map(plant => {
     const pp = prod.filter((e: any) => e.plant === plant)
-    const dayDone = DAY_SLOTS.filter(slot =>
-      pp.some((e: any) => e.shift?.toLowerCase().includes('day') && (e.production_slots || []).some((s: any) => s.slot_name === slot))
-    )
-    const nightDone = NIGHT_SLOTS.filter(slot =>
-      pp.some((e: any) => e.shift?.toLowerCase().includes('night') && (e.production_slots || []).some((s: any) => s.slot_name === slot))
-    )
+    const dayEntries = pp.filter((e: any) => e.shift?.toLowerCase().includes('day'))
+    const nightEntries = pp.filter((e: any) => e.shift?.toLowerCase().includes('night'))
+    // unique machines that have entry
+    const dayMachines = Array.from(new Set(dayEntries.map((e: any) => e.machine).filter(Boolean)))
+    const nightMachines = Array.from(new Set(nightEntries.map((e: any) => e.machine).filter(Boolean)))
+    const totalMachines = PLANT_MACHINES[plant] || 0
+    // which machines are missing (day shift)
+    const allMach = (MACH[plant] || [])
+    const missingDay = allMach.filter((m: string) => !dayMachines.includes(m))
     return {
       plant,
-      dayDone: dayDone.length, dayTotal: DAY_SLOTS.length, daySlots: dayDone,
-      nightDone: nightDone.length, nightTotal: NIGHT_SLOTS.length, nightSlots: nightDone,
-      entries: pp.length
+      totalMachines,
+      dayDone: dayMachines.length,
+      nightDone: nightMachines.length,
+      missingDay,
+      entries: pp.length,
+      goodParts: pp.reduce((a: number, e: any) => a + (e.good_parts || 0), 0),
     }
   })
 
