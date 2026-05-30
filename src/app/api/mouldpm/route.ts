@@ -1,7 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-export async function GET() {
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const logsMould = searchParams.get('logs_mould') || ''
+  const date = searchParams.get('date') || ''
+
+  // PM logs for a specific mould (for Mould History tab) — includes checks
+  if (logsMould) {
+    const { data } = await supabase.from('pm_logs').select('*').ilike('mould_name', logsMould).order('date', { ascending: true })
+    return NextResponse.json({ success: true, logs: data || [] })
+  }
+
+  // PM logs for a specific date (used by Daily Report)
+  if (date) {
+    const { data } = await supabase.from('pm_logs').select('*').eq('date', date).order('date', { ascending: false })
+    return NextResponse.json({ success: true, data: data || [] })
+  }
+
   const { data: moulds } = await supabase.from('mould_master').select('*').order('mould_name')
   const result = (moulds || []).map((m:any) => {
     const curr = m.current_shots || 0
@@ -14,6 +31,7 @@ export async function GET() {
   })
   return NextResponse.json({ success: true, moulds: result })
 }
+
 export async function POST(req: Request) {
   const d = await req.json()
   if (d.action === 'setup') {
