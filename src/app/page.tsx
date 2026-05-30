@@ -8296,6 +8296,7 @@ function ProcessCheckTab({user}:{user:User}) {
   // Count pending items for header
   let pendingCount=0
   data.production.forEach((p:any)=>{ if(p.dayDone<p.dayTotal) pendingCount++ })
+  data.quality.forEach((q:any)=>{ if(q.done<q.total) pendingCount++ })
   if(!data.ims.done) pendingCount++
   if(!data.rejection.done) pendingCount++
   if(data.breakdown.pending>0) pendingCount++
@@ -8359,21 +8360,26 @@ function ProcessCheckTab({user}:{user:User}) {
       })}
     </div>
 
-    {/* QUALITY — plant wise */}
+    {/* QUALITY — plant wise, slot-wise */}
     <div style={S.card}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{fontWeight:700,color:'#1F3864'}}>🔬 Quality Check (Plant-wise)</span>
-        {s.quality_due_time&&<span style={{fontSize:10,color:pastDue(s.quality_due_time)?'#C00000':'#666'}}>Due by {s.quality_due_time}</span>}
+        <span style={{fontWeight:700,color:'#1F3864'}}>🔬 Quality Check (Plant-wise, Slot-wise)</span>
+        {s.quality_due_time&&<span style={{fontSize:10,color:pastDue(s.quality_due_time)?'#C00000':'#666'}}>Last slot by {s.quality_due_time}</span>}
       </div>
-      {data.quality.map((q:any,i:number)=>(
-        <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid #F5F5F5'}}>
-          <span style={{fontSize:12,fontWeight:600}}>{q.plant}</span>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            {q.ng>0&&<span style={{fontSize:10,color:'#C00000',fontWeight:600}}>{q.ng} NG</span>}
-            <Chip ok={q.checks>0} warn={false} text={q.checks>0?`✅ ${q.checks} checks (${q.slots} slots)`:'❌ Nahi hua'}/>
+      {data.quality.map((q:any,i:number)=>{
+        const ok=q.done===q.total
+        return <div key={i} style={{background:ok?'#F0FFF4':'#FFF9F9',border:`1px solid ${ok?'#276221':'#E0E0E0'}`,borderRadius:8,padding:'8px 12px',marginBottom:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontWeight:700,fontSize:13,color:'#1F3864'}}>{q.plant}</span>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              {q.ng>0&&<span style={{fontSize:10,color:'#C00000',fontWeight:700}}>{q.ng} NG</span>}
+              <Chip ok={ok} warn={!ok&&q.done>0} text={`${q.done}/${q.total} slots`}/>
+            </div>
           </div>
+          {!ok&&q.missing.length>0&&<div style={{fontSize:11,color:'#C00000',marginTop:4}}>⏳ Pending: {q.missing.join(', ')}</div>}
+          {q.checks>0&&<div style={{fontSize:10,color:'#666',marginTop:3}}>{q.checks} total checks</div>}
         </div>
-      ))}
+      })}
     </div>
 
     {/* Combined checks */}
