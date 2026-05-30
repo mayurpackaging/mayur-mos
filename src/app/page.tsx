@@ -8253,6 +8253,47 @@ function ProcessCheckTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [form,setForm]=useState<any>({})
+  const [showTelegram,setShowTelegram]=useState(false)
+  const [tgStaff,setTgStaff]=useState<any[]>([])
+  const [tgHasToken,setTgHasToken]=useState(false)
+  const [tgToken,setTgToken]=useState('')
+  const [tgForm,setTgForm]=useState({department:'production',staffName:'',chatId:'',plant:''})
+  const [tgSending,setTgSending]=useState(false)
+  const [tgToast,setTgToast]=useState<{msg:string,ok:boolean}|null>(null)
+
+  const loadTelegram=async()=>{
+    const res=await fetch('/api/telegram').then(r=>r.json()).catch(()=>({staff:[]}))
+    setTgStaff(res.staff||[])
+    setTgHasToken(res.hasToken||false)
+  }
+  useEffect(()=>{loadTelegram()},[])
+
+  const tgAddStaff=async()=>{
+    if(!tgForm.staffName||!tgForm.chatId){setTgToast({msg:'Naam aur Chat ID daalo!',ok:false});return}
+    const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'add_staff',...tgForm})}).then(r=>r.json())
+    setTgToast({msg:res.msg,ok:res.success})
+    if(res.success){setTgForm({department:'production',staffName:'',chatId:'',plant:''});loadTelegram()}
+  }
+  const tgDelStaff=async(id:string)=>{
+    const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'delete_staff',id})}).then(r=>r.json())
+    if(res.success) loadTelegram()
+  }
+  const tgSaveToken=async()=>{
+    if(!tgToken){setTgToast({msg:'Token daalo!',ok:false});return}
+    const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'save_token',token:tgToken})}).then(r=>r.json())
+    setTgToast({msg:res.msg,ok:res.success})
+    if(res.success){setTgToken('');loadTelegram()}
+  }
+  const tgSendNow=async()=>{
+    setTgSending(true)
+    const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'send_reminders',date})}).then(r=>r.json())
+    setTgSending(false)
+    setTgToast({msg:res.msg,ok:res.success})
+  }
 
   const load=async()=>{
     setLoading(true)
@@ -8313,6 +8354,7 @@ function ProcessCheckTab({user}:{user:User}) {
           <div style={{fontSize:11,opacity:0.8}}>Kaun si entry hui, kaun si pending — live status</div>
         </div>
         <button onClick={()=>setShowSettings(!showSettings)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:600,cursor:'pointer'}}>⚙️ Time Settings</button>
+        <button onClick={()=>setShowTelegram(!showTelegram)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:600,cursor:'pointer',marginLeft:6}}>📱 Telegram</button>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'none',fontSize:13,fontWeight:700,color:'#1F3864'}}/>
@@ -8337,6 +8379,64 @@ function ProcessCheckTab({user}:{user:User}) {
       </div>
       <button style={{...S.sb,marginTop:8}} onClick={saveSettings} disabled={saving}>{saving?'Saving...':'💾 Save Settings'}</button>
       {toast&&<Toast {...toast}/>}
+    </div>}
+
+    {/* Telegram panel */}
+    {showTelegram&&<div style={{...S.card,border:'2px solid #229ED9'}}>
+      <div style={{fontWeight:700,color:'#229ED9',marginBottom:10}}>📱 Telegram Reminders</div>
+
+      {/* Token */}
+      <div style={{background:tgHasToken?'#E8F5E9':'#FFF3E0',borderRadius:8,padding:'8px 12px',marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:600,color:tgHasToken?'#276221':'#E65100',marginBottom:6}}>
+          {tgHasToken?'✅ Bot token set hai':'⚠️ Bot token nahi hai — pehle yeh daalo'}
+        </div>
+        <div style={{display:'flex',gap:6}}>
+          <input value={tgToken} onChange={e=>setTgToken(e.target.value)} placeholder="@BotFather se mila token paste karo" style={{...S.fi,marginBottom:0,flex:1}}/>
+          <button onClick={tgSaveToken} style={{background:'#229ED9',color:'#fff',border:'none',borderRadius:8,padding:'0 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Save</button>
+        </div>
+      </div>
+
+      {/* Add staff */}
+      <div style={{fontSize:12,fontWeight:700,color:'#1F3864',marginBottom:6}}>Staff Add Karo (department-wise)</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+        <div style={S.f}><label style={S.lbl}>Department</label>
+          <select style={S.fi} value={tgForm.department} onChange={e=>setTgForm(p=>({...p,department:e.target.value}))}>
+            <option value="production">Production</option>
+            <option value="quality">Quality</option>
+            <option value="rejection">Rejection</option>
+            <option value="breakdown">Breakdown</option>
+            <option value="mouldpm">Mould PM</option>
+            <option value="ims">IMS Stock</option>
+            <option value="spares">Spares</option>
+          </select>
+        </div>
+        <div style={S.f}><label style={S.lbl}>Staff Name</label><input style={S.fi} value={tgForm.staffName} onChange={e=>setTgForm(p=>({...p,staffName:e.target.value}))} placeholder="Naam"/></div>
+        <div style={S.f}><label style={S.lbl}>Chat ID</label><input style={S.fi} value={tgForm.chatId} onChange={e=>setTgForm(p=>({...p,chatId:e.target.value}))} placeholder="e.g. 123456789"/></div>
+        <div style={S.f}><label style={S.lbl}>Plant (optional)</label>
+          <select style={S.fi} value={tgForm.plant} onChange={e=>setTgForm(p=>({...p,plant:e.target.value}))}>
+            <option value="">All Plants</option><option>Plant 477</option><option>Plant 488</option><option>Plant 433</option>
+          </select>
+        </div>
+      </div>
+      <button onClick={tgAddStaff} style={{width:'100%',padding:8,border:'1px dashed #229ED9',borderRadius:8,background:'#fff',color:'#229ED9',fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:10}}>+ Add Staff</button>
+
+      {/* Staff list */}
+      {tgStaff.length>0&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:600,color:'#666',marginBottom:4}}>Added Staff ({tgStaff.length})</div>
+        {tgStaff.map((st:any)=>(
+          <div key={st.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 8px',background:'#F8F9FF',borderRadius:6,marginBottom:4,fontSize:11}}>
+            <span><b>{st.staff_name}</b> · {st.department}{st.plant?' · '+st.plant:''} <span style={{color:'#888'}}>({st.chat_id})</span></span>
+            <button onClick={()=>tgDelStaff(st.id)} style={{background:'#FFEBEE',color:'#C00000',border:'none',borderRadius:4,padding:'2px 8px',cursor:'pointer',fontSize:11}}>✕</button>
+          </div>
+        ))}
+      </div>}
+
+      {/* Send button */}
+      <button onClick={tgSendNow} disabled={tgSending} style={{width:'100%',padding:10,background:'#229ED9',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>
+        {tgSending?'Bhej raha hai...':'📤 Abhi Pending Reminders Bhejo'}
+      </button>
+      <div style={{fontSize:10,color:'#666',marginTop:6}}>Sirf jinka kaam pending hai unhi ko message jayega. Jiska kaam ho gaya, usko skip.</div>
+      {tgToast&&<Toast {...tgToast}/>}
     </div>}
 
     {/* PRODUCTION — plant wise, slot-wise */}
