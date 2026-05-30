@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   // Fetch all data for the date in parallel.
   // Quality & spares use their own API routes (avoids table-name mismatch).
   const [prodRes, qualApi, bdRes, imsRes, rejRes, sparesApi, mouldRes] = await Promise.all([
-    supabase.from('production').select('plant,machine,shift,good_parts,rejection,entered_by').eq('date', date),
+    supabase.from('production').select('id,plant,machine,shift,good_parts,rejection,entered_by').eq('date', date),
     fetch(`${base}/api/quality?report=1&from=${date}&to=${date}`).then(r => r.json()).catch(() => ({ data: [] })),
     supabase.from('breakdowns').select('id,machine,plant,problem,analysis,solution,status,reported_time,downtime_min').eq('date', date),
     supabase.from('ims_stock').select('plant,item_name,entered_by').eq('date', date),
@@ -51,31 +51,35 @@ export async function GET(req: Request) {
   const spares = (sparesApi.recentMovements || sparesApi.movements || []).filter((s: any) => (s.date || '').slice(0, 10) === date)
   const moulds = mouldRes.data || []
 
-  // Total machines per plant (from MACH config mirrored here)
-  const PLANT_MACHINES: Record<string, number> = {
-    'Plant 477': 6,
-    'Plant 488': 7,
-    'Plant 433': 2,
+  // Fetch slots for today's production rows
+  const prodIds = prod.map((p: any) => p.id).filter(Boolean)
+  let slotsData: any[] = []
+  if (prodIds.length > 0) {
+    const { data: sd } = await supabase.from('production_slots').select('production_id,slot_name').in('production_id', prodIds)
+    slotsData = sd || []
   }
+  // map production_id -> {plant, shift}
+  const prodMap: Record<string, any> = {}
+  prod.forEach((p: any) => { prodMap[p.id] = p })
 
-  // ── PRODUCTION (plant-wise, machine-based) ──
+  // ── PRODUCTION (plant-wise, slot-wise via production_slots join) ──
   const production = PLANTS.map(plant => {
+    // slots done for this plant, split by shift
+    const dayDoneSlots = new Set<string>()
+    const nightDoneSlots = new Set<string>()
+    slotsData.forEach((s: any) => {
+      const par = prodMap[s.production_id]
+      if (!par || par.plant !== plant) return
+      if ((par.shift || '').toLowerCase().includes('night')) nightDoneSlots.add(s.slot_name)
+      else dayDoneSlots.add(s.slot_name)
+    })
+    const dayMissing = DAY_SLOTS.filter(sl => !dayDoneSlots.has(sl))
+    const nightMissing = NIGHT_SLOTS.filter(sl => !nightDoneSlots.has(sl))
     const pp = prod.filter((e: any) => e.plant === plant)
-    const dayEntries = pp.filter((e: any) => e.shift?.toLowerCase().includes('day'))
-    const nightEntries = pp.filter((e: any) => e.shift?.toLowerCase().includes('night'))
-    // unique machines that have entry
-    const dayMachines = Array.from(new Set(dayEntries.map((e: any) => e.machine).filter(Boolean)))
-    const nightMachines = Array.from(new Set(nightEntries.map((e: any) => e.machine).filter(Boolean)))
-    const totalMachines = PLANT_MACHINES[plant] || 0
-    // which machines are missing (day shift)
-    const allMach = (MACH[plant] || [])
-    const missingDay = allMach.filter((m: string) => !dayMachines.includes(m))
     return {
       plant,
-      totalMachines,
-      dayDone: dayMachines.length,
-      nightDone: nightMachines.length,
-      missingDay,
+      dayDone: DAY_SLOTS.length - dayMissing.length, dayTotal: DAY_SLOTS.length, dayMissing,
+      nightDone: NIGHT_SLOTS.length - nightMissing.length, nightTotal: NIGHT_SLOTS.length, nightMissing,
       entries: pp.length,
       goodParts: pp.reduce((a: number, e: any) => a + (e.good_parts || 0), 0),
     }
