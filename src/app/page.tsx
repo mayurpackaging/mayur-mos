@@ -2361,7 +2361,9 @@ function MouldPMTab({user}:{user:User}) {
   const saveDone=async()=>{
     if(!doneForm.mouldName||!doneForm.currentShots){setToast({msg:'Mould aur shots daalo!',ok:false});return}
     setSaving(true)
-    const mould=moulds.find(m=>m.mould_name===doneForm.mouldName)
+    // Match by base name (ignore code in brackets) so mould_master frequency mil jaye
+    const baseName=(s:string)=>(s||'').replace(/\s*\([^)]*\)\s*$/,'').trim().toLowerCase()
+    const mould=moulds.find(m=>m.mould_name===doneForm.mouldName)||moulds.find(m=>baseName(m.mould_name)===baseName(doneForm.mouldName))
     const res=await fetch('/api/mouldpm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'done',...doneForm,pmFrequency:mould?.pm_frequency_shots||0,checks,ngCount:Object.values(checks).filter(v=>v==='NG').length})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success});if(res.success){load();setChecks({})}
   }
@@ -2416,7 +2418,7 @@ function MouldPMTab({user}:{user:User}) {
         <div style={S.f}><label style={S.lbl}>Mould Name</label>
           <select style={S.fi} value={setupForm.mouldName} onChange={e=>setSetupForm(p=>({...p,mouldName:e.target.value}))}>
             <option value="">-- Select Mould --</option>
-            {moulds.map(m=><option key={m.id} value={m.mould_name}>{m.mould_name}</option>)}
+            {MOULDS.map(m=><option key={m.code} value={m.name+' ('+m.code+')'}>{m.name} ({m.code})</option>)}
           </select>
         </div>
         <div style={S.f}><label style={S.lbl}>PM Frequency (Shots)</label><input type="number" style={S.fi} value={setupForm.pmShots} onChange={e=>setSetupForm(p=>({...p,pmShots:e.target.value}))} placeholder="e.g. 500000"/></div>
@@ -2436,7 +2438,7 @@ function MouldPMTab({user}:{user:User}) {
       <div style={S.fr}>
         <div style={S.f}><label style={S.lbl}>Date</label><input type="date" style={S.fi} value={doneForm.pmDate} onChange={e=>setDoneForm(p=>({...p,pmDate:e.target.value}))}/></div>
         <div style={S.f}><label style={S.lbl}>Mould</label><select style={S.fi} value={doneForm.mouldName} onChange={e=>setDoneForm(p=>({...p,mouldName:e.target.value}))}>
-          <option value="">Select</option>{moulds.map(m=><option key={m.id}>{m.mould_name}</option>)}
+          <option value="">Select</option>{MOULDS.map(m=><option key={m.code} value={m.name+' ('+m.code+')'}>{m.name} ({m.code})</option>)}
         </select></div>
       </div>
       <div style={S.fr}>
