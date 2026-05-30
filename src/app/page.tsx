@@ -11,6 +11,7 @@ const ML: Record<string, string> = {
   bulkproduction:"Bulk Production", dailyreport:"Daily Report",
   mouldhistory:"Mould History",
   qcalerts:"QC Alerts",
+  processcheck:"✅ Process Checker",
   reports:"Reports", users:"Users", performance:"Performance"
 }
 
@@ -281,7 +282,8 @@ export default function MOS() {
         {tab==='mouldhistory'&&<MouldHistoryTab/>}
         {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
         {tab==='qcalerts'&&<QCAlertsTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts'].includes(tab)&&(
+        {tab==='processcheck'&&<ProcessCheckTab user={user}/>}
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -4741,7 +4743,8 @@ function UsersTab({user}:{user:User}) {
   },[])
 
   const ROLE_MODULES:Record<string,string> = {
-    'Admin':'mis,ims,production,planning,quality,rejection,mouldchange,dispatch,batch,sales,spares,mouldpm,breakdown,reports,users,performance',
+    'Admin':'mis,ims,production,planning,quality,rejection,mouldchange,dispatch,batch,sales,spares,mouldpm,breakdown,reports,users,performance,qcalerts,processcheck',
+    'Process Coordinator':'processcheck,mis,production,quality,rejection,breakdown,mouldpm,reports',
     'Plant Head':'mis,ims,production,planning,quality,rejection,mouldchange,mouldpm,breakdown,reports',
     'Maintenance':'breakdown,mouldpm,mouldchange,spares,reports',
     'Maintenance Foreman':'breakdown,mouldpm,mouldchange,spares,reports',
@@ -8238,5 +8241,207 @@ function PMLogsReport({logs}:{logs:any[]}){
       </table>
     </div>
     {selected&&<PMDetailModal log={selected} onClose={()=>setSelected(null)}/>}
+  </div>
+}
+
+// ─── Process Checker Tab ──────────────────────────────────────
+function ProcessCheckTab({user}:{user:User}) {
+  const [date,setDate]=useState(nd())
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(true)
+  const [showSettings,setShowSettings]=useState(false)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [form,setForm]=useState<any>({})
+
+  const load=async()=>{
+    setLoading(true)
+    const res=await fetch(`/api/processcheck?date=${date}`).then(r=>r.json()).catch(()=>null)
+    setData(res)
+    if(res?.settings) setForm(res.settings)
+    setLoading(false)
+  }
+
+  useEffect(()=>{load()},[date])
+
+  // current IST time HH:MM
+  const nowHM=()=>{
+    const ist=new Date(Date.now()+5.5*60*60*1000)
+    return ist.toISOString().slice(11,16)
+  }
+  const isToday=date===nd()
+  const curTime=nowHM()
+  const pastDue=(due:string)=>isToday&&due&&curTime>due
+
+  const saveSettings=async()=>{
+    setSaving(true)
+    const res=await fetch('/api/processcheck',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'save_settings',...form,updatedBy:user.name})
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success){setShowSettings(false);load()}
+  }
+
+  if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading process status...</div>
+  if(!data) return <div style={S.card}>Error loading. Refresh karo.</div>
+
+  // status chip helper
+  const Chip=({ok,warn,text}:{ok:boolean,warn?:boolean,text:string})=>(
+    <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:999,
+      background:ok?'#E8F5E9':warn?'#FFF3E0':'#FFEBEE',
+      color:ok?'#276221':warn?'#E65100':'#C00000'}}>{text}</span>
+  )
+
+  // Count pending items for header
+  let pendingCount=0
+  data.production.forEach((p:any)=>{ if(p.dayDone<p.dayTotal) pendingCount++ })
+  if(!data.ims.done) pendingCount++
+  if(!data.rejection.done) pendingCount++
+  if(data.breakdown.pending>0) pendingCount++
+  if(data.mouldPM.overdue>0) pendingCount++
+
+  const s=data.settings||{}
+
+  return <div>
+    {/* Header */}
+    <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:'14px 16px',marginBottom:8,color:'#fff'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:16}}>✅ Process Checker</div>
+          <div style={{fontSize:11,opacity:0.8}}>Kaun si entry hui, kaun si pending — live status</div>
+        </div>
+        <button onClick={()=>setShowSettings(!showSettings)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:600,cursor:'pointer'}}>⚙️ Time Settings</button>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'none',fontSize:13,fontWeight:700,color:'#1F3864'}}/>
+        <button onClick={load} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:8,padding:'6px 12px',fontSize:11,cursor:'pointer'}}>↻ Refresh</button>
+        {isToday&&<span style={{fontSize:11,marginLeft:'auto',opacity:0.9}}>🕐 Abhi {curTime} IST</span>}
+      </div>
+      {pendingCount>0
+        ? <div style={{marginTop:8,background:'rgba(255,82,82,0.25)',borderRadius:8,padding:'6px 12px',fontSize:12,fontWeight:600}}>⚠️ {pendingCount} cheezein pending — follow-up karo!</div>
+        : <div style={{marginTop:8,background:'rgba(76,175,80,0.3)',borderRadius:8,padding:'6px 12px',fontSize:12,fontWeight:600}}>✅ Sab kuch on track!</div>}
+    </div>
+
+    {/* Settings panel */}
+    {showSettings&&<div style={{...S.card,border:'2px solid #1F3864'}}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>⚙️ Due Time Settings (sab ko same dikhega)</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div style={S.f}><label style={S.lbl}>IMS Stock — by</label><input type="time" style={S.fi} value={form.ims_due_time||''} onChange={e=>setForm((p:any)=>({...p,ims_due_time:e.target.value}))}/></div>
+        <div style={S.f}><label style={S.lbl}>Quality — by</label><input type="time" style={S.fi} value={form.quality_due_time||''} onChange={e=>setForm((p:any)=>({...p,quality_due_time:e.target.value}))}/></div>
+        <div style={S.f}><label style={S.lbl}>Rejection — by</label><input type="time" style={S.fi} value={form.rejection_due_time||''} onChange={e=>setForm((p:any)=>({...p,rejection_due_time:e.target.value}))}/></div>
+        <div style={S.f}><label style={S.lbl}>Spares — by</label><input type="time" style={S.fi} value={form.spares_due_time||''} onChange={e=>setForm((p:any)=>({...p,spares_due_time:e.target.value}))}/></div>
+        <div style={S.f}><label style={S.lbl}>Breakdown max pending (min)</label><input type="number" style={S.fi} value={form.breakdown_max_pending_min||''} onChange={e=>setForm((p:any)=>({...p,breakdown_max_pending_min:e.target.value}))}/></div>
+        <div style={S.f}><label style={S.lbl}>Production slot grace (min)</label><input type="number" style={S.fi} value={form.production_slot_grace_min||''} onChange={e=>setForm((p:any)=>({...p,production_slot_grace_min:e.target.value}))}/></div>
+      </div>
+      <button style={{...S.sb,marginTop:8}} onClick={saveSettings} disabled={saving}>{saving?'Saving...':'💾 Save Settings'}</button>
+      {toast&&<Toast {...toast}/>}
+    </div>}
+
+    {/* PRODUCTION — plant wise */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>🏭 Production Entry (Plant-wise)</div>
+      {data.production.map((p:any,i:number)=>{
+        const dayOk=p.dayDone===p.dayTotal
+        const allDaySlots=['8am-11am','11am-2pm','2pm-5pm','5pm-8pm']
+        const missing=allDaySlots.filter(sl=>!p.daySlots.includes(sl))
+        return <div key={i} style={{background:dayOk?'#F0FFF4':'#FFF9F9',border:`1px solid ${dayOk?'#276221':'#E0E0E0'}`,borderRadius:8,padding:'8px 12px',marginBottom:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{p.plant}</span>
+            <Chip ok={dayOk} warn={!dayOk&&p.dayDone>0} text={`Day: ${p.dayDone}/${p.dayTotal} slots`}/>
+          </div>
+          {!dayOk&&<div style={{fontSize:11,color:'#C00000',marginTop:4}}>⏳ Pending slots: {missing.join(', ')}</div>}
+          <div style={{fontSize:10,color:'#666',marginTop:3}}>Night: {p.nightDone}/{p.nightTotal} | Total entries: {p.entries}</div>
+        </div>
+      })}
+    </div>
+
+    {/* QUALITY — plant wise */}
+    <div style={S.card}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <span style={{fontWeight:700,color:'#1F3864'}}>🔬 Quality Check (Plant-wise)</span>
+        {s.quality_due_time&&<span style={{fontSize:10,color:pastDue(s.quality_due_time)?'#C00000':'#666'}}>Due by {s.quality_due_time}</span>}
+      </div>
+      {data.quality.map((q:any,i:number)=>(
+        <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid #F5F5F5'}}>
+          <span style={{fontSize:12,fontWeight:600}}>{q.plant}</span>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            {q.ng>0&&<span style={{fontSize:10,color:'#C00000',fontWeight:600}}>{q.ng} NG</span>}
+            <Chip ok={q.checks>0} warn={false} text={q.checks>0?`✅ ${q.checks} checks (${q.slots} slots)`:'❌ Nahi hua'}/>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Combined checks */}
+    <div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>📋 Baaki Checks (Combined)</div>
+
+      {/* IMS */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
+        <div>
+          <div style={{fontWeight:600,fontSize:12}}>📦 IMS Stock</div>
+          {s.ims_due_time&&<div style={{fontSize:10,color:pastDue(s.ims_due_time)&&!data.ims.done?'#C00000':'#666'}}>Due by {s.ims_due_time}{pastDue(s.ims_due_time)&&!data.ims.done?' — LATE!':''}</div>}
+        </div>
+        <Chip ok={data.ims.done} text={data.ims.done?`✅ ${data.ims.entries} entries`:'❌ Aaj nahi aaya'}/>
+      </div>
+
+      {/* Rejection */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
+        <div>
+          <div style={{fontWeight:600,fontSize:12}}>❌ Rejection Entry</div>
+          {s.rejection_due_time&&<div style={{fontSize:10,color:'#666'}}>Due by {s.rejection_due_time}</div>}
+        </div>
+        <Chip ok={data.rejection.done} warn={!data.rejection.done} text={data.rejection.done?`✅ ${data.rejection.entries} entries (${data.rejection.totalQty} pcs)`:'⚠️ Koi entry nahi'}/>
+      </div>
+
+      {/* Breakdown */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
+        <div>
+          <div style={{fontWeight:600,fontSize:12}}>🔧 Breakdown</div>
+          <div style={{fontSize:10,color:'#666'}}>{data.breakdown.total} total · {data.breakdown.resolved} resolved{data.breakdown.noAnalysis>0?` · ${data.breakdown.noAnalysis} bina analysis`:''}</div>
+        </div>
+        <Chip ok={data.breakdown.pending===0} warn={false} text={data.breakdown.pending>0?`🔴 ${data.breakdown.pending} pending`:'✅ All clear'}/>
+      </div>
+
+      {/* Spares */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
+        <div>
+          <div style={{fontWeight:600,fontSize:12}}>🔩 Spares Movement</div>
+          {s.spares_due_time&&<div style={{fontSize:10,color:'#666'}}>Due by {s.spares_due_time}</div>}
+        </div>
+        <Chip ok={data.spares.entries>0} warn={true} text={data.spares.entries>0?`✅ In:${data.spares.stockIn} Used:${data.spares.used}`:'— Koi movement nahi'}/>
+      </div>
+
+      {/* Mould PM */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0'}}>
+        <div>
+          <div style={{fontWeight:600,fontSize:12}}>⚙️ Mould PM Due</div>
+          <div style={{fontSize:10,color:'#666'}}>{data.mouldPM.dueSoon} due soon</div>
+        </div>
+        <Chip ok={data.mouldPM.overdue===0} text={data.mouldPM.overdue>0?`🚨 ${data.mouldPM.overdue} overdue`:'✅ Koi overdue nahi'}/>
+      </div>
+    </div>
+
+    {/* Pending breakdown list */}
+    {data.breakdown.pendingList.length>0&&<div style={{...S.card,border:'1px solid #C00000'}}>
+      <div style={{fontWeight:700,color:'#C00000',marginBottom:6}}>🔴 Pending Breakdowns</div>
+      {data.breakdown.pendingList.map((b:any,i:number)=>(
+        <div key={i} style={{fontSize:11,padding:'4px 0',borderBottom:'1px solid #FFE0E0'}}>
+          <b>{b.machine}</b> ({b.plant}) — {b.problem}
+        </div>
+      ))}
+    </div>}
+
+    {/* PM Due list */}
+    {data.mouldPM.list.length>0&&<div style={{...S.card,border:'1px solid #854F0B'}}>
+      <div style={{fontWeight:700,color:'#854F0B',marginBottom:6}}>⚙️ PM Due / Overdue</div>
+      {data.mouldPM.list.map((m:any,i:number)=>(
+        <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F0E5D5'}}>
+          <span><b>{m.mould}</b> {m.plant?`· ${m.plant}`:''}</span>
+          <span style={{color:m.status==='OVERDUE'?'#C00000':'#854F0B',fontWeight:700}}>{m.status==='OVERDUE'?'OVERDUE':`${m.remaining.toLocaleString()} shots`}</span>
+        </div>
+      ))}
+    </div>}
   </div>
 }
