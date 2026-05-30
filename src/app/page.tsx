@@ -8295,7 +8295,7 @@ function ProcessCheckTab({user}:{user:User}) {
 
   // Count pending items for header
   let pendingCount=0
-  data.production.forEach((p:any)=>{ if(p.dayDone<p.dayTotal) pendingCount++ })
+  data.production.forEach((p:any)=>{ if(p.totalMachines>0&&p.dayDone<p.totalMachines) pendingCount++ })
   if(!data.ims.done) pendingCount++
   if(!data.rejection.done) pendingCount++
   if(data.breakdown.pending>0) pendingCount++
@@ -8342,16 +8342,14 @@ function ProcessCheckTab({user}:{user:User}) {
     <div style={S.card}>
       <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>🏭 Production Entry (Plant-wise)</div>
       {data.production.map((p:any,i:number)=>{
-        const dayOk=p.dayDone===p.dayTotal
-        const allDaySlots=['8am-11am','11am-2pm','2pm-5pm','5pm-8pm']
-        const missing=allDaySlots.filter(sl=>!p.daySlots.includes(sl))
+        const dayOk=p.dayDone>=p.totalMachines&&p.totalMachines>0
         return <div key={i} style={{background:dayOk?'#F0FFF4':'#FFF9F9',border:`1px solid ${dayOk?'#276221':'#E0E0E0'}`,borderRadius:8,padding:'8px 12px',marginBottom:6}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span style={{fontWeight:700,color:'#1F3864',fontSize:13}}>{p.plant}</span>
-            <Chip ok={dayOk} warn={!dayOk&&p.dayDone>0} text={`Day: ${p.dayDone}/${p.dayTotal} slots`}/>
+            <Chip ok={dayOk} warn={!dayOk&&p.dayDone>0} text={`Day: ${p.dayDone}/${p.totalMachines} machines`}/>
           </div>
-          {!dayOk&&<div style={{fontSize:11,color:'#C00000',marginTop:4}}>⏳ Pending slots: {missing.join(', ')}</div>}
-          <div style={{fontSize:10,color:'#666',marginTop:3}}>Night: {p.nightDone}/{p.nightTotal} | Total entries: {p.entries}</div>
+          {!dayOk&&p.missingDay.length>0&&<div style={{fontSize:11,color:'#C00000',marginTop:4}}>⏳ Entry baaki: {p.missingDay.join(', ')}</div>}
+          <div style={{fontSize:10,color:'#666',marginTop:3}}>Night: {p.nightDone}/{p.totalMachines} machines · Total entries: {p.entries} · Good: {(p.goodParts||0).toLocaleString()}</div>
         </div>
       })}
     </div>
