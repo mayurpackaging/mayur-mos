@@ -10,6 +10,7 @@ const ML: Record<string, string> = {
   mouldpm:"Mould PM", breakdown:"Breakdown", maintenance:"Maintenance",
   bulkproduction:"Bulk Production", dailyreport:"Daily Report",
   mouldhistory:"Mould History",
+  qcalerts:"QC Alerts",
   reports:"Reports", users:"Users", performance:"Performance"
 }
 
@@ -279,7 +280,8 @@ export default function MOS() {
         {tab==='dailyreport'&&<DailyReportTab user={user}/>}
         {tab==='mouldhistory'&&<MouldHistoryTab/>}
         {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory'].includes(tab)&&(
+        {tab==='qcalerts'&&<QCAlertsTab user={user}/>}
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -7964,5 +7966,164 @@ Extract every single entry you can see. Return ONLY the JSON array.`
     </div>}
 
     {toast&&<Toast {...toast}/>}
+  </div>
+}
+
+// ─── QC Alerts Tab ────────────────────────────────────────────
+function QCAlertsTab({user}:{user:User}) {
+  const [alerts,setAlerts]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [filter,setFilter]=useState('all') // all | Pending | Resolved
+  const [selected,setSelected]=useState<any>(null)
+  const [resolvedBy,setResolvedBy]=useState(user.name)
+  const [resolution,setResolution]=useState('')
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+
+  const load=async()=>{
+    setLoading(true)
+    const statusQ=filter!=='all'?`?status=${filter}`:''
+    const res=await fetch(`/api/qcalerts${statusQ}`).then(r=>r.json()).catch(()=>({data:[]}))
+    setAlerts(res.data||[])
+    setLoading(false)
+  }
+
+  useEffect(()=>{load()},[filter])
+
+  const openDetail=(a:any)=>{
+    setSelected(a)
+    setResolvedBy(a.resolved_by||user.name)
+    setResolution(a.resolution||'')
+  }
+
+  const handleResolve=async()=>{
+    if(!resolution.trim()){setToast({msg:'Action / resolution likho!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/qcalerts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'resolve',id:selected.id,resolvedBy,resolution})
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success){setSelected(null);load()}
+  }
+
+  const handleReopen=async()=>{
+    setSaving(true)
+    const res=await fetch('/api/qcalerts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'reopen',id:selected.id})
+    }).then(r=>r.json())
+    setSaving(false)
+    setToast({msg:res.msg,ok:res.success})
+    if(res.success){setSelected(null);load()}
+  }
+
+  const fmt=(ts:string|null)=>ts?new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'--'
+
+  const pendingCount=alerts.filter(a=>a.status==='Pending').length
+  const resolvedCount=alerts.filter(a=>a.status==='Resolved').length
+
+  return <div>
+    {/* Summary */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+      <div style={{...S.met,background:pendingCount>0?'#FFEBEE':'#fff',border:pendingCount>0?'2px solid #C00000':'1px solid #E0E0E0'}}>
+        <div style={{fontSize:10,color:'#C00000',fontWeight:600}}>🔴 Action Pending</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#C00000'}}>{pendingCount}</div>
+      </div>
+      <div style={S.met}>
+        <div style={{fontSize:10,color:'#276221',fontWeight:600}}>✅ Resolved</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#276221'}}>{resolvedCount}</div>
+      </div>
+    </div>
+
+    {/* Filter tabs */}
+    <div style={{display:'flex',gap:6,marginBottom:8}}>
+      {[{k:'all',l:'All'},{k:'Pending',l:'🔴 Pending'},{k:'Resolved',l:'✅ Resolved'}].map(f=>(
+        <button key={f.k} onClick={()=>setFilter(f.k)} style={{
+          flex:1,padding:'8px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12,
+          background:filter===f.k?'#1F3864':'#F0F0F0',color:filter===f.k?'#fff':'#444'
+        }}>{f.l}</button>
+      ))}
+      <button onClick={load} style={{padding:'8px 12px',border:'1px solid #1F3864',borderRadius:8,background:'#fff',color:'#1F3864',cursor:'pointer',fontSize:12}}>↻</button>
+    </div>
+
+    {/* List */}
+    {loading?<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
+      :alerts.length===0?<div style={{...S.card,textAlign:'center',color:'#888',padding:32}}>Koi alert nahi.</div>
+      :alerts.map((a:any)=>(
+        <div key={a.id} onClick={()=>openDetail(a)} style={{...S.card,marginBottom:8,cursor:'pointer',
+          borderLeft:`4px solid ${a.status==='Resolved'?'#276221':'#C00000'}`}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:13,color:'#1F3864'}}>{a.machine} · {a.product||a.mould_name}</div>
+              <div style={{fontSize:12,color:'#C00000',marginTop:3,fontWeight:500}}>{a.issues}</div>
+              <div style={{fontSize:11,color:'#666',marginTop:4}}>{a.date} {a.check_time&&`· ${a.check_time}`} · {a.plant} · QC: {a.qc_person||'--'}</div>
+            </div>
+            <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:999,whiteSpace:'nowrap' as const,
+              background:a.status==='Resolved'?'#E8F5E9':'#FFEBEE',color:a.status==='Resolved'?'#276221':'#C00000'}}>
+              {a.status==='Resolved'?'✅ Resolved':'🔴 Pending'}
+            </span>
+          </div>
+          <div style={{fontSize:10,color:'#1F3864',marginTop:6,fontWeight:600}}>👆 Detail dekhne ke liye click karo</div>
+        </div>
+      ))
+    }
+
+    {/* Detail Modal */}
+    {selected&&<div onClick={()=>setSelected(null)} style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:16,overflowY:'auto' as const}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:12,padding:18,width:'100%',maxWidth:480,marginTop:30}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontWeight:700,color:'#1F3864',fontSize:15}}>Alert Detail</div>
+          <button onClick={()=>setSelected(null)} style={{background:'#f0f0f0',border:'none',borderRadius:999,width:28,height:28,cursor:'pointer',fontSize:14}}>✕</button>
+        </div>
+
+        {/* QC ne kya report kiya */}
+        <div style={{background:'#FFEBEE',borderRadius:8,padding:12,marginBottom:10}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#C00000',marginBottom:8,textTransform:'uppercase' as const}}>QC ne kya report kiya</div>
+          {[
+            {l:'Issue',v:selected.issues,bold:true},
+            {l:'Machine',v:selected.machine},
+            {l:'Plant',v:selected.plant},
+            {l:'Product',v:selected.product},
+            {l:'Mould',v:[selected.mould_name,selected.mould_code].filter(Boolean).join(' · ')},
+            {l:'Date / Slot',v:`${selected.date} ${selected.check_time||''}`},
+            {l:'Weight (act/std)',v:(selected.weight_actual!=null||selected.weight_standard!=null)?`${selected.weight_actual??'--'}g / ${selected.weight_standard??'--'}g`:''},
+            {l:'QC Remarks',v:selected.remarks},
+            {l:'Reported by',v:selected.qc_person},
+          ].filter(f=>f.v).map((f,i)=>(
+            <div key={i} style={{display:'flex',gap:8,marginTop:5,fontSize:12}}>
+              <span style={{color:'#666',minWidth:110}}>{f.l}</span>
+              <span style={{fontWeight:f.bold?700:400,color:'#1a1a1a'}}>{f.v}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Operator action */}
+        <div style={{background:selected.status==='Resolved'?'#E8F5E9':'#F9F9F9',borderRadius:8,padding:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:selected.status==='Resolved'?'#276221':'#666',marginBottom:8,textTransform:'uppercase' as const}}>Operator Action</div>
+
+          {selected.status==='Resolved'?<>
+            {[
+              {l:'Status',v:'✅ Resolved',bold:true},
+              {l:'Resolved by',v:selected.resolved_by},
+              {l:'Resolved at',v:fmt(selected.resolved_at)},
+              {l:'Action taken',v:selected.resolution},
+            ].filter(f=>f.v).map((f,i)=>(
+              <div key={i} style={{display:'flex',gap:8,marginTop:5,fontSize:12}}>
+                <span style={{color:'#666',minWidth:110}}>{f.l}</span>
+                <span style={{fontWeight:f.bold?700:400,color:'#1a1a1a'}}>{f.v}</span>
+              </div>
+            ))}
+            <button onClick={handleReopen} disabled={saving} style={{marginTop:10,padding:'8px 14px',borderRadius:8,border:'1px solid #ccc',background:'#fff',cursor:'pointer',fontSize:12}}>Re-open</button>
+          </>:<>
+            <div style={{fontSize:12,color:'#C00000',marginBottom:10,fontWeight:600}}>⚠️ Operator ne abhi tak action nahi liya!</div>
+            <input value={resolvedBy} onChange={e=>setResolvedBy(e.target.value)} placeholder="Operator ka naam" style={{...S.fi,marginBottom:8}}/>
+            <textarea value={resolution} onChange={e=>setResolution(e.target.value)} rows={3} placeholder="Kya action liya? (e.g. cavity 13,16 saaf ki, dhaga hata diya)" style={{...S.fi,resize:'vertical' as const,marginBottom:8}}/>
+            <button onClick={handleResolve} disabled={saving} style={{...S.sb,background:'#276221',marginTop:0}}>{saving?'Saving...':'✅ Mark Resolved'}</button>
+          </>}
+        </div>
+        {toast&&<Toast {...toast}/>}
+      </div>
+    </div>}
+    {toast&&!selected&&<Toast {...toast}/>}
   </div>
 }
