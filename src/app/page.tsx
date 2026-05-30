@@ -3216,33 +3216,7 @@ function ReportsTab() {
           )}
 
           {/* Mould PM Report */}
-          {module === 'mouldpm' && (
-            <div style={S.card}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Mould PM Logs ({data.total || 0})</div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                  <thead><tr>
-                    {['Date', 'Mould', 'Done By', 'Current Shots', 'Next PM', 'NG Count', 'Result'].map(h =>
-                      <th key={h} style={{ background: '#1F3864', color: '#fff', padding: '6px 8px', textAlign: 'left' }}>{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {(data.data || []).map((r: any, i: number) => (
-                      <tr key={i} style={{ background: i % 2 === 0 ? '#FAFAFA' : '#fff' }}>
-                        <td style={{ padding: '6px 8px' }}>{r.date}</td>
-                        <td style={{ padding: '6px 8px', fontWeight: 600 }}>{r.mould_name}</td>
-                        <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.done_by}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center' }}>{(r.current_shots || 0).toLocaleString()}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center' }}>{(r.next_pm_shots || 0).toLocaleString()}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', color: r.ng_count > 0 ? '#C00000' : '#276221', fontWeight: 700 }}>{r.ng_count}</td>
-                        <td style={{ padding: '6px 8px' }}><span style={{ background: r.overall_result === 'OK' ? '#E8F5E9' : '#FFEBEE', color: r.overall_result === 'OK' ? '#276221' : '#C00000', padding: '2px 7px', borderRadius: 999, fontSize: 10 }}>{r.overall_result}</span></td>
-                      </tr>
-                    ))}
-                    {!data.data?.length && <tr><td colSpan={7} style={{ textAlign: 'center', color: '#666', padding: 16 }}>Koi data nahi!</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {module === 'mouldpm' && <PMLogsReport logs={data.data || []} />}
         </div>
       )}
       {module==='productionstatus'&&<ProductionStatusReport date={to} plant={plant}/>}
@@ -7637,6 +7611,7 @@ function MouldHistoryTab() {
   const [history,setHistory]=useState([])
   const [activeTab,setActiveTab]=useState('all')
   const [stats,setStats]=useState(null)
+  const [pmDetail,setPmDetail]=useState<any>(null)
 
   const filteredMoulds = !search ? [] : MOULDS.filter(
     m=>m.name.toLowerCase().includes(search.toLowerCase())||m.code.includes(search)
@@ -7650,9 +7625,23 @@ function MouldHistoryTab() {
     setActiveTab('all')
     setSearch('')
     try {
-      const histRes = await fetch('/api/mouldhistory?job_no='+mould.code).then(r=>r.json()).catch(()=>[])
+      const [histRes,pmRes] = await Promise.all([
+        fetch('/api/mouldhistory?job_no='+mould.code).then(r=>r.json()).catch(()=>[]),
+        fetch('/api/mouldpm?logs_mould='+encodeURIComponent(mould.name)).then(r=>r.json()).catch(()=>({logs:[]}))
+      ])
       const logbookRows = Array.isArray(histRes) ? histRes : []
-      const allRows = logbookRows.sort((a,b)=>new Date(a.record_date||'1900').getTime()-new Date(b.record_date||'1900').getTime())
+      // Convert pm_logs (app-entered PMs with checklist) into timeline rows
+      const pmLogRows = (pmRes.logs||[]).map((p:any)=>({
+        record_type:'PM',
+        record_date:p.date,
+        machine_no:p.plant||'',
+        issue:'',
+        work_done:p.correction||(p.overall_result==='OK'?'PM completed — all OK':'PM done'),
+        parts_changed:'',
+        result:p.overall_result||'OK',
+        _pmLog:p  // full pm_log with checks, for detail modal
+      }))
+      const allRows = [...logbookRows,...pmLogRows].sort((a,b)=>new Date(a.record_date||'1900').getTime()-new Date(b.record_date||'1900').getTime())
       const pmRows=allRows.filter(r=>r.record_type==='PM')
       const bdRows=allRows.filter(r=>r.record_type==='BD')
       const rmRows=allRows.filter(r=>r.record_type==='RM')
@@ -7731,7 +7720,7 @@ function MouldHistoryTab() {
                 return (
                   <div key={i} style={{display:'flex',gap:10,marginBottom:10}}>
                     <div style={{width:38,height:38,borderRadius:'50%',flexShrink:0,background:c.bg,border:'2px solid '+c.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>{c.icon}</div>
-                    <div style={{flex:1,background:c.bg,border:'1px solid '+c.border+'44',borderRadius:8,padding:'8px 12px'}}>
+                    <div onClick={()=>rec._pmLog&&setPmDetail(rec._pmLog)} style={{flex:1,background:c.bg,border:'1px solid '+c.border+'44',borderRadius:8,padding:'8px 12px',cursor:rec._pmLog?'pointer':'default'}}>
                       <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
                         <span style={{fontWeight:700,fontSize:12,color:c.color}}>{rec.record_type==='PM'?'Preventive Maintenance':rec.record_type==='BD'?'Breakdown':rec.record_type==='RM'?'Routine Maintenance':'Mould Change'}{rec.machine_no&&rec.machine_no!=='--'?' | '+rec.machine_no:''}{rec._live?' 🔴 LIVE':''}</span>
                         <span style={{fontSize:10,color:'#666',fontWeight:600}}>{rec.record_date}</span>
@@ -7740,6 +7729,7 @@ function MouldHistoryTab() {
                       {rec.work_done&&rec.work_done!=='--'&&<div style={{fontSize:11,color:'#444',marginBottom:2}}><b>Work: </b>{rec.work_done}</div>}
                       {rec.parts_changed&&rec.parts_changed!=='--'&&rec.parts_changed!==''&&<div style={{fontSize:11,color:'#5B2C8D',marginBottom:2}}><b>Parts: </b>{rec.parts_changed}</div>}
                       {rec.result&&rec.result!=='--'&&<span style={{background:['Fixed','Done','Running','OK','Ready'].includes(rec.result)?'#276221':'#854F0B',color:'#fff',fontSize:9,padding:'2px 8px',borderRadius:999,fontWeight:600}}>{rec.result}</span>}
+                      {rec._pmLog&&<div style={{fontSize:10,color:'#1F3864',marginTop:4,fontWeight:700}}>👆 Checklist detail dekhne ke liye click karo {rec._pmLog.ng_count>0?`(${rec._pmLog.ng_count} NG)`:''}</div>}
                     </div>
                   </div>
                 )
@@ -7754,6 +7744,7 @@ function MouldHistoryTab() {
         <div style={{fontSize:13,fontWeight:600,color:'#444',marginBottom:4}}>Koi bhi mould search karo</div>
         <div style={{fontSize:11}}>530+ records | Jun 2022 – May 2026</div>
       </div>}
+      {pmDetail&&<PMDetailModal log={pmDetail} onClose={()=>setPmDetail(null)}/>}
     </div>
   )
 }
@@ -8125,5 +8116,125 @@ function QCAlertsTab({user}:{user:User}) {
       </div>
     </div>}
     {toast&&!selected&&<Toast {...toast}/>}
+  </div>
+}
+
+// ─── PM Checklist Detail Helper ───────────────────────────────
+// checks object keys = sequential index of non-header PM_CHECKLIST items
+function pmChecklistDetail(checks:Record<string,string>){
+  const items:{section:string,point:string,method:string,result:string}[]=[]
+  let section=''
+  let idx=0
+  PM_CHECKLIST.forEach((item:any)=>{
+    if(item.h){ section=item.s; return }
+    const result=(checks&&checks[idx]!==undefined)?checks[idx]:(checks&&checks[String(idx)]!==undefined?checks[String(idx)]:'')
+    items.push({section,point:item.s,method:item.m||'',result:result||'--'})
+    idx++
+  })
+  return items
+}
+
+// ─── PM Detail Modal (shared by Reports + Mould History) ──────
+function PMDetailModal({log,onClose}:{log:any,onClose:()=>void}){
+  const checks=log.checks||{}
+  const detail=pmChecklistDetail(checks)
+  const okCount=detail.filter(d=>d.result==='OK').length
+  const ngCount=detail.filter(d=>d.result==='NG').length
+  const naCount=detail.filter(d=>d.result==='N/A').length
+  const pending=detail.filter(d=>d.result==='--').length
+
+  // group by section
+  const sections:Record<string,typeof detail>={}
+  detail.forEach(d=>{ if(!sections[d.section]) sections[d.section]=[]; sections[d.section].push(d) })
+
+  return <div onClick={onClose} style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:16,overflowY:'auto' as const}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:12,padding:18,width:'100%',maxWidth:520,marginTop:24,marginBottom:24}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontWeight:700,color:'#1F3864',fontSize:15}}>PM Detail — {log.mould_name||log.mould||'--'}</div>
+        <button onClick={onClose} style={{background:'#f0f0f0',border:'none',borderRadius:999,width:28,height:28,cursor:'pointer',fontSize:14}}>✕</button>
+      </div>
+
+      {/* Summary */}
+      <div style={{background:'#E8EDF5',borderRadius:8,padding:12,marginBottom:10,fontSize:12}}>
+        {[
+          {l:'Date',v:log.date},
+          {l:'Done By',v:log.done_by},
+          {l:'Current Shots',v:(log.current_shots||0).toLocaleString()},
+          {l:'Next PM At',v:(log.next_pm_shots||0).toLocaleString()},
+          {l:'Overall Result',v:log.overall_result},
+          {l:'Correction',v:log.correction},
+        ].filter(f=>f.v).map((f,i)=>(
+          <div key={i} style={{display:'flex',gap:8,marginBottom:4}}>
+            <span style={{color:'#666',minWidth:110}}>{f.l}</span>
+            <span style={{fontWeight:600,color:'#1a1a1a'}}>{f.v}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Count chips */}
+      <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap' as const}}>
+        <span style={{background:'#E8F5E9',color:'#276221',padding:'4px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>✅ OK: {okCount}</span>
+        <span style={{background:'#FFEBEE',color:'#C00000',padding:'4px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>❌ NG: {ngCount}</span>
+        <span style={{background:'#F0F0F0',color:'#666',padding:'4px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>N/A: {naCount}</span>
+        {pending>0&&<span style={{background:'#FFF3E0',color:'#854F0B',padding:'4px 10px',borderRadius:999,fontSize:11,fontWeight:700}}>Not checked: {pending}</span>}
+      </div>
+
+      {/* Checklist by section */}
+      {detail.length===0
+        ? <div style={{textAlign:'center',color:'#888',padding:20,fontSize:12}}>Is PM ka checklist detail save nahi hua tha.</div>
+        : Object.entries(sections).map(([sec,pts],si)=>(
+          <div key={si} style={{marginBottom:10}}>
+            <div style={{background:'#1F3864',color:'#FFD966',padding:'4px 10px',fontSize:11,fontWeight:700,borderRadius:4,marginBottom:4}}>{sec}</div>
+            {pts.map((p,pi)=>{
+              const col=p.result==='OK'?'#276221':p.result==='NG'?'#C00000':p.result==='N/A'?'#666':'#999'
+              const bg=p.result==='OK'?'#F0FFF4':p.result==='NG'?'#FFEBEE':p.result==='N/A'?'#F5F5F5':'#FAFAFA'
+              return <div key={pi} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 8px',background:bg,borderRadius:6,marginBottom:3}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,fontWeight:500}}>{p.point}</div>
+                  {p.method&&<div style={{fontSize:9,color:'#888'}}>[{p.method}]</div>}
+                </div>
+                <span style={{fontSize:11,fontWeight:700,color:col,minWidth:40,textAlign:'right' as const}}>
+                  {p.result==='OK'?'✅ OK':p.result==='NG'?'❌ NG':p.result==='N/A'?'N/A':'—'}
+                </span>
+              </div>
+            })}
+          </div>
+        ))
+      }
+    </div>
+  </div>
+}
+
+// ─── PM Logs Report (Reports tab) ─────────────────────────────
+function PMLogsReport({logs}:{logs:any[]}){
+  const [selected,setSelected]=useState<any>(null)
+  return <div style={S.card}>
+    <div style={{fontWeight:700,marginBottom:8}}>Mould PM Logs ({logs.length})</div>
+    <div style={{fontSize:11,color:'#1F3864',marginBottom:8,fontWeight:600}}>👆 Kisi bhi row pe click karo — pura checklist detail dikhega</div>
+    <div style={{overflowX:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+        <thead><tr>
+          {['Date','Mould','Done By','Current Shots','Next PM','NG Count','Result'].map(h=>
+            <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {logs.map((r:any,i:number)=>(
+            <tr key={i} onClick={()=>setSelected(r)} style={{background:i%2===0?'#FAFAFA':'#fff',cursor:'pointer'}}
+              onMouseEnter={e=>(e.currentTarget.style.background='#E8EDF5')}
+              onMouseLeave={e=>(e.currentTarget.style.background=i%2===0?'#FAFAFA':'#fff')}>
+              <td style={{padding:'6px 8px'}}>{r.date}</td>
+              <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864',textDecoration:'underline'}}>{r.mould_name}</td>
+              <td style={{padding:'6px 8px',fontSize:10}}>{r.done_by}</td>
+              <td style={{padding:'6px 8px',textAlign:'center'}}>{(r.current_shots||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center'}}>{(r.next_pm_shots||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',color:r.ng_count>0?'#C00000':'#276221',fontWeight:700}}>{r.ng_count}</td>
+              <td style={{padding:'6px 8px'}}><span style={{background:r.overall_result==='OK'?'#E8F5E9':'#FFEBEE',color:r.overall_result==='OK'?'#276221':'#C00000',padding:'2px 7px',borderRadius:999,fontSize:10}}>{r.overall_result}</span></td>
+            </tr>
+          ))}
+          {logs.length===0&&<tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>Koi data nahi!</td></tr>}
+        </tbody>
+      </table>
+    </div>
+    {selected&&<PMDetailModal log={selected} onClose={()=>setSelected(null)}/>}
   </div>
 }
