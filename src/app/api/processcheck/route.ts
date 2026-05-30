@@ -85,12 +85,21 @@ export async function GET(req: Request) {
     }
   })
 
-  // ── QUALITY (plant-wise) ──
+  // ── QUALITY (plant-wise, slot-wise) ──
+  const QC_SLOTS = ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00']
   const quality = PLANTS.map(plant => {
     const qp = qual.filter((e: any) => (e.plant === plant) || (e.machine || '').startsWith(plant))
-    const slots = Array.from(new Set(qp.map((e: any) => e.check_time).filter(Boolean)))
+    const doneSlots = new Set(qp.map((e: any) => e.check_time).filter(Boolean))
+    const missing = QC_SLOTS.filter(sl => !doneSlots.has(sl))
     const ng = qp.filter((e: any) => e.overall_result === 'NG').length
-    return { plant, checks: qp.length, slots: slots.length, ng }
+    return {
+      plant,
+      checks: qp.length,
+      done: QC_SLOTS.length - missing.length,
+      total: QC_SLOTS.length,
+      missing,
+      ng,
+    }
   })
 
   // ── BREAKDOWN ──
