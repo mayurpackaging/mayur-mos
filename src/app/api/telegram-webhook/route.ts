@@ -78,7 +78,7 @@ export async function POST(req: Request) {
       mould_running: mould,
       problem,
       time_of_call: istTime(),
-      status: 'Open',
+      status: 'Pending',
       reported_by: 'Telegram - ' + fromName,
       reported_time: new Date().toISOString(),
     })
