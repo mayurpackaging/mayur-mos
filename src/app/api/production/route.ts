@@ -75,13 +75,14 @@ export async function POST(req: Request) {
     entered_by: d.enteredBy || ''
   }
 
-  // Check if entry already exists for this date+machine+shift+plant
+  // Check if entry already exists for this date+machine+shift+plant+mould
   const { data: existing } = await supabase.from('production')
     .select('id')
     .eq('date', entryDate)
     .eq('machine', entryMachine)
     .eq('shift', entryShift)
     .eq('plant', entryPlant)
+    .eq('mould', d.mould || '')
     .maybeSingle()
 
   let prodId: string
