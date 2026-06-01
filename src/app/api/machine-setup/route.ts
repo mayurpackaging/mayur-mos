@@ -6,6 +6,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
@@ -23,21 +25,19 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const d = await req.json()
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date(Date.now() + 5.5*60*60*1000).toISOString().split('T')[0]
 
   if (d.type === 'setup') {
     const results = []
     for (const m of (d.machines || [])) {
       if (!m.machine) continue
-
-      // First try to delete existing, then insert fresh
       await supabase.from('machine_setup')
         .delete()
         .eq('date', d.date || today)
         .eq('plant', d.plant)
         .eq('machine', m.machine)
 
-      const { data, error } = await supabase.from('machine_setup').insert({
+      const { error } = await supabase.from('machine_setup').insert({
         date: d.date || today,
         plant: d.plant,
         machine: m.machine,
@@ -50,11 +50,7 @@ export async function POST(req: Request) {
         valid_from_slot: m.validFromSlot || '8am-11am',
         created_by: d.createdBy || ''
       })
-
-      if (error) {
-        console.error('Insert error:', error)
-        return NextResponse.json({ success: false, msg: error.message })
-      }
+      if (error) return NextResponse.json({ success: false, msg: error.message })
       results.push(m.machine)
     }
     return NextResponse.json({ success: true, msg: `${results.length} machines setup saved!` })
@@ -68,78 +64,94 @@ export async function POST(req: Request) {
       if (!entry.machine) continue
       if (!entry.good && !entry.rejection && !entry.down && entry.status === 'running') continue
 
-      const totalGood = parseFloat(entry.good) || 0
-      const totalRej = parseFloat(entry.rejection) || 0
-      const totalDown = parseFloat(entry.down) || 0
+      const slotGood = parseFloat(entry.good) || 0
+      const slotRej = parseFloat(entry.rejection) || 0
+      const slotDown = parseFloat(entry.down) || 0
       const cavities = parseFloat(entry.cavities) || 0
-      const shotsThisSlot = cavities > 0 ? Math.round((totalGood + totalRej) / cavities) : 0
 
+      const entryDate = d.date || today
+      const entryShift = d.shift
+      const entryPlant = d.plant
+      const entryMachine = entry.machine
+      const entryMould = entry.mould || ''
+      const slotName = d.slot
+
+      // ── Direct edit by id (from history edit) ──
       if (entry.editId) {
+        await supabase.from('production_slots').delete()
+          .eq('production_id', entry.editId).eq('slot_name', slotName)
+        await supabase.from('production_slots').insert({
+          production_id: entry.editId, slot_name: slotName,
+          good_parts: Math.round(slotGood), rejection: Math.round(slotRej),
+          downtime: Math.round(slotDown), remarks: entry.remarks || ''
+        })
+        // recalc totals
+        const { data: sl } = await supabase.from('production_slots')
+          .select('good_parts,rejection,downtime').eq('production_id', entry.editId)
+        const g = (sl||[]).reduce((a,s)=>a+(s.good_parts||0),0)
+        const r = (sl||[]).reduce((a,s)=>a+(s.rejection||0),0)
+        const dn = (sl||[]).reduce((a,s)=>a+(s.downtime||0),0)
         await supabase.from('production').update({
-          good_parts: Math.round(totalGood),
-          rejection: Math.round(totalRej),
-          downtime: Math.round(totalDown),
-          remarks: entry.remarks || ''
+          good_parts: Math.round(g), rejection: Math.round(r),
+          downtime: Math.round(dn), remarks: entry.remarks || ''
         }).eq('id', entry.editId)
-
-        await supabase.from('production_slots').update({
-          good_parts: Math.round(totalGood),
-          rejection: Math.round(totalRej),
-          downtime: Math.round(totalDown),
-          remarks: entry.remarks || ''
-        }).eq('production_id', entry.editId).eq('slot_name', d.slot)
-
         saved++
         continue
       }
 
-      const { data: prod, error } = await supabase.from('production').insert({
-        date: d.date || today,
-        shift: d.shift,
-        plant: d.plant,
-        machine: entry.machine,
-        operator: entry.operator || '',
-        operator2: entry.operator2 || '',
-        product: entry.product || '',
-        mould: entry.mould || '',
-        cavities: parseFloat(entry.cavities) || 0,
-        cycle_time: parseFloat(entry.cycleTime) || 0,
-        material: '',
-        good_parts: Math.round(totalGood),
-        rejection: Math.round(totalRej),
-        downtime: Math.round(totalDown),
-        shots_this_shift: shotsThisSlot,
+      // ── Find existing production row (same date+machine+shift+plant+mould) ──
+      const { data: existRows } = await supabase.from('production')
+        .select('id')
+        .eq('date', entryDate).eq('machine', entryMachine)
+        .eq('shift', entryShift).eq('plant', entryPlant)
+        .eq('mould', entryMould)
+        .order('created_at', { ascending: true }).limit(1)
+      const existing = (existRows && existRows.length > 0) ? existRows[0] : null
+
+      let prodId: string
+      if (existing) {
+        prodId = existing.id
+      } else {
+        const { data: prod, error } = await supabase.from('production').insert({
+          date: entryDate, shift: entryShift, plant: entryPlant, machine: entryMachine,
+          operator: entry.operator || '', operator2: entry.operator2 || '',
+          product: entry.product || '', mould: entryMould,
+          cavities: cavities, cycle_time: parseFloat(entry.cycleTime) || 0, material: '',
+          good_parts: 0, rejection: 0, downtime: 0, shots_this_shift: 0,
+          machine_status: entry.status || 'running',
+          stop_reason: entry.stopReason || '', remarks: entry.remarks || '',
+          entered_by: d.enteredBy || ''
+        }).select().single()
+        if (error) { errors.push(`${entry.machine}: ${error.message}`); continue }
+        prodId = prod.id
+      }
+
+      // replace just this slot
+      await supabase.from('production_slots').delete()
+        .eq('production_id', prodId).eq('slot_name', slotName)
+      await supabase.from('production_slots').insert({
+        production_id: prodId, slot_name: slotName,
+        good_parts: Math.round(slotGood), rejection: Math.round(slotRej),
+        downtime: Math.round(slotDown), remarks: entry.remarks || ''
+      })
+
+      // recalc row totals from ALL slots
+      const { data: allSlots } = await supabase.from('production_slots')
+        .select('good_parts,rejection,downtime').eq('production_id', prodId)
+      const sumGood = (allSlots||[]).reduce((a,s)=>a+(s.good_parts||0),0)
+      const sumRej = (allSlots||[]).reduce((a,s)=>a+(s.rejection||0),0)
+      const sumDown = (allSlots||[]).reduce((a,s)=>a+(s.downtime||0),0)
+      const sumShots = cavities > 0 ? Math.round((sumGood+sumRej)/cavities) : 0
+
+      await supabase.from('production').update({
+        good_parts: Math.round(sumGood), rejection: Math.round(sumRej),
+        downtime: Math.round(sumDown), shots_this_shift: sumShots,
         machine_status: entry.status || 'running',
         stop_reason: entry.stopReason || '',
-        remarks: entry.remarks || '',
-        entered_by: d.enteredBy
-      }).select().single()
+        operator: entry.operator || '', operator2: entry.operator2 || '',
+      }).eq('id', prodId)
 
-      if (error) { errors.push(`${entry.machine}: ${error.message}`); continue }
-
-      if (prod) {
-        await supabase.from('production_slots').insert({
-          production_id: prod.id,
-          slot_name: d.slot,
-          good_parts: Math.round(totalGood),
-          rejection: Math.round(totalRej),
-          downtime: Math.round(totalDown),
-          remarks: entry.remarks || ''
-        })
-
-        if (entry.mould && shotsThisSlot > 0) {
-          const mouldCode = entry.mould.split(' - ')[0]
-          const { data: mould } = await supabase.from('mould_master').select('*').eq('mould_code', mouldCode).maybeSingle()
-          if (mould && mould.pm_frequency_shots > 0) {
-            const newShots = (mould.current_shots || 0) + shotsThisSlot
-            const remaining = (mould.next_pm_at_shots || 0) - newShots
-            const pct10 = mould.pm_frequency_shots * 0.1
-            const newStatus = remaining <= 0 ? 'OVERDUE' : remaining < pct10 ? 'DUE SOON' : 'Active'
-            await supabase.from('mould_master').update({ current_shots: newShots, status: newStatus }).eq('id', mould.id)
-          }
-        }
-        saved++
-      }
+      saved++
     }
 
     if (saved > 0) return NextResponse.json({ success: true, msg: `${saved} machines ka ${d.slot} slot saved!` })
