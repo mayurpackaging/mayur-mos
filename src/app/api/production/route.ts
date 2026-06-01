@@ -6,6 +6,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
@@ -13,7 +15,6 @@ export async function GET(req: Request) {
   const from = searchParams.get('from') || ''
   const to = searchParams.get('to') || ''
 
-  // Date range mode — for weekly report
   if (from && to) {
     const { data } = await supabase.from('production')
       .select('date,good_parts,rejection,machine,product,shift,plant')
@@ -34,7 +35,6 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const d = await req.json()
-  // IST timezone fix — UTC+5:30
   const now = new Date()
   const istOffset = 5.5 * 60 * 60 * 1000
   const istDate = new Date(now.getTime() + istOffset)
@@ -47,13 +47,16 @@ export async function POST(req: Request) {
   const cavities = parseFloat(d.cavities) || 0
   const shotsThisShift = cavities > 0 ? Math.round((totalGood + totalRej) / cavities) : 0
 
-  // No duplicate blocking - just warn on frontend
+  const entryDate = d.date || today
+  const entryShift = d.shift
+  const entryPlant = d.plant
+  const entryMachine = d.machine || ''
 
-  const { data: prod, error } = await supabase.from('production').insert({
-    date: d.date || today,
-    shift: d.shift,
-    plant: d.plant,
-    machine: d.machine || '',
+  const rowData = {
+    date: entryDate,
+    shift: entryShift,
+    plant: entryPlant,
+    machine: entryMachine,
     operator: d.operator || '',
     operator2: d.operator2 || '',
     product: d.product || '',
@@ -70,14 +73,39 @@ export async function POST(req: Request) {
     stop_reason: d.stopReason || '',
     remarks: d.remarks || '',
     entered_by: d.enteredBy || ''
-  }).select().single()
+  }
 
-  if (error) return NextResponse.json({ success: false, msg: error.message })
+  // Check if entry already exists for this date+machine+shift+plant
+  const { data: existing } = await supabase.from('production')
+    .select('id')
+    .eq('date', entryDate)
+    .eq('machine', entryMachine)
+    .eq('shift', entryShift)
+    .eq('plant', entryPlant)
+    .maybeSingle()
+
+  let prodId: string
+  let wasUpdate = false
+
+  if (existing) {
+    // UPDATE existing row (no duplicate)
+    const { error } = await supabase.from('production').update(rowData).eq('id', existing.id)
+    if (error) return NextResponse.json({ success: false, msg: error.message })
+    prodId = existing.id
+    wasUpdate = true
+    // remove old slots, will re-insert fresh
+    await supabase.from('production_slots').delete().eq('production_id', prodId)
+  } else {
+    // INSERT new row
+    const { data: prod, error } = await supabase.from('production').insert(rowData).select().single()
+    if (error) return NextResponse.json({ success: false, msg: error.message })
+    prodId = prod.id
+  }
 
   // Save slots
-  if (prod && slots.length > 0) {
+  if (prodId && slots.length > 0) {
     const slotRows = slots.map((s: any) => ({
-      production_id: prod.id,
+      production_id: prodId,
       slot_name: s.slot || '',
       good_parts: parseFloat(s.good) || 0,
       rejection: parseFloat(s.rejection) || 0,
@@ -87,8 +115,8 @@ export async function POST(req: Request) {
     await supabase.from('production_slots').insert(slotRows)
   }
 
-  // Update mould shot counter
-  if (d.mould && shotsThisShift > 0) {
+  // Update mould shot counter — ONLY on new insert (not on update, warna double count hoga)
+  if (!wasUpdate && d.mould && shotsThisShift > 0) {
     const mouldCode = d.mould.split(' - ')[0]
     const { data: mould } = await supabase.from('mould_master').select('*').eq('mould_code', mouldCode).maybeSingle()
     if (mould) {
@@ -102,6 +130,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     success: true,
-    msg: `Saved! Good: ${Math.round(totalGood).toLocaleString()} | Rej: ${Math.round(totalRej).toLocaleString()}`
+    msg: `${wasUpdate ? 'Updated' : 'Saved'}! Good: ${Math.round(totalGood).toLocaleString()} | Rej: ${Math.round(totalRej).toLocaleString()}`
   })
 }
