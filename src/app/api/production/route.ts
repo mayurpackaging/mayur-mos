@@ -76,48 +76,66 @@ export async function POST(req: Request) {
   }
 
   // Check if entry already exists for this date+machine+shift+plant+mould
-  const { data: existing } = await supabase.from('production')
+  const { data: existingRows } = await supabase.from('production')
     .select('id')
     .eq('date', entryDate)
     .eq('machine', entryMachine)
     .eq('shift', entryShift)
     .eq('plant', entryPlant)
     .eq('mould', d.mould || '')
-    .maybeSingle()
+    .order('created_at', { ascending: true })
+    .limit(1)
+  const existing = (existingRows && existingRows.length > 0) ? existingRows[0] : null
 
   let prodId: string
   let wasUpdate = false
 
   if (existing) {
-    // UPDATE existing row (no duplicate)
-    const { error } = await supabase.from('production').update(rowData).eq('id', existing.id)
-    if (error) return NextResponse.json({ success: false, msg: error.message })
     prodId = existing.id
     wasUpdate = true
-    await supabase.from('production_slots').delete().eq('production_id', prodId)
   } else {
-    // INSERT new row — use upsert to handle race/constraint cleanly
-    const { data: prod, error } = await supabase.from('production')
-      .upsert(rowData, { onConflict: 'date,machine,shift,plant,mould' })
-      .select().single()
+    // INSERT new row (totals filled later)
+    const { data: prod, error } = await supabase.from('production').insert(rowData).select().single()
     if (error) return NextResponse.json({ success: false, msg: error.message })
     prodId = prod.id
-    // upsert may have updated an existing row — clear its old slots to avoid stale slot rows
-    await supabase.from('production_slots').delete().eq('production_id', prodId)
   }
 
-  // Save slots
+  // ── Merge slots: keep old slots, update/add the ones just submitted ──
   if (prodId && slots.length > 0) {
-    const slotRows = slots.map((s: any) => ({
-      production_id: prodId,
-      slot_name: s.slot || '',
-      good_parts: parseFloat(s.good) || 0,
-      rejection: parseFloat(s.rejection) || 0,
-      downtime: parseFloat(s.down) || 0,
-      remarks: s.remarks || ''
-    }))
-    await supabase.from('production_slots').insert(slotRows)
+    for (const s of slots) {
+      const slotName = s.slot || ''
+      if (!slotName) continue
+      // delete this specific slot if it exists (so we replace just this slot)
+      await supabase.from('production_slots').delete().eq('production_id', prodId).eq('slot_name', slotName)
+      // insert fresh
+      await supabase.from('production_slots').insert({
+        production_id: prodId,
+        slot_name: slotName,
+        good_parts: parseFloat(s.good) || 0,
+        rejection: parseFloat(s.rejection) || 0,
+        downtime: parseFloat(s.down) || 0,
+        remarks: s.remarks || ''
+      })
+    }
   }
+
+  // ── Recalculate row totals from ALL slots (old + new) ──
+  const { data: allSlots } = await supabase.from('production_slots')
+    .select('good_parts,rejection,downtime').eq('production_id', prodId)
+  const sumGood = (allSlots || []).reduce((a, s) => a + (s.good_parts || 0), 0)
+  const sumRej = (allSlots || []).reduce((a, s) => a + (s.rejection || 0), 0)
+  const sumDown = (allSlots || []).reduce((a, s) => a + (s.downtime || 0), 0)
+  const sumShots = cavities > 0 ? Math.round((sumGood + sumRej) / cavities) : 0
+
+  // update the row with merged totals + latest meta fields
+  await supabase.from('production').update({
+    ...rowData,
+    good_parts: Math.round(sumGood),
+    rejection: Math.round(sumRej),
+    downtime: Math.round(sumDown),
+    shots_this_shift: sumShots,
+  }).eq('id', prodId)
+
 
   // Update mould shot counter — ONLY on new insert (not on update, warna double count hoga)
   if (!wasUpdate && d.mould && shotsThisShift > 0) {
@@ -134,6 +152,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     success: true,
-    msg: `${wasUpdate ? 'Updated' : 'Saved'}! Good: ${Math.round(totalGood).toLocaleString()} | Rej: ${Math.round(totalRej).toLocaleString()}`
+    msg: `${wasUpdate ? 'Updated' : 'Saved'}! Total Good: ${Math.round(sumGood).toLocaleString()} | Rej: ${Math.round(sumRej).toLocaleString()}`
   })
 }
