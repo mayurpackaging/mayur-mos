@@ -94,13 +94,16 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ success: false, msg: error.message })
     prodId = existing.id
     wasUpdate = true
-    // remove old slots, will re-insert fresh
     await supabase.from('production_slots').delete().eq('production_id', prodId)
   } else {
-    // INSERT new row
-    const { data: prod, error } = await supabase.from('production').insert(rowData).select().single()
+    // INSERT new row — use upsert to handle race/constraint cleanly
+    const { data: prod, error } = await supabase.from('production')
+      .upsert(rowData, { onConflict: 'date,machine,shift,plant,mould' })
+      .select().single()
     if (error) return NextResponse.json({ success: false, msg: error.message })
     prodId = prod.id
+    // upsert may have updated an existing row — clear its old slots to avoid stale slot rows
+    await supabase.from('production_slots').delete().eq('production_id', prodId)
   }
 
   // Save slots
