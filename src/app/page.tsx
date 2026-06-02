@@ -8474,6 +8474,7 @@ function ProcessCheckTab({user}:{user:User}) {
             <Chip ok={nightOk} warn={!nightOk&&p.nightDone>0} text={`🌙 Night: ${p.nightDone}/${p.nightTotal} slots`}/>
           </div>
           {!nightOk&&p.nightDone>0&&p.nightMissing.length>0&&<div style={{fontSize:11,color:'#C00000',marginTop:4}}>⏳ Night pending: {p.nightMissing.join(', ')}</div>}
+          {!dayOk&&p.dayMissing.length>0&&<CopyMsgBtn message={`🏭 *Production Entry Pending*\n${p.plant} — Day Shift\nSlots baaki: ${p.dayMissing.join(', ')}\nDate: ${date}\n\nKripya production entry jaldi karein.`}/>}
         </div>
       })}
     </div>
@@ -8495,6 +8496,7 @@ function ProcessCheckTab({user}:{user:User}) {
             </div>
           </div>
           {!ok&&q.missing.length>0&&<div style={{fontSize:11,color:'#C00000',marginTop:4}}>⏳ Pending: {q.missing.join(', ')}</div>}
+          {!ok&&q.missing.length>0&&<CopyMsgBtn message={`🔬 *Quality Check Pending*\n${q.plant}\nSlots baaki: ${q.missing.join(', ')}\nDate: ${date}\n\nKripya quality check karein.`}/>}
           {q.checks>0&&<div style={{fontSize:10,color:'#666',marginTop:3}}>{q.checks} total checks</div>}
         </div>
       })}
@@ -8512,6 +8514,7 @@ function ProcessCheckTab({user}:{user:User}) {
         </div>
         <Chip ok={data.ims.done} text={data.ims.done?`✅ ${data.ims.entries} entries`:'❌ Aaj nahi aaya'}/>
       </div>
+      {!data.ims.done&&<CopyMsgBtn message={`📦 *IMS Stock Entry Pending*\nAaj ka stock entry nahi hua.\nDate: ${date}\n\nKripya stock entry karein.`}/>}
 
       {/* Rejection */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
@@ -8521,6 +8524,7 @@ function ProcessCheckTab({user}:{user:User}) {
         </div>
         <Chip ok={data.rejection.done} warn={!data.rejection.done} text={data.rejection.done?`✅ ${data.rejection.entries} entries (${data.rejection.totalQty} pcs)`:'⚠️ Koi entry nahi'}/>
       </div>
+      {!data.rejection.done&&<CopyMsgBtn message={`❌ *Rejection Entry Pending*\nAaj koi rejection entry nahi hui.\nDate: ${date}\n\nAgar rejection hai toh entry karein.`}/>}
 
       {/* Breakdown */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
@@ -8554,8 +8558,9 @@ function ProcessCheckTab({user}:{user:User}) {
     {data.breakdown.pendingList.length>0&&<div style={{...S.card,border:'1px solid #C00000'}}>
       <div style={{fontWeight:700,color:'#C00000',marginBottom:6}}>🔴 Pending Breakdowns</div>
       {data.breakdown.pendingList.map((b:any,i:number)=>(
-        <div key={i} style={{fontSize:11,padding:'4px 0',borderBottom:'1px solid #FFE0E0'}}>
-          <b>{b.machine}</b> ({b.plant}) — {b.problem}
+        <div key={i} style={{padding:'6px 0',borderBottom:'1px solid #FFE0E0'}}>
+          <div style={{fontSize:11}}><b>{b.machine}</b> ({b.plant}) — {b.problem}</div>
+          <CopyMsgBtn message={`🔧 *Breakdown Pending*\nMachine: ${b.machine}\nPlant: ${b.plant}\nProblem: ${b.problem}\nDate: ${date}\n\nYeh breakdown abhi tak resolve nahi hua. Kripya dekhein.`}/>
         </div>
       ))}
     </div>}
@@ -8564,11 +8569,38 @@ function ProcessCheckTab({user}:{user:User}) {
     {data.mouldPM.list.length>0&&<div style={{...S.card,border:'1px solid #854F0B'}}>
       <div style={{fontWeight:700,color:'#854F0B',marginBottom:6}}>⚙️ PM Due / Overdue</div>
       {data.mouldPM.list.map((m:any,i:number)=>(
-        <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F0E5D5'}}>
-          <span><b>{m.mould}</b> {m.plant?`· ${m.plant}`:''}</span>
-          <span style={{color:m.status==='OVERDUE'?'#C00000':'#854F0B',fontWeight:700}}>{m.status==='OVERDUE'?'OVERDUE':`${m.remaining.toLocaleString()} shots`}</span>
+        <div key={i} style={{padding:'6px 0',borderBottom:'1px solid #F0E5D5'}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:11}}>
+            <span><b>{m.mould}</b> {m.plant?`· ${m.plant}`:''}</span>
+            <span style={{color:m.status==='OVERDUE'?'#C00000':'#854F0B',fontWeight:700}}>{m.status==='OVERDUE'?'OVERDUE':`${m.remaining.toLocaleString()} shots`}</span>
+          </div>
+          <CopyMsgBtn message={`⚙️ *Mould PM ${m.status==='OVERDUE'?'OVERDUE':'Due Soon'}*\nMould: ${m.mould}${m.plant?'\nPlant: '+m.plant:''}\n${m.status==='OVERDUE'?'Yeh mould PM ka time nikal gaya hai!':`${m.remaining.toLocaleString()} shots baaki hain.`}\n\nKripya PM schedule karein.`}/>
         </div>
       ))}
     </div>}
+  </div>
+}
+
+// ─── Copy-to-WhatsApp message button ──────────────────────────
+function CopyMsgBtn({message,label}:{message:string,label?:string}) {
+  const [copied,setCopied]=useState(false)
+  const doCopy=()=>{
+    try {
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(message).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000)})
+      } else {
+        // fallback
+        const ta=document.createElement('textarea')
+        ta.value=message; document.body.appendChild(ta); ta.select()
+        document.execCommand('copy'); document.body.removeChild(ta)
+        setCopied(true);setTimeout(()=>setCopied(false),2000)
+      }
+    } catch(e){ setCopied(false) }
+  }
+  return <div style={{marginTop:6,background:'#F0F7F0',border:'1px dashed #25D366',borderRadius:8,padding:'8px 10px'}}>
+    <div style={{fontSize:11,color:'#444',whiteSpace:'pre-wrap' as const,marginBottom:6}}>{message}</div>
+    <button onClick={doCopy} style={{background:copied?'#276221':'#25D366',color:'#fff',border:'none',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+      {copied?'✅ Copied! WhatsApp pe paste karo':'📋 Copy for WhatsApp'}
+    </button>
   </div>
 }
