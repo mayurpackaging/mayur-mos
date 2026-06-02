@@ -1552,7 +1552,7 @@ function QCAlertBanner({user}:{user:User}) {
         {a.weight_actual&&a.weight_standard&&<div style={{color:'#C00000',marginTop:3}}>Weight: {a.weight_actual}g (std: {a.weight_standard}g)</div>}
         {a.remarks&&<div style={{color:'#666',marginTop:3,fontStyle:'italic'}}>QC remarks: {a.remarks}</div>}
       </div>
-      <CopyMsgBtn message={`🚨 *QC Alert — Action Required!*\n${a.machine} | ${a.date} ${a.check_time||''}\n${a.product||''}${a.mould_name?' · '+a.mould_name:''}\n\n*Issue:* ${a.issues}${(a.weight_actual&&a.weight_standard)?`\nWeight: ${a.weight_actual}g (std: ${a.weight_standard}g)`:''}${a.remarks?`\nRemarks: ${a.remarks}`:''}\n\nKripya jaldi action lein.`}/>
+      <CopyMsgBtn message={`🚨 *QC Alert — Action Required!*\n${a.machine} | ${a.date} ${a.check_time||''}\n${a.product||''}${a.mould_name?' · '+a.mould_name:''}\n\n*Issue:* ${a.issues}${(a.weight_actual&&a.weight_standard)?`\nWeight: ${a.weight_actual}g (std: ${a.weight_standard}g)`:''}${a.remarks?`\nRemarks: ${a.remarks}`:''}\n\nKripya jaldi action lein.`} user={user}/>
       {resolveId===a.id
         ?<div>
           <textarea style={{...S.fi,height:60,resize:'none' as const,marginBottom:6}} value={resolution} onChange={e=>setResolution(e.target.value)} placeholder="Kya kiya — e.g. cavity 13 polish done, speed adjust ki, mould clean kiya..."/>
@@ -2861,6 +2861,15 @@ function BreakdownTab({user}:{user:User}) {
           <div style={{textAlign:'center',marginTop:8,fontSize:13,fontWeight:700,color:(selectedBD as any).downtime_min>180?'#C00000':(selectedBD as any).downtime_min>60?'#854F0B':'#276221'}}>
             ⏱️ Downtime: {(selectedBD as any).downtime_min||0} min
           </div>
+
+          {/* WhatsApp summary copy — for resolved breakdowns */}
+          {((selectedBD as any).status?.includes('Resolved')||(selectedBD as any).solution||(selectedBD as any).resolved_time)&&(()=>{
+            const b:any=selectedBD
+            const rt=b.reported_time?new Date(b.reported_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''
+            const st=b.resolved_time?new Date(b.resolved_time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''
+            const msg=`✅ *Breakdown Resolved*\n${b.machine||''} — ${b.plant||''}\n${b.mould_running?'⚙️ Mould: '+b.mould_running+'\n':''}📅 ${b.date||''}\n\n*Problem:* ${b.problem||'--'}\n${b.analysis?'*Analysis:* '+b.analysis+'\n':''}*Solution:* ${b.solution||'--'}\n${b.spares_used&&b.spares_used!=='--'?'*Parts Used:* '+b.spares_used+'\n':''}${rt?'\n🔴 Reported: '+rt:''}${st?'\n✅ Resolved: '+st:''}\n⏱️ Downtime: ${b.downtime_min||0} min\n👷 By: ${b.resolved_by||b.reported_by||'--'}`
+            return <CopyMsgBtn message={msg} user={user}/>
+          })()}
 
           {/* Mould History link */}
           {(selectedBD as any).mould_running&&<div style={{marginTop:10,background:'#E8EDF5',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#1F3864',fontWeight:600}}>
@@ -8110,7 +8119,7 @@ function QCAlertsTab({user}:{user:User}) {
               <span style={{fontWeight:f.bold?700:400,color:'#1a1a1a'}}>{f.v}</span>
             </div>
           ))}
-          <CopyMsgBtn message={`🚨 *QC Alert — Action Required!*\n${selected.machine||''} | ${selected.date} ${selected.check_time||''}\n${selected.product||''}${selected.mould_name?' · '+selected.mould_name:''}\n\n*Issue:* ${selected.issues}${(selected.weight_actual!=null&&selected.weight_standard!=null)?`\nWeight: ${selected.weight_actual}g (std: ${selected.weight_standard}g)`:''}${selected.remarks?`\nRemarks: ${selected.remarks}`:''}\nReported by: ${selected.qc_person||'--'}\n\nKripya jaldi action lein.`}/>
+          <CopyMsgBtn message={`🚨 *QC Alert — Action Required!*\n${selected.machine||''} | ${selected.date} ${selected.check_time||''}\n${selected.product||''}${selected.mould_name?' · '+selected.mould_name:''}\n\n*Issue:* ${selected.issues}${(selected.weight_actual!=null&&selected.weight_standard!=null)?`\nWeight: ${selected.weight_actual}g (std: ${selected.weight_standard}g)`:''}${selected.remarks?`\nRemarks: ${selected.remarks}`:''}\nReported by: ${selected.qc_person||'--'}\n\nKripya jaldi action lein.`} user={user}/>
         </div>
 
         {/* Operator action */}
@@ -8476,7 +8485,7 @@ function ProcessCheckTab({user}:{user:User}) {
             <Chip ok={nightOk} warn={!nightOk&&p.nightDone>0} text={`🌙 Night: ${p.nightDone}/${p.nightTotal} slots`}/>
           </div>
           {!nightOk&&p.nightDone>0&&p.nightMissing.length>0&&<div style={{fontSize:11,color:'#C00000',marginTop:4}}>⏳ Night pending: {p.nightMissing.join(', ')}</div>}
-          {!dayOk&&p.dayMissing.length>0&&<CopyMsgBtn message={`🏭 *Production Entry Pending*\n${p.plant} — Day Shift\nSlots baaki: ${p.dayMissing.join(', ')}\nDate: ${date}\n\nKripya production entry jaldi karein.`}/>}
+          {!dayOk&&p.dayMissing.length>0&&<CopyMsgBtn message={`🏭 *Production Entry Pending*\n${p.plant} — Day Shift\nSlots baaki: ${p.dayMissing.join(', ')}\nDate: ${date}\n\nKripya production entry jaldi karein.`} user={user}/>}
         </div>
       })}
     </div>
@@ -8498,7 +8507,7 @@ function ProcessCheckTab({user}:{user:User}) {
             </div>
           </div>
           {!ok&&q.missing.length>0&&<div style={{fontSize:11,color:'#C00000',marginTop:4}}>⏳ Pending: {q.missing.join(', ')}</div>}
-          {!ok&&q.missing.length>0&&<CopyMsgBtn message={`🔬 *Quality Check Pending*\n${q.plant}\nSlots baaki: ${q.missing.join(', ')}\nDate: ${date}\n\nKripya quality check karein.`}/>}
+          {!ok&&q.missing.length>0&&<CopyMsgBtn message={`🔬 *Quality Check Pending*\n${q.plant}\nSlots baaki: ${q.missing.join(', ')}\nDate: ${date}\n\nKripya quality check karein.`} user={user}/>}
           {q.checks>0&&<div style={{fontSize:10,color:'#666',marginTop:3}}>{q.checks} total checks</div>}
         </div>
       })}
@@ -8516,7 +8525,7 @@ function ProcessCheckTab({user}:{user:User}) {
         </div>
         <Chip ok={data.ims.done} text={data.ims.done?`✅ ${data.ims.entries} entries`:'❌ Aaj nahi aaya'}/>
       </div>
-      {!data.ims.done&&<CopyMsgBtn message={`📦 *IMS Stock Entry Pending*\nAaj ka stock entry nahi hua.\nDate: ${date}\n\nKripya stock entry karein.`}/>}
+      {!data.ims.done&&<CopyMsgBtn message={`📦 *IMS Stock Entry Pending*\nAaj ka stock entry nahi hua.\nDate: ${date}\n\nKripya stock entry karein.`} user={user}/>}
 
       {/* Rejection */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
@@ -8526,7 +8535,7 @@ function ProcessCheckTab({user}:{user:User}) {
         </div>
         <Chip ok={data.rejection.done} warn={!data.rejection.done} text={data.rejection.done?`✅ ${data.rejection.entries} entries (${data.rejection.totalQty} pcs)`:'⚠️ Koi entry nahi'}/>
       </div>
-      {!data.rejection.done&&<CopyMsgBtn message={`❌ *Rejection Entry Pending*\nAaj koi rejection entry nahi hui.\nDate: ${date}\n\nAgar rejection hai toh entry karein.`}/>}
+      {!data.rejection.done&&<CopyMsgBtn message={`❌ *Rejection Entry Pending*\nAaj koi rejection entry nahi hui.\nDate: ${date}\n\nAgar rejection hai toh entry karein.`} user={user}/>}
 
       {/* Breakdown */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
@@ -8562,7 +8571,7 @@ function ProcessCheckTab({user}:{user:User}) {
       {data.breakdown.pendingList.map((b:any,i:number)=>(
         <div key={i} style={{padding:'6px 0',borderBottom:'1px solid #FFE0E0'}}>
           <div style={{fontSize:11}}><b>{b.machine}</b> ({b.plant}) — {b.problem}</div>
-          <CopyMsgBtn message={`🔧 *Breakdown Pending*\nMachine: ${b.machine}\nPlant: ${b.plant}\nProblem: ${b.problem}\nDate: ${date}\n\nYeh breakdown abhi tak resolve nahi hua. Kripya dekhein.`}/>
+          <CopyMsgBtn message={`🔧 *Breakdown Pending*\nMachine: ${b.machine}\nPlant: ${b.plant}\nProblem: ${b.problem}\nDate: ${date}\n\nYeh breakdown abhi tak resolve nahi hua. Kripya dekhein.`} user={user}/>
         </div>
       ))}
     </div>}
@@ -8576,16 +8585,19 @@ function ProcessCheckTab({user}:{user:User}) {
             <span><b>{m.mould}</b> {m.plant?`· ${m.plant}`:''}</span>
             <span style={{color:m.status==='OVERDUE'?'#C00000':'#854F0B',fontWeight:700}}>{m.status==='OVERDUE'?'OVERDUE':`${m.remaining.toLocaleString()} shots`}</span>
           </div>
-          <CopyMsgBtn message={`⚙️ *Mould PM ${m.status==='OVERDUE'?'OVERDUE':'Due Soon'}*\nMould: ${m.mould}${m.plant?'\nPlant: '+m.plant:''}\n${m.status==='OVERDUE'?'Yeh mould PM ka time nikal gaya hai!':`${m.remaining.toLocaleString()} shots baaki hain.`}\n\nKripya PM schedule karein.`}/>
+          <CopyMsgBtn message={`⚙️ *Mould PM ${m.status==='OVERDUE'?'OVERDUE':'Due Soon'}*\nMould: ${m.mould}${m.plant?'\nPlant: '+m.plant:''}\n${m.status==='OVERDUE'?'Yeh mould PM ka time nikal gaya hai!':`${m.remaining.toLocaleString()} shots baaki hain.`}\n\nKripya PM schedule karein.`} user={user}/>
         </div>
       ))}
     </div>}
   </div>
 }
 
-// ─── Copy-to-WhatsApp message button ──────────────────────────
-function CopyMsgBtn({message,label}:{message:string,label?:string}) {
+// ─── Copy-to-WhatsApp message button (only for Process Coordinator / Admin) ──
+function CopyMsgBtn({message,user}:{message:string,user?:User}) {
   const [copied,setCopied]=useState(false)
+  // Only Process Coordinator and Admin can see/copy WhatsApp messages
+  const role=(user?.role||'').toLowerCase()
+  if(role!=='process coordinator'&&role!=='admin') return null
   const doCopy=()=>{
     try {
       if(navigator.clipboard&&navigator.clipboard.writeText){
