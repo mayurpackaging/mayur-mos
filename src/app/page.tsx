@@ -268,7 +268,7 @@ export default function MOS() {
         {tab==='mouldchange'&&<MouldChangeTab user={user}/>}
         {tab==='mouldpm'&&<MouldPMTab user={user}/>}
         {tab==='rejection'&&<RejectionTab user={user}/>}
-        {tab==='reports'&&<ReportsTab/>}
+        {tab==='reports'&&<ReportsTab user={user}/>}
         {tab==='dispatch'&&<DispatchTab user={user}/>}
         {tab==='spares'&&<SparesTab user={user}/>}
         {tab==='quality'&&<QualityTab user={user}/>}
@@ -2914,7 +2914,7 @@ function BreakdownTab({user}:{user:User}) {
   </div>
 }
 
-function ReportsTab() {
+function ReportsTab({user}:{user:User}) {
   const [module, setModule] = useState('production')
   const [from, setFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 7)
@@ -2924,6 +2924,7 @@ function ReportsTab() {
   const [plant, setPlant] = useState('')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any>(null)
+  const [rejTrack, setRejTrack] = useState<any>(null)
   const [toast, setToast] = useState<{msg:string,ok:boolean}|null>(null)
 
   const load = async () => {
@@ -2933,6 +2934,10 @@ function ReportsTab() {
     setLoading(false)
     if (res.success) setData(res)
     else setToast({ msg: res.msg, ok: false })
+    if (module === 'rejection') {
+      const rt = await fetch('/api/rejection-track?days=7').then(r=>r.json()).catch(()=>null)
+      setRejTrack(rt)
+    }
   }
 
   const MODULES = [
@@ -3161,6 +3166,44 @@ function ReportsTab() {
                 <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Total Entries</div><div style={{ fontSize: 18, fontWeight: 700, color: '#C00000' }}>{data.summary?.total || 0}</div></div>
                 <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Total Qty</div><div style={{ fontSize: 18, fontWeight: 700, color: '#C00000' }}>{(data.summary?.totalQty || 0).toLocaleString()} pcs</div></div>
               </div>
+
+              {/* Production vs Rejection-entry difference */}
+              {rejTrack && rejTrack.rows && (
+                <div style={S.card}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>📊 Production vs Rejection-Entry (last 7 days)</div>
+                  <div style={{ fontSize: 11, color: '#666', marginBottom: 8 }}>Last rejection entry: <b style={{color:'#1F3864'}}>{rejTrack.lastEntryDate}</b></div>
+                  {rejTrack.missingDays && rejTrack.missingDays.length > 0 && (
+                    <div style={{ background: '#FFEBEE', borderRadius: 6, padding: '6px 10px', marginBottom: 8, fontSize: 11 }}>
+                      <b style={{color:'#C00000'}}>⚠️ Entry nahi hui:</b> {rejTrack.missingDays.map((m:any)=>`${m.date} (${m.plant})`).join(', ')}
+                    </div>
+                  )}
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+                      <thead><tr>{['Date','Plant','Prod Rej','Entry Rej','Diff'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'4px 6px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+                      <tbody>{rejTrack.rows.map((r:any,i:number)=>(
+                        <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                          <td style={{padding:'4px 6px'}}>{r.date}</td>
+                          <td style={{padding:'4px 6px'}}>{r.plant}</td>
+                          <td style={{padding:'4px 6px',textAlign:'center'}}>{r.prodRej}</td>
+                          <td style={{padding:'4px 6px',textAlign:'center',color:r.entryMissing?'#C00000':'#333'}}>{r.entryMissing?'❌':r.entryRej}</td>
+                          <td style={{padding:'4px 6px',textAlign:'center',fontWeight:700,color:Math.abs(r.diff)>50?'#C00000':'#276221'}}>{r.diff>0?'+':''}{r.diff}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                  <CopyMsgBtn user={user} message={(()=>{
+                    let msg=`📊 *Rejection Difference Report*\nLast entry: ${rejTrack.lastEntryDate}\n\n`
+                    rejTrack.rows.forEach((r:any)=>{
+                      msg+=`${r.date} ${r.plant}: Prod ${r.prodRej} vs Entry ${r.entryMissing?'NAHI':r.entryRej}${!r.entryMissing?` (diff ${r.diff>0?'+':''}${r.diff})`:''}\n`
+                    })
+                    if(rejTrack.missingDays.length>0){
+                      msg+='\n*Entry pending:*\n'
+                      rejTrack.missingDays.forEach((m:any)=>{msg+=`${m.date} — ${m.plant}\n`})
+                    }
+                    return msg
+                  })()}/>
+                </div>
+              )}
               {/* By reason */}
               {data.byReason && Object.keys(data.byReason).length > 0 && (
                 <div style={S.card}>
@@ -8297,6 +8340,14 @@ function ProcessCheckTab({user}:{user:User}) {
   }
   useEffect(()=>{loadTelegram()},[])
 
+  const [rejTrack,setRejTrack]=useState<any>(null)
+  const [showRejTrack,setShowRejTrack]=useState(false)
+  const loadRejTrack=async()=>{
+    const res=await fetch('/api/rejection-track?days=7').then(r=>r.json()).catch(()=>null)
+    setRejTrack(res)
+  }
+  useEffect(()=>{loadRejTrack()},[])
+
   const tgAddStaff=async()=>{
     if(!tgForm.staffName||!tgForm.chatId){setTgToast({msg:'Naam aur Chat ID daalo!',ok:false});return}
     const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -8536,6 +8587,72 @@ function ProcessCheckTab({user}:{user:User}) {
         <Chip ok={data.rejection.done} warn={!data.rejection.done} text={data.rejection.done?`✅ ${data.rejection.entries} entries (${data.rejection.totalQty} pcs)`:'⚠️ Koi entry nahi'}/>
       </div>
       {!data.rejection.done&&<CopyMsgBtn message={`❌ *Rejection Entry Pending*\nAaj koi rejection entry nahi hui.\nDate: ${date}\n\nAgar rejection hai toh entry karein.`} user={user}/>}
+
+      {/* Rejection Tracking detail toggle */}
+      <div style={{marginTop:8,paddingTop:8,borderTop:'1px dashed #E0E0E0'}}>
+        <button onClick={()=>setShowRejTrack(!showRejTrack)} style={{background:'#FFF3E0',border:'1px solid #E65100',color:'#E65100',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+          📊 Rejection Tracking {showRejTrack?'▲':'▼'}
+        </button>
+        {rejTrack&&rejTrack.lastEntryDate&&<span style={{fontSize:10,color:'#666',marginLeft:8}}>Last entry: {rejTrack.lastEntryDate}</span>}
+      </div>
+
+      {showRejTrack&&rejTrack&&<div style={{marginTop:8}}>
+        {/* Missing days */}
+        {rejTrack.missingDays&&rejTrack.missingDays.length>0&&<div style={{background:'#FFEBEE',borderRadius:8,padding:'8px 10px',marginBottom:8}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#C00000',marginBottom:4}}>⚠️ Rejection entry NAHI hui (par production thi):</div>
+          {rejTrack.missingDays.map((m:any,i:number)=>(
+            <div key={i} style={{fontSize:11,color:'#333'}}>• {m.date} — {m.plant} (production rejection: {m.prodRej})</div>
+          ))}
+        </div>}
+
+        {/* Day-wise prod vs entry */}
+        <div style={{overflowX:'auto',marginBottom:8}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
+            <thead><tr>{['Date','Plant','Prod Rej','Entry Rej','Diff'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'4px 6px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+            <tbody>{rejTrack.rows.map((r:any,i:number)=>(
+              <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                <td style={{padding:'4px 6px'}}>{r.date}</td>
+                <td style={{padding:'4px 6px'}}>{r.plant}</td>
+                <td style={{padding:'4px 6px',textAlign:'center'}}>{r.prodRej}</td>
+                <td style={{padding:'4px 6px',textAlign:'center',color:r.entryMissing?'#C00000':'#333'}}>{r.entryMissing?'❌ nahi':r.entryRej}</td>
+                <td style={{padding:'4px 6px',textAlign:'center',fontWeight:700,color:Math.abs(r.diff)>50?'#C00000':'#276221'}}>{r.diff>0?'+':''}{r.diff}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+
+        {/* Today machine-wise difference */}
+        {rejTrack.machineRows&&rejTrack.machineRows.filter((m:any)=>m.diff!==0).length>0&&<div style={{marginBottom:8}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:4}}>Aaj ka machine-wise difference:</div>
+          {rejTrack.machineRows.filter((m:any)=>m.diff!==0).map((m:any,i:number)=>(
+            <div key={i} style={{fontSize:11,padding:'3px 0',borderBottom:'1px solid #F5F5F5'}}>
+              <b>{m.machine}</b> ({m.plant}): Prod {m.prodRej} vs Entry {m.entryRej} → <span style={{color:Math.abs(m.diff)>50?'#C00000':'#854F0B',fontWeight:700}}>diff {m.diff>0?'+':''}{m.diff}</span>
+            </div>
+          ))}
+        </div>}
+
+        {/* WhatsApp copy for rejection difference */}
+        <CopyMsgBtn user={user} message={(()=>{
+          let msg=`📊 *Rejection Difference Report* (${rejTrack.today})\n`
+          msg+=`Last entry: ${rejTrack.lastEntryDate}\n\n`
+          const todayRows=rejTrack.rows.filter((r:any)=>r.date===rejTrack.today)
+          todayRows.forEach((r:any)=>{
+            msg+=`${r.plant}: Production ${r.prodRej} vs Entry ${r.entryMissing?'NAHI hui':r.entryRej}`
+            if(!r.entryMissing) msg+=` (diff ${r.diff>0?'+':''}${r.diff})`
+            msg+='\n'
+          })
+          const machDiff=rejTrack.machineRows.filter((m:any)=>m.diff!==0)
+          if(machDiff.length>0){
+            msg+='\n*Machine-wise difference:*\n'
+            machDiff.forEach((m:any)=>{ msg+=`${m.machine} (${m.plant}): diff ${m.diff>0?'+':''}${m.diff}\n` })
+          }
+          if(rejTrack.missingDays.length>0){
+            msg+='\n*Entry pending dino ke liye:*\n'
+            rejTrack.missingDays.forEach((m:any)=>{ msg+=`${m.date} — ${m.plant}\n` })
+          }
+          return msg
+        })()}/>
+      </div>}
 
       {/* Breakdown */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F5F5F5'}}>
