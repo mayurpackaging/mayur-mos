@@ -6252,19 +6252,21 @@ function BulkProductionTab({user}:{user:User}) {
     }
   }
 
-  const startEdit=(prod:any)=>{
-    setEditingId(prod.id)
-    setEditVals({good:prod.good_parts,rejection:prod.rejection,down:prod.downtime,remarks:prod.remarks||''})
+  const startEdit=(prod:any,slotObj?:any)=>{
+    const key=prod.id+'-'+(slotObj?.slot_name||'')
+    setEditingId(key)
+    setEditVals({good:slotObj?.good_parts??prod.good_parts,rejection:slotObj?.rejection??prod.rejection,down:slotObj?.downtime??prod.downtime,remarks:slotObj?.remarks||prod.remarks||''})
   }
 
-  const saveEdit=async(prod:any)=>{
+  const saveEdit=async(prod:any,slotName?:string)=>{
     setSaving(true)
+    const useSlot=slotName||prod.production_slots?.[0]?.slot_name||slot
     const res=await fetch('/api/machine-setup',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         type:'bulk_slot',date,
-        shift:prod.shift,plant,slot:prod.production_slots?.[0]?.slot_name||slot,
+        shift:prod.shift,plant,slot:useSlot,
         enteredBy:user.name,
         entries:[{machine:prod.machine,product:prod.product,mould:prod.mould,cavities:prod.cavities,cycleTime:prod.cycle_time,operator:prod.operator,good:editVals.good,rejection:editVals.rejection,down:editVals.down,remarks:editVals.remarks,editId:prod.id}]
       })
@@ -6514,10 +6516,16 @@ function BulkProductionTab({user}:{user:User}) {
             {['Machine','Shift','Product','Slot','Good','Rej','Down','By','Action'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
           </tr></thead>
-          <tbody>{history.map((h:any,i:number)=>{
-            const isEditing=editingId===h.id
-            const slotName=h.production_slots?.[0]?.slot_name||'--'
-            return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+          <tbody>{history.flatMap((h:any)=>{
+            const slots=(h.production_slots&&h.production_slots.length>0)?h.production_slots:[{slot_name:'--',good_parts:h.good_parts,rejection:h.rejection,downtime:h.downtime}]
+            // sort slots in standard order
+            const order=['8am-11am','11am-2pm','2pm-5pm','5pm-8pm','8pm-11pm','11pm-2am','2am-5am','5am-8am']
+            const sorted=[...slots].sort((a:any,b:any)=>order.indexOf(a.slot_name)-order.indexOf(b.slot_name))
+            return sorted.map((s:any,si:number)=>({h,s,key:h.id+'-'+(s.slot_name||si)}))
+          }).map(({h,s,key}:any,i:number)=>{
+            const isEditing=editingId===key
+            const slotName=s.slot_name||'--'
+            return <tr key={key} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
               <td style={{padding:'6px 8px',fontWeight:700,color:'#1F3864'}}>{h.machine}</td>
               <td style={{padding:'6px 8px',fontSize:10}}>{h.shift?.includes('Day')?'☀️ Day':'🌙 Night'}</td>
               <td style={{padding:'6px 8px',fontSize:10}}>{h.product}</td>
@@ -6528,16 +6536,16 @@ function BulkProductionTab({user}:{user:User}) {
                 <td style={{padding:2}}><input type="number" value={editVals.down} onChange={e=>setEditVals(p=>({...p,down:e.target.value}))} style={{width:55,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
                 <td style={{padding:'6px 8px',fontSize:10}}>{h.entered_by}</td>
                 <td style={{padding:4,display:'flex',gap:4}}>
-                  <button onClick={()=>saveEdit(h)} style={{background:'#276221',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',fontSize:10,cursor:'pointer',fontWeight:700}}>Save</button>
+                  <button onClick={()=>saveEdit(h,s.slot_name)} style={{background:'#276221',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',fontSize:10,cursor:'pointer',fontWeight:700}}>Save</button>
                   <button onClick={()=>setEditingId(null)} style={{background:'#666',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',fontSize:10,cursor:'pointer'}}>Cancel</button>
                 </td>
               </>:<>
-                <td style={{padding:'6px 8px',color:'#276221',fontWeight:700}}>{(h.good_parts||0).toLocaleString()}</td>
-                <td style={{padding:'6px 8px',color:'#C00000',fontWeight:700}}>{h.rejection||0}</td>
-                <td style={{padding:'6px 8px',color:'#854F0B'}}>{h.downtime||0}m</td>
+                <td style={{padding:'6px 8px',color:'#276221',fontWeight:700}}>{(s.good_parts||0).toLocaleString()}</td>
+                <td style={{padding:'6px 8px',color:'#C00000',fontWeight:700}}>{s.rejection||0}</td>
+                <td style={{padding:'6px 8px',color:'#854F0B'}}>{s.downtime||0}m</td>
                 <td style={{padding:'6px 8px',fontSize:10}}>{h.entered_by}</td>
                 <td style={{padding:4}}>
-                  <button onClick={()=>startEdit(h)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>✏️ Edit</button>
+                  <button onClick={()=>startEdit(h,s)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>✏️ Edit</button>
                 </td>
               </>}
             </tr>
