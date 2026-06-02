@@ -2342,6 +2342,7 @@ function MouldChangeTab({user}:{user:User}) {
 function MouldPMTab({user}:{user:User}) {
   const [moulds,setMoulds]=useState<any[]>([])
   const [loading,setLoading]=useState(true)
+  const [pmFilter,setPmFilter]=useState<string>('')
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [checks,setChecks]=useState<Record<number,string>>({})
@@ -2380,18 +2381,24 @@ function MouldPMTab({user}:{user:User}) {
   let checkIdx=0
   return <div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total Moulds</div><div style={{fontSize:20,fontWeight:700}}>{moulds.length}</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Overdue</div><div style={{fontSize:20,fontWeight:700,color:'#C00000'}}>{overdue}</div></div>
-      <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Due Soon</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{dueSoon}</div></div>
+      <div style={{...S.met,cursor:'pointer',border:pmFilter===''?'2px solid #1F3864':'1px solid #E0E0E0'}} onClick={()=>setPmFilter('')}><div style={{fontSize:10,color:'#666'}}>Total Moulds</div><div style={{fontSize:20,fontWeight:700}}>{moulds.length}</div></div>
+      <div style={{...S.met,cursor:'pointer',border:pmFilter==='OVERDUE'?'2px solid #C00000':'1px solid #E0E0E0'}} onClick={()=>setPmFilter(pmFilter==='OVERDUE'?'':'OVERDUE')}><div style={{fontSize:10,color:'#666'}}>Overdue 👆</div><div style={{fontSize:20,fontWeight:700,color:'#C00000'}}>{overdue}</div></div>
+      <div style={{...S.met,cursor:'pointer',border:pmFilter==='DUE SOON'?'2px solid #854F0B':'1px solid #E0E0E0'}} onClick={()=>setPmFilter(pmFilter==='DUE SOON'?'':'DUE SOON')}><div style={{fontSize:10,color:'#666'}}>Due Soon 👆</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{dueSoon}</div></div>
     </div>
 
     {/* Status table */}
     <div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:8}}>Mould PM Status</div>
+      <div style={{fontWeight:700,marginBottom:8}}>Mould PM Status {pmFilter&&<span style={{fontSize:11,color:'#1F3864',fontWeight:600}}>— {pmFilter} only <span style={{color:'#C00000',cursor:'pointer'}} onClick={()=>setPmFilter('')}>✕ clear</span></span>}</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>{['Mould','Code','Current','PM At','Progress','Remaining','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
-          <tbody>{moulds.length===0?<tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>Koi mould setup nahi!</td></tr>:moulds.map((m:any,i:number)=>{
+          <tbody>{(()=>{
+            const rank=(s:string)=>s==='OVERDUE'?0:s==='DUE SOON'?1:2
+            const shown=moulds
+              .filter((m:any)=>pmFilter?m.status===pmFilter:true)
+              .sort((a:any,b:any)=>rank(a.status)-rank(b.status))
+            if(shown.length===0) return <tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>{pmFilter?`Koi ${pmFilter} mould nahi!`:'Koi mould setup nahi!'}</td></tr>
+            return shown.map((m:any,i:number)=>{
             const col=m.status==='OVERDUE'?'#C00000':m.status==='DUE SOON'?'#854F0B':'#276221'
             const bg=m.status==='OVERDUE'?'#FFEBEE':m.status==='DUE SOON'?'#FFF3E0':'#E8F5E9'
             return <tr key={i}>
@@ -2408,7 +2415,7 @@ function MouldPMTab({user}:{user:User}) {
               <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>{m.remaining>0?m.remaining.toLocaleString()+' shots':'OVERDUE'}</td>
               <td style={{padding:'6px 8px'}}><span style={{background:bg,color:col,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{m.status}</span></td>
             </tr>
-          })}</tbody>
+          })})()}</tbody>
         </table>
       </div>
     </div>
@@ -6518,10 +6525,13 @@ function BulkProductionTab({user}:{user:User}) {
           </tr></thead>
           <tbody>{history.flatMap((h:any)=>{
             const slots=(h.production_slots&&h.production_slots.length>0)?h.production_slots:[{slot_name:'--',good_parts:h.good_parts,rejection:h.rejection,downtime:h.downtime}]
-            // sort slots in standard order
+            return slots.map((s:any)=>({h,s,key:h.id+'-'+(s.slot_name||'x')}))
+          }).sort((a:any,b:any)=>{
+            // sort by slot order first, then machine name
             const order=['8am-11am','11am-2pm','2pm-5pm','5pm-8pm','8pm-11pm','11pm-2am','2am-5am','5am-8am']
-            const sorted=[...slots].sort((a:any,b:any)=>order.indexOf(a.slot_name)-order.indexOf(b.slot_name))
-            return sorted.map((s:any,si:number)=>({h,s,key:h.id+'-'+(s.slot_name||si)}))
+            const sa=order.indexOf(a.s.slot_name), sb=order.indexOf(b.s.slot_name)
+            if(sa!==sb) return sa-sb
+            return (a.h.machine||'').localeCompare(b.h.machine||'')
           }).map(({h,s,key}:any,i:number)=>{
             const isEditing=editingId===key
             const slotName=s.slot_name||'--'
