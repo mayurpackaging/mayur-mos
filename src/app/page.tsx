@@ -1552,6 +1552,7 @@ function QCAlertBanner({user}:{user:User}) {
         {a.weight_actual&&a.weight_standard&&<div style={{color:'#C00000',marginTop:3}}>Weight: {a.weight_actual}g (std: {a.weight_standard}g)</div>}
         {a.remarks&&<div style={{color:'#666',marginTop:3,fontStyle:'italic'}}>QC remarks: {a.remarks}</div>}
       </div>
+      <CopyMsgBtn message={`🚨 *QC Alert — Action Required!*\n${a.machine} | ${a.date} ${a.check_time||''}\n${a.product||''}${a.mould_name?' · '+a.mould_name:''}\n\n*Issue:* ${a.issues}${(a.weight_actual&&a.weight_standard)?`\nWeight: ${a.weight_actual}g (std: ${a.weight_standard}g)`:''}${a.remarks?`\nRemarks: ${a.remarks}`:''}\n\nKripya jaldi action lein.`}/>
       {resolveId===a.id
         ?<div>
           <textarea style={{...S.fi,height:60,resize:'none' as const,marginBottom:6}} value={resolution} onChange={e=>setResolution(e.target.value)} placeholder="Kya kiya — e.g. cavity 13 polish done, speed adjust ki, mould clean kiya..."/>
@@ -8109,6 +8110,7 @@ function QCAlertsTab({user}:{user:User}) {
               <span style={{fontWeight:f.bold?700:400,color:'#1a1a1a'}}>{f.v}</span>
             </div>
           ))}
+          <CopyMsgBtn message={`🚨 *QC Alert — Action Required!*\n${selected.machine||''} | ${selected.date} ${selected.check_time||''}\n${selected.product||''}${selected.mould_name?' · '+selected.mould_name:''}\n\n*Issue:* ${selected.issues}${(selected.weight_actual!=null&&selected.weight_standard!=null)?`\nWeight: ${selected.weight_actual}g (std: ${selected.weight_standard}g)`:''}${selected.remarks?`\nRemarks: ${selected.remarks}`:''}\nReported by: ${selected.qc_person||'--'}\n\nKripya jaldi action lein.`}/>
         </div>
 
         {/* Operator action */}
