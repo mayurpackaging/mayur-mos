@@ -2352,7 +2352,26 @@ function MouldPMTab({user}:{user:User}) {
   const [setupForm,setSetupForm]=useState({mouldName:'',pmShots:'',currentShots:'',plant:'',machine:''})
   const [doneForm,setDoneForm]=useState({pmDate:nd(),mouldName:'',doneBy:OPS[0],currentShots:'',overallResult:'OK',correction:''})
 
-  const load=useCallback(()=>{fetch('/api/mouldpm').then(r=>r.json()).then(d=>{setMoulds(d.moulds||[]);setLoading(false)})},[])
+  const load=useCallback(()=>{fetch('/api/mouldpm').then(r=>r.json()).then(d=>{
+    const list=(d.moulds||[]).map((m:any)=>{
+      const freq=m.pm_frequency_shots||0
+      const cur=m.current_shots||0
+      const nextAt=m.next_pm_at_shots||0
+      // last PM hua tha is shots pe:
+      const lastPmAt=nextAt-freq
+      // PM ke baad ab tak chale:
+      const sinceLastPM=Math.max(0, cur-lastPmAt)
+      // remaining shots tak next PM:
+      const remaining=nextAt-cur
+      // percentage (PM ke baad se, 0 se restart):
+      const pct=freq>0?Math.round((sinceLastPM/freq)*100):0
+      // status
+      const pct10=freq*0.1
+      const status=remaining<=0?'OVERDUE':remaining<pct10?'DUE SOON':'Active'
+      return {...m, sinceLastPM, remaining, pct, status}
+    })
+    setMoulds(list);setLoading(false)
+  })},[])
   useEffect(()=>{load()},[load])
 
   const setCheck=(i:number,val:string)=>setChecks(p=>({...p,[i]:val}))
@@ -2394,20 +2413,21 @@ function MouldPMTab({user}:{user:User}) {
       <div style={{fontWeight:700,marginBottom:8}}>Mould PM Status {pmFilter&&<span style={{fontSize:11,color:'#1F3864',fontWeight:600}}>— {pmFilter} only <span style={{color:'#C00000',cursor:'pointer'}} onClick={()=>setPmFilter('')}>✕ clear</span></span>}</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Mould','Code','Current','PM At','Progress','Remaining','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <thead><tr>{['Mould','Code','Total Shots','PM Baad Shots','PM At','Progress','Remaining','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
           <tbody>{(()=>{
             const rank=(s:string)=>s==='OVERDUE'?0:s==='DUE SOON'?1:2
             const shown=moulds
               .filter((m:any)=>pmFilter?m.status===pmFilter:true)
               .sort((a:any,b:any)=>rank(a.status)-rank(b.status))
-            if(shown.length===0) return <tr><td colSpan={7} style={{textAlign:'center',color:'#666',padding:16}}>{pmFilter?`Koi ${pmFilter} mould nahi!`:'Koi mould setup nahi!'}</td></tr>
+            if(shown.length===0) return <tr><td colSpan={8} style={{textAlign:'center',color:'#666',padding:16}}>{pmFilter?`Koi ${pmFilter} mould nahi!`:'Koi mould setup nahi!'}</td></tr>
             return shown.map((m:any,i:number)=>{
             const col=m.status==='OVERDUE'?'#C00000':m.status==='DUE SOON'?'#854F0B':'#276221'
             const bg=m.status==='OVERDUE'?'#FFEBEE':m.status==='DUE SOON'?'#FFF3E0':'#E8F5E9'
             return <tr key={i}>
               <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{m.mould_name}</td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{m.mould_code||'--'}</td>
-              <td style={{padding:'6px 8px',textAlign:'center'}}>{(m.current_shots||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',color:'#666'}}>{(m.current_shots||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#1F3864'}}>{(m.sinceLastPM||0).toLocaleString()}</td>
               <td style={{padding:'6px 8px',textAlign:'center'}}>{(m.next_pm_at_shots||0).toLocaleString()}</td>
               <td style={{padding:'6px 8px'}}>
                 <div style={{display:'flex',alignItems:'center',gap:4}}>
