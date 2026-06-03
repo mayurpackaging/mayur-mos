@@ -12,6 +12,7 @@ const ML: Record<string, string> = {
   mouldhistory:"Mould History",
   qcalerts:"QC Alerts",
   processcheck:"✅ Process Checker",
+  guide:"📖 Help / Guide",
   reports:"Reports", users:"Users", performance:"Performance"
 }
 
@@ -283,7 +284,8 @@ export default function MOS() {
         {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
         {tab==='qcalerts'&&<QCAlertsTab user={user}/>}
         {tab==='processcheck'&&<ProcessCheckTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck'].includes(tab)&&(
+        {tab==='guide'&&<GuideTab/>}
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -8733,5 +8735,119 @@ function CopyMsgBtn({message,user}:{message:string,user?:User}) {
     <button onClick={doCopy} style={{background:copied?'#276221':'#25D366',color:'#fff',border:'none',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
       {copied?'✅ Copied! WhatsApp pe paste karo':'📋 Copy for WhatsApp'}
     </button>
+  </div>
+}
+
+// ─── Help / Guide tab for Process Coordinator ──────────────────
+function GuideTab() {
+  const Sec=({n,title,children}:{n:string,title:string,children:any})=>(
+    <div style={{background:'#fff',borderRadius:10,padding:'14px 16px',marginBottom:10,border:'1px solid #E8E8E8'}}>
+      <div style={{fontWeight:700,color:'#1F3864',fontSize:15,marginBottom:8,borderBottom:'2px solid #1F3864',paddingBottom:6}}>{n}. {title}</div>
+      {children}
+    </div>
+  )
+  const Step=({children}:{children:any})=><div style={{fontSize:13,color:'#333',marginBottom:6,paddingLeft:6}}>‣ {children}</div>
+  const Box=({color,bg,title,children}:{color:string,bg:string,title:string,children:any})=>(
+    <div style={{background:bg,borderLeft:`4px solid ${color}`,borderRadius:6,padding:'8px 12px',marginTop:8}}>
+      <div style={{fontWeight:700,color,fontSize:12,marginBottom:3}}>{title}</div>
+      <div style={{fontSize:12,color:'#333'}}>{children}</div>
+    </div>
+  )
+  return <div style={{maxWidth:700,margin:'0 auto'}}>
+    <div style={{textAlign:'center',marginBottom:14}}>
+      <div style={{fontWeight:800,color:'#1F3864',fontSize:22}}>📖 Process Coordinator Guide</div>
+      <div style={{color:'#E65100',fontWeight:700,fontSize:14,marginTop:2}}>Kaam Kaise Karein — Easy Steps</div>
+    </div>
+
+    <Box color="#E65100" bg="#FFF3E0" title="Aapka Kaam Ek Line Mein:">
+      Har cheez check karo — entry hui ya nahi. Jahan problem ho, uska message Copy karke WhatsApp pe bhej do.
+    </Box>
+    <div style={{height:10}}/>
+
+    <Sec n="1" title="Login Kaise Karein">
+      <Step>App kholo: <b>mayur-mos.vercel.app</b></Step>
+      <Step>Username: <b>coordinator</b></Step>
+      <Step>Password: <b>coord@123</b></Step>
+      <Step>Login dabao. Ho gaya!</Step>
+    </Sec>
+
+    <Sec n="2" title="Sabse Pehle — Process Checker Kholo">
+      <div style={{fontSize:13,marginBottom:6}}>Yahi aapki main screen hai. Ek nazar mein dikh jata hai aaj kya hua aur kya baaki hai:</div>
+      <Step>Production entry hui ya nahi</Step>
+      <Step>Quality check hua ya nahi</Step>
+      <Step>Rejection entry hui ya nahi</Step>
+      <Step>Breakdown pending ya theek hua</Step>
+      <Step>Stock (IMS) entry hui ya nahi</Step>
+      <Step>Mould PM due ya overdue</Step>
+      <Box color="#276221" bg="#E8F5E9" title="Green ✅ matlab:">Kaam ho gaya — kuch karne ki zaroorat nahi.</Box>
+      <Box color="#C00000" bg="#FFEBEE" title="Red ❌ / Orange ⚠️ matlab:">Kaam baaki hai — neeche Copy button dabao aur WhatsApp pe bhej do.</Box>
+    </Sec>
+
+    <Sec n="3" title="WhatsApp Message Kaise Bhejein (Sabse Important)">
+      <div style={{fontSize:13,marginBottom:6}}>Jab problem dikhe, uske neeche green button hota hai: 📋 Copy for WhatsApp</div>
+      <Step>Copy button dabao.</Step>
+      <Step>Button green ho jayega: ✅ Copied!</Step>
+      <Step>WhatsApp kholo (bande ya group ko).</Step>
+      <Step>Message box mein ungli daba ke rakho → Paste.</Step>
+      <Step>Message aa jayega — Send dabao!</Step>
+      <Box color="#1F3864" bg="#E6F1FB" title="Message khud likhna NAHI hai:">App khud poora message bana deta hai. Aapko bas Copy karke bhejna hai.</Box>
+    </Sec>
+
+    <Sec n="4" title="Production Check Karna">
+      <Step>Har plant ke saamne dikhega kitne slot ki entry hui (jaise 'Day: 3/4 slots').</Step>
+      <Step>4/4 green — sab ho gaya. Kam hai toh slot baaki hai.</Step>
+      <Step>Copy button dabao → operator ko bhej do.</Step>
+    </Sec>
+
+    <Sec n="5" title="Quality Check Karna">
+      <Step>Quality wale ne check kiya ya nahi — dekho.</Step>
+      <Step>Pending hai toh Copy → quality wale ko bhejo.</Step>
+      <Step>QC Alert (lal box) aaye toh uska Copy button turant bhej do.</Step>
+    </Sec>
+
+    <Sec n="6" title="Rejection Track Karna">
+      <div style={{fontSize:13,marginBottom:6}}>Rejection ke neeche button: 📊 Rejection Tracking — use dabao. Ismein dikhega:</div>
+      <Step>Last entry kab hui.</Step>
+      <Step>Kaunse din entry NAHI hui (red mein).</Step>
+      <Step>Production vs Quality rejection ka DIFFERENCE.</Step>
+      <Step>Kis machine pe kitna difference.</Step>
+      <Box color="#E65100" bg="#FFF3E0" title="Difference kyun important:">Production ne 1000 bola par entry sirf 600 — toh 400 ka gap. Matlab entry poori nahi hui. Follow-up karo.</Box>
+    </Sec>
+
+    <Sec n="7" title="Breakdown Dekhna">
+      <Step>🔴 Pending — abhi theek nahi hua. Copy → maintenance ko bhejo.</Step>
+      <Step>✅ Resolved — theek ho gaya.</Step>
+      <Step>Resolved pe click karo → summary khulegi (kya hua, kaise theek hua). Copy karke group mein bhej do.</Step>
+    </Sec>
+
+    <Sec n="8" title="Stock (IMS) Entry Karna">
+      <Step>IMS tab kholo.</Step>
+      <Step>Aaj ka stock bharo (jo aaya/gaya).</Step>
+      <Step>Save dabao.</Step>
+    </Sec>
+
+    <Sec n="9" title="Spares Entry Karna">
+      <Step>Spares ka data WhatsApp group pe aata hai.</Step>
+      <Step>Spares tab kholo.</Step>
+      <Step>Jo part aaya — entry karo. Jo use hua aur kahan — woh entry karo.</Step>
+      <Step>Save dabao.</Step>
+    </Sec>
+
+    <Sec n="10" title="Mould PM Reminder">
+      <Step>Mould PM tab kholo.</Step>
+      <Step>'Overdue' / 'Due Soon' box pe click karke dekho kaunsa mould due hai.</Step>
+      <Step>Process Checker mein bhi Mould PM ka Copy button hai — reminder bhej do.</Step>
+    </Sec>
+
+    <div style={{background:'#E8F5E9',borderLeft:'4px solid #276221',borderRadius:8,padding:'12px 16px',marginTop:10}}>
+      <div style={{fontWeight:800,color:'#276221',fontSize:15,marginBottom:8}}>Bas Itna Yaad Rakho:</div>
+      <div style={{fontSize:13,lineHeight:1.7}}>
+        <b>1. DEKHO</b> — Process Checker mein sab pending dikhega.<br/>
+        <b>2. COPY</b> — pending ke neeche green button dabao.<br/>
+        <b>3. BHEJO</b> — WhatsApp pe paste karke send karo.<br/>
+        <b>4. ENTRY</b> — Stock aur Spares khud bharo.<br/><br/>
+        Itna kar liya toh aapka poora din ka kaam ho gaya! 👍
+      </div>
+    </div>
   </div>
 }
