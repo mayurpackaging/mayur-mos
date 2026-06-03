@@ -6576,7 +6576,7 @@ function BulkProductionTab({user}:{user:User}) {
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['Machine','Shift','Product','Slot','Good','Rej','Down','By','Action'].map(h=>
+            {['Machine','Shift','Product','Slot','Good','Rej','Down','Remarks','By','Action'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
           </tr></thead>
           <tbody>{history.flatMap((h:any)=>{
@@ -6600,6 +6600,7 @@ function BulkProductionTab({user}:{user:User}) {
                 <td style={{padding:2}}><input type="number" value={editVals.good} onChange={e=>setEditVals(p=>({...p,good:e.target.value}))} style={{width:70,padding:'4px',border:'2px solid #276221',borderRadius:4,textAlign:'center',fontSize:12,fontWeight:700}}/></td>
                 <td style={{padding:2}}><input type="number" value={editVals.rejection} onChange={e=>setEditVals(p=>({...p,rejection:e.target.value}))} style={{width:60,padding:'4px',border:'2px solid #C00000',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
                 <td style={{padding:2}}><input type="number" value={editVals.down} onChange={e=>setEditVals(p=>({...p,down:e.target.value}))} style={{width:55,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,textAlign:'center',fontSize:12}}/></td>
+                <td style={{padding:2}}><input type="text" value={editVals.remarks} onChange={e=>setEditVals(p=>({...p,remarks:e.target.value}))} style={{width:120,padding:'4px',border:'1px solid #E0E0E0',borderRadius:4,fontSize:11}} placeholder="Remarks"/></td>
                 <td style={{padding:'6px 8px',fontSize:10}}>{h.entered_by}</td>
                 <td style={{padding:4,display:'flex',gap:4}}>
                   <button onClick={()=>saveEdit(h,s.slot_name)} style={{background:'#276221',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',fontSize:10,cursor:'pointer',fontWeight:700}}>Save</button>
@@ -6609,6 +6610,7 @@ function BulkProductionTab({user}:{user:User}) {
                 <td style={{padding:'6px 8px',color:'#276221',fontWeight:700}}>{(s.good_parts||0).toLocaleString()}</td>
                 <td style={{padding:'6px 8px',color:'#C00000',fontWeight:700}}>{s.rejection||0}</td>
                 <td style={{padding:'6px 8px',color:'#854F0B'}}>{s.downtime||0}m</td>
+                <td style={{padding:'6px 8px',fontSize:10,color:'#555',maxWidth:140,wordBreak:'break-word' as const}}>{s.remarks||'--'}</td>
                 <td style={{padding:'6px 8px',fontSize:10}}>{h.entered_by}</td>
                 <td style={{padding:4}}>
                   <button onClick={()=>startEdit(h,s)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>✏️ Edit</button>
