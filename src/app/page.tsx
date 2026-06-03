@@ -8388,6 +8388,12 @@ function ProcessCheckTab({user}:{user:User}) {
 
   useEffect(()=>{load()},[date])
 
+  // Auto-refresh every 60s so the 30-min breakdown alarm stays live
+  useEffect(()=>{
+    const t=setInterval(()=>{ if(isToday) load() },60000)
+    return ()=>clearInterval(t)
+  },[date,isToday])
+
   // current IST time HH:MM
   const nowHM=()=>{
     const ist=new Date(Date.now()+5.5*60*60*1000)
@@ -8448,6 +8454,29 @@ function ProcessCheckTab({user}:{user:User}) {
         ? <div style={{marginTop:8,background:'rgba(255,82,82,0.25)',borderRadius:8,padding:'6px 12px',fontSize:12,fontWeight:600}}>⚠️ {pendingCount} cheezein pending — follow-up karo!</div>
         : <div style={{marginTop:8,background:'rgba(76,175,80,0.3)',borderRadius:8,padding:'6px 12px',fontSize:12,fontWeight:600}}>✅ Sab kuch on track!</div>}
     </div>
+
+    {/* 🚨 30-min+ Breakdown ALARM */}
+    {(()=>{
+      const list=(data?.breakdown?.pendingList||[]).map((b:any)=>{
+        const elapsed=b.reported_time?Math.round((Date.now()-new Date(b.reported_time).getTime())/60000):0
+        return {...b,elapsed}
+      }).filter((b:any)=>b.elapsed>=30)
+      if(list.length===0) return null
+      return <div style={{background:'#C00000',borderRadius:12,padding:'12px 14px',marginBottom:10,color:'#fff',animation:'none',boxShadow:'0 2px 8px rgba(192,0,0,0.4)'}}>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:8,display:'flex',alignItems:'center',gap:8}}>
+          🚨 ALARM — {list.length} Breakdown 30 min+ Pending!
+        </div>
+        {list.map((b:any,i:number)=>{
+          const h=Math.floor(b.elapsed/60),m=b.elapsed%60
+          const elTxt=h>0?`${h}h ${m}m`:`${m}m`
+          return <div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px 10px',marginBottom:6}}>
+            <div style={{fontSize:13,fontWeight:700}}>{b.machine} ({b.plant}) — {elTxt} se pending!</div>
+            <div style={{fontSize:11,opacity:0.9,marginTop:2}}>{b.problem}</div>
+            <CopyMsgBtn user={user} message={`🚨 *URGENT — Breakdown ${elTxt} se pending!*\n${b.machine} — ${b.plant}\nProblem: ${b.problem}\nDate: ${date}\n\nYeh breakdown ${elTxt} se theek nahi hua hai. *Kab tak theek hoga?* Turant batayein aur jaldi resolve karein.`}/>
+          </div>
+        })}
+      </div>
+    })()}
 
     {/* Settings panel */}
     {showSettings&&<div style={{...S.card,border:'2px solid #1F3864'}}>
