@@ -8388,12 +8388,6 @@ function ProcessCheckTab({user}:{user:User}) {
 
   useEffect(()=>{load()},[date])
 
-  // Auto-refresh every 60s so the 30-min breakdown alarm stays live
-  useEffect(()=>{
-    const t=setInterval(()=>{ if(isToday) load() },60000)
-    return ()=>clearInterval(t)
-  },[date,isToday])
-
   // current IST time HH:MM
   const nowHM=()=>{
     const ist=new Date(Date.now()+5.5*60*60*1000)
@@ -8401,6 +8395,13 @@ function ProcessCheckTab({user}:{user:User}) {
   }
   const isToday=date===nd()
   const curTime=nowHM()
+
+  // Auto-refresh every 60s so the 30-min breakdown alarm stays live
+  useEffect(()=>{
+    const t=setInterval(()=>{ if(isToday) load() },60000)
+    return ()=>clearInterval(t)
+  },[date,isToday])
+
   const pastDue=(due:string)=>isToday&&due&&curTime>due
 
   const saveSettings=async()=>{
