@@ -2682,7 +2682,7 @@ function BreakdownTab({user}:{user:User}) {
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
             <div>
               <div style={{fontWeight:700,fontSize:13,color:'#1F3864'}}>{b.machine} — {b.plant}</div>
-              <div style={{fontSize:11,color:'#666',marginTop:2}}>{b.category} | {b.bd_id||b.id?.slice(0,8)}</div>
+              <div style={{fontSize:11,color:'#666',marginTop:2}}>{b.category} | {b.bd_id||b.id?.slice(0,8)} {b.date?`| 📅 ${b.date}`:''}</div>
               {b.mould_running&&<div style={{fontSize:11,color:'#1F3864',marginTop:3,fontWeight:600,background:'#E8EDF5',display:'inline-block',padding:'2px 8px',borderRadius:4}}>⚙️ {b.mould_running}</div>}
               <div style={{fontSize:12,color:'#333',marginTop:4,fontWeight:500}}>{b.problem}</div>
             </div>
@@ -2884,7 +2884,7 @@ function BreakdownTab({user}:{user:User}) {
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['BD ID','Machine','Plant','⚙️ Mould','Category','Problem','Analysis','Solution','Parts Used','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
+            {['BD ID','📅 Date','Machine','Plant','⚙️ Mould','Category','Problem','Analysis','Solution','Parts Used','🔴 Reported','🔧 Work Start','✅ Resolved','⏱️ Downtime','By'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left',whiteSpace:'nowrap' as const}}>{h}</th>)}
           </tr></thead>
           <tbody>{resolved.map((b:any,i:number)=>{
@@ -2893,6 +2893,7 @@ function BreakdownTab({user}:{user:User}) {
             const dtCol=dtMins>0?(dtMins<=60?'#276221':dtMins<=180?'#854F0B':'#C00000'):'#666'
             return <tr key={i} onClick={()=>setSelectedBD(b)} style={{background:i%2===0?'#F8FFF8':'#fff',cursor:'pointer'}} onMouseEnter={e=>(e.currentTarget.style.background='#E8EDF5')} onMouseLeave={e=>(e.currentTarget.style.background=i%2===0?'#F8FFF8':'#fff')}>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666',whiteSpace:'nowrap' as const}}>{b.bd_id||b.id?.slice(0,8)}</td>
+              <td style={{padding:'6px 8px',fontSize:10,color:'#1F3864',fontWeight:600,whiteSpace:'nowrap' as const}}>{b.date||'--'}</td>
               <td style={{padding:'6px 8px',fontWeight:600,color:'#1F3864',whiteSpace:'nowrap' as const}}>{b.machine}</td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#555',whiteSpace:'nowrap' as const}}>{b.plant||'--'}</td>
               <td style={{padding:'6px 8px',fontSize:10,fontWeight:600,color:'#854F0B',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={b.mould_running||'--'}>{b.mould_running||'--'}</td>
