@@ -110,7 +110,7 @@ export async function GET(req: Request) {
     pending: bdPending.length,
     resolved: bd.filter((b: any) => b.status === 'Resolved').length,
     noAnalysis: bdNoAnalysis.length,
-    pendingList: bdPending.map((b: any) => ({ machine: b.machine, plant: b.plant, problem: b.problem })),
+    pendingList: bdPending.map((b: any) => ({ machine: b.machine, plant: b.plant, problem: b.problem, reported_time: b.reported_time, bd_id: b.id })),
   }
 
   // ── MOULD PM (due / overdue) ──
