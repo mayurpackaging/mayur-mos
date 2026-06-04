@@ -3553,6 +3553,18 @@ function SparesTab({user}:{user:User}) {
   const [partHistory,setPartHistory]=useState<any[]>([])
   const [partHistoryLoading,setPartHistoryLoading]=useState(false)
 
+  const printSpares=(list)=>{
+    const today=new Date().toLocaleDateString('en-IN')
+    const rows=list.map((s,i)=>{
+      const loc=[s.plant,s.room,s.almirah,s.box_no].filter(Boolean).join(' / ')
+      const stColor=s.status==='Out of Stock'?'#C00000':s.status==='Low'?'#E65100':'#276221'
+      return `<tr><td style="text-align:center">${i+1}</td><td><b>${s.part_name||''}</b></td><td>${s.category||''}</td><td>${loc||'--'}</td><td style="text-align:center;font-weight:bold">${s.current_stock??0} ${s.unit||''}</td><td style="text-align:center">${s.min_qty||0}</td><td style="text-align:center;color:${stColor};font-weight:bold">${s.status||''}</td><td>${s.last_vendor||'--'}</td><td style="text-align:right">${s.last_price?'Rs '+s.last_price:'--'}</td></tr>`
+    }).join('')
+    const html=`<html><head><title>Spares Stock List</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#222}h1{color:#1F3864;font-size:20px;margin:0}.sub{color:#666;font-size:12px;margin:4px 0 16px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1F3864;color:#fff;padding:6px 8px;text-align:left;border:1px solid #1F3864}td{padding:5px 8px;border:1px solid #ddd}tr:nth-child(even){background:#f7f7f7}@media print{button{display:none}}</style></head><body><h1>Mayur - Spares Stock List</h1><div class="sub">Date: ${today} | Total Items: ${list.length}</div><table><thead><tr><th>#</th><th>Part Name</th><th>Category</th><th>Location</th><th>Stock</th><th>Min</th><th>Status</th><th>Vendor</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table><button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button></body></html>`
+    const w=window.open('','_blank')
+    if(w){ w.document.write(html); w.document.close() }
+  }
+
   const loadPartHistory=async(part:any)=>{
     setSelectedPart(part)
     setPartHistoryLoading(true)
@@ -3676,7 +3688,10 @@ function SparesTab({user}:{user:User}) {
 
     {/* Stock table */}
     {spareView==='stock'&&<div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:8,color:'#1F3864',fontSize:13}}>📦 Spares Stock Status {canEdit&&<span style={{fontSize:10,color:'#854F0B',marginLeft:8}}>✏️ Edit rights: Sirf aapke paas</span>}</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>📦 Spares Stock Status {canEdit&&<span style={{fontSize:10,color:'#854F0B',marginLeft:8}}>✏️ Edit rights: Sirf aapke paas</span>}</div>
+        <button onClick={()=>printSpares(spares.filter((s:any)=>!spareSearch||s.part_name?.toLowerCase().includes(spareSearch.toLowerCase())))} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>🖨️ Print List</button>
+      </div>
       <div style={{overflowX:'auto'}}>
         {/* Part History Modal */}
         {selectedPart&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
