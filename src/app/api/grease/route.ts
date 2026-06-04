@@ -60,11 +60,28 @@ export async function GET(req: Request) {
     if (r.machine && !lastByMachine[r.machine]) lastByMachine[r.machine] = r
   }
 
+  // plant-wise stock from spare_movements (In - Used per plant per grease)
+  const greaseNames = (allSpares || []).map((s: any) => s.part_name)
+  const plantWise: Record<string, Record<string, number>> = {}
+  for (const gn of greaseNames) {
+    const { data: mv } = await supabase.from('spare_movements')
+      .select('plant,action,qty').ilike('part_name', gn)
+    const byPlant: Record<string, number> = {}
+    for (const m of (mv || [])) {
+      const p = m.plant || 'No Plant'
+      const q = parseFloat(m.qty) || 0
+      if (!byPlant[p]) byPlant[p] = 0
+      byPlant[p] += (m.action === 'Stock In' ? q : -q)
+    }
+    plantWise[gn] = byPlant
+  }
+
   return NextResponse.json({
     success: true,
     stock: allSpares || [],
     logs: logs || [],
     lastByMachine: Object.values(lastByMachine),
+    plantWise,
   })
 }
 
