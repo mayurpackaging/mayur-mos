@@ -6,6 +6,39 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+export const dynamic = 'force-dynamic'
+
+// ─── Recalculate stock for a part from ALL its movements (running total) ───
+// This is the single source of truth. Stock In = +qty, everything else = -qty.
+// It also rewrites new_stock on every movement row so history shows correct running stock.
+async function recalcStock(partName: string) {
+  // get all movements oldest-first
+  const { data: movs } = await supabase.from('spare_movements')
+    .select('id,action,qty,created_at')
+    .ilike('part_name', partName)
+    .order('created_at', { ascending: true })
+
+  let running = 0
+  for (const m of (movs || [])) {
+    const q = parseFloat(m.qty) || 0
+    if (m.action === 'Stock In') running += q
+    else running -= q   // Used in Machine / Stock Out
+    if (running < 0) running = 0
+    // fix this row's new_stock if wrong
+    if ((m as any).new_stock !== running) {
+      await supabase.from('spare_movements').update({ new_stock: running }).eq('id', m.id)
+    }
+  }
+
+  // update master current_stock
+  const { data: spare } = await supabase.from('spares_master').select('id,min_qty').ilike('part_name', partName).maybeSingle()
+  if (spare) {
+    const status = running === 0 ? 'Out of Stock' : running < (spare.min_qty || 0) ? 'Low' : 'OK'
+    await supabase.from('spares_master').update({ current_stock: running, status, last_updated: new Date().toISOString() }).eq('id', spare.id)
+  }
+  return running
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const part = searchParams.get('part') || ''
@@ -30,7 +63,6 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const d = await req.json()
-  // IST timezone fix — UTC+5:30
   const now = new Date()
   const istOffset = 5.5 * 60 * 60 * 1000
   const istDate = new Date(now.getTime() + istOffset)
@@ -42,22 +74,13 @@ export async function POST(req: Request) {
   for (const item of items) {
     if (!item.partName || !item.qty) continue
 
-    // Check if spare exists in master
     const { data: existing } = await supabase.from('spares_master').select('*').ilike('part_name', item.partName).maybeSingle()
-
     const qty = parseFloat(item.qty) || 0
     const price = parseFloat(item.pricePerPc) || 0
 
     if (existing) {
-      // Update stock
-      let newStock = existing.current_stock || 0
-      if (d.action === 'Stock In') newStock += qty
-      else if (d.action === 'Stock Out' || d.action === 'Used in Machine') newStock = Math.max(0, newStock - qty)
-
-      const status = newStock === 0 ? 'Out of Stock' : newStock < (existing.min_qty || 0) ? 'Low' : 'OK'
-
+      // update meta fields (stock recalculated below)
       await supabase.from('spares_master').update({
-        current_stock: newStock,
         last_price: price > 0 ? price : existing.last_price,
         last_vendor: d.vendor || existing.last_vendor,
         plant: item.plant || existing.plant || '',
@@ -65,70 +88,40 @@ export async function POST(req: Request) {
         almirah: item.almirah || existing.almirah || '',
         box_no: item.boxNo || existing.box_no || '',
         storage_type: item.storageType || existing.storage_type || 'Box',
-        status,
         last_updated: new Date().toISOString()
       }).eq('id', existing.id)
 
-      // Save movement
       await supabase.from('spare_movements').insert({
-        date: d.date || today,
-        slip_no: d.slipNo || '',
-        vendor: d.vendor || '',
-        part_name: item.partName,
-        category: existing.category || item.category || '',
-        action: d.action,
-        qty,
-        price_per_pc: price,
-        total_price: qty * price,
-        done_by: d.doneBy,
-        new_stock: newStock,
-        plant: d.plant || '',
-        machine: d.machine || '',
-        mould_no: d.mouldNo || '',
-        mould_name: d.mouldNo ? d.mouldNo.split('(')[0].trim() : '',
+        date: d.date || today, slip_no: d.slipNo || '', vendor: d.vendor || '',
+        part_name: item.partName, category: existing.category || item.category || '',
+        action: d.action, qty, price_per_pc: price, total_price: qty * price,
+        done_by: d.doneBy, new_stock: 0,
+        plant: d.plant || '', machine: d.machine || '',
+        mould_no: d.mouldNo || '', mould_name: d.mouldNo ? d.mouldNo.split('(')[0].trim() : '',
         used_for: d.usedFor || ''
       })
     } else {
-      // New spare - add to master
-      const newStock = d.action === 'Stock In' ? qty : 0
-      const status = newStock === 0 ? 'Out of Stock' : newStock < (parseFloat(item.minQty) || 0) ? 'Low' : 'OK'
-
       await supabase.from('spares_master').insert({
-        part_name: item.partName,
-        category: item.category || '',
-        unit: item.unit || 'Pcs',
-        min_qty: parseFloat(item.minQty) || 0,
-        current_stock: newStock,
-        last_price: price,
-        last_vendor: d.vendor || '',
-        plant: item.plant || '',
-        room: item.room || '',
-        almirah: item.almirah || '',
-        box_no: item.boxNo || '',
-        storage_type: item.storageType || 'Box',
-        status
+        part_name: item.partName, category: item.category || '', unit: item.unit || 'Pcs',
+        min_qty: parseFloat(item.minQty) || 0, current_stock: 0,
+        last_price: price, last_vendor: d.vendor || '',
+        plant: item.plant || '', room: item.room || '', almirah: item.almirah || '',
+        box_no: item.boxNo || '', storage_type: item.storageType || 'Box', status: 'Out of Stock'
       })
 
-      // Save movement
       await supabase.from('spare_movements').insert({
-        date: d.date || today,
-        slip_no: d.slipNo || '',
-        vendor: d.vendor || '',
-        part_name: item.partName,
-        category: item.category || '',
-        action: d.action,
-        qty,
-        price_per_pc: price,
-        total_price: qty * price,
-        done_by: d.doneBy,
-        new_stock: newStock,
-        plant: d.plant || '',
-        machine: d.machine || '',
-        mould_no: d.mouldNo || '',
-        mould_name: d.mouldNo ? d.mouldNo.split('(')[0].trim() : '',
+        date: d.date || today, slip_no: d.slipNo || '', vendor: d.vendor || '',
+        part_name: item.partName, category: item.category || '',
+        action: d.action, qty, price_per_pc: price, total_price: qty * price,
+        done_by: d.doneBy, new_stock: 0,
+        plant: d.plant || '', machine: d.machine || '',
+        mould_no: d.mouldNo || '', mould_name: d.mouldNo ? d.mouldNo.split('(')[0].trim() : '',
         used_for: d.usedFor || ''
       })
     }
+
+    // ✅ Always recalc from all movements — single source of truth
+    await recalcStock(item.partName)
   }
 
   // If used in mould — also save to mould_history
@@ -139,18 +132,11 @@ export async function POST(req: Request) {
 
     if (mouldCode) {
       await supabase.from('mould_history').insert({
-        mould_no: '---',
-        job_no: mouldCode,
-        mould_name: mouldName,
-        record_date: d.date || today,
-        pdf_source: 'LIVE',
-        record_type: 'RM',
-        machine_no: d.machine || '',
-        issue: 'Spare parts used in mould',
-        work_done: 'Parts replaced/used: ' + partsList,
-        parts_changed: partsList,
-        result: 'Done',
-        remarks: 'Used by: ' + d.doneBy + ' | Plant: ' + d.plant
+        mould_no: '---', job_no: mouldCode, mould_name: mouldName,
+        record_date: d.date || today, pdf_source: 'LIVE', record_type: 'RM',
+        machine_no: d.machine || '', issue: 'Spare parts used in mould',
+        work_done: 'Parts replaced/used: ' + partsList, parts_changed: partsList,
+        result: 'Done', remarks: 'Used by: ' + d.doneBy + ' | Plant: ' + d.plant
       })
     }
   }
@@ -162,39 +148,32 @@ export async function PUT(req: Request) {
   const d = await req.json()
   if (!d.id) return NextResponse.json({ success: false, msg: 'ID required' })
 
-  // Movement edit
+  // Movement edit — update row, then recalc stock for that part
   if (d._movement) {
+    // get old part name (in case part_name changed)
+    const { data: oldMov } = await supabase.from('spare_movements').select('part_name').eq('id', d.id).maybeSingle()
     const { error } = await supabase.from('spare_movements').update({
-      part_name: d.part_name,
-      date: d.date,
-      action: d.action,
-      qty: parseFloat(d.qty) || 0,
-      done_by: d.done_by || '',
-      vendor: d.vendor || '',
+      part_name: d.part_name, date: d.date, action: d.action,
+      qty: parseFloat(d.qty) || 0, done_by: d.done_by || '', vendor: d.vendor || '',
     }).eq('id', d.id)
     if (error) return NextResponse.json({ success: false, msg: error.message })
-    return NextResponse.json({ success: true, msg: 'Movement updated!' })
+    // recalc both old and new part (if name changed)
+    if (oldMov && oldMov.part_name && oldMov.part_name !== d.part_name) await recalcStock(oldMov.part_name)
+    await recalcStock(d.part_name)
+    return NextResponse.json({ success: true, msg: 'Movement updated & stock theek ho gaya!' })
   }
 
-  // Spare master edit
+  // Spare master edit (manual stock set — keep as-is, user override)
   const status = parseFloat(d.current_stock)===0 ? 'Out of Stock'
     : parseFloat(d.current_stock) < parseFloat(d.min_qty||0) ? 'Low' : 'OK'
 
   const { error } = await supabase.from('spares_master').update({
-    part_name: d.part_name,
-    category: d.category,
-    unit: d.unit,
-    current_stock: parseFloat(d.current_stock) || 0,
-    min_qty: parseFloat(d.min_qty) || 0,
-    last_price: parseFloat(d.last_price) || 0,
-    last_vendor: d.last_vendor || '',
-    plant: d.plant || '',
-    room: d.room || '',
-    almirah: d.almirah || '',
-    box_no: d.box_no || '',
-    storage_type: d.storage_type || 'Box',
-    status,
-    last_updated: new Date().toISOString()
+    part_name: d.part_name, category: d.category, unit: d.unit,
+    current_stock: parseFloat(d.current_stock) || 0, min_qty: parseFloat(d.min_qty) || 0,
+    last_price: parseFloat(d.last_price) || 0, last_vendor: d.last_vendor || '',
+    plant: d.plant || '', room: d.room || '', almirah: d.almirah || '',
+    box_no: d.box_no || '', storage_type: d.storage_type || 'Box',
+    status, last_updated: new Date().toISOString()
   }).eq('id', d.id)
 
   if (error) return NextResponse.json({ success: false, msg: error.message })
@@ -206,28 +185,15 @@ export async function DELETE(req: Request) {
   const id = searchParams.get('id')
   const movementId = searchParams.get('movement_id')
 
-  // Delete movement — stock bhi reverse karo
+  // Delete movement — then recalc stock from remaining movements
   if (movementId) {
-    // Pehle movement fetch karo
-    const { data: mov } = await supabase.from('spare_movements').select('*').eq('id', movementId).maybeSingle()
-    if (mov) {
-      // Stock reverse karo
-      const { data: spare } = await supabase.from('spares_master').select('*').ilike('part_name', mov.part_name).maybeSingle()
-      if (spare) {
-        let newStock = spare.current_stock || 0
-        if (mov.action === 'Stock In') newStock -= (mov.qty || 0)  // Stock In tha toh minus karo
-        else newStock += (mov.qty || 0)  // Used/Out tha toh wapas add karo
-        newStock = Math.max(0, newStock)
-        const status = newStock === 0 ? 'Out of Stock' : newStock < (spare.min_qty || 0) ? 'Low' : 'OK'
-        await supabase.from('spares_master').update({ current_stock: newStock, status }).eq('id', spare.id)
-      }
-    }
+    const { data: mov } = await supabase.from('spare_movements').select('part_name').eq('id', movementId).maybeSingle()
     const { error } = await supabase.from('spare_movements').delete().eq('id', movementId)
     if (error) return NextResponse.json({ success: false, msg: error.message })
-    return NextResponse.json({ success: true, msg: 'Movement deleted & stock reversed!' })
+    if (mov && mov.part_name) await recalcStock(mov.part_name)
+    return NextResponse.json({ success: true, msg: 'Movement deleted & stock theek ho gaya!' })
   }
 
-  // Delete spare master
   if (!id) return NextResponse.json({ success: false, msg: 'ID required' })
   const { error } = await supabase.from('spares_master').delete().eq('id', id)
   if (error) return NextResponse.json({ success: false, msg: error.message })
