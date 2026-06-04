@@ -13,6 +13,7 @@ const ML: Record<string, string> = {
   qcalerts:"QC Alerts",
   processcheck:"✅ Process Checker",
   guide:"📖 Help / Guide",
+  grease:"🛢️ Grease",
   reports:"Reports", users:"Users", performance:"Performance"
 }
 
@@ -285,7 +286,8 @@ export default function MOS() {
         {tab==='qcalerts'&&<QCAlertsTab user={user}/>}
         {tab==='processcheck'&&<ProcessCheckTab user={user}/>}
         {tab==='guide'&&<GuideTab/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide'].includes(tab)&&(
+        {tab==='grease'&&<GreaseTab user={user}/>}
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -8917,5 +8919,183 @@ function GuideTab() {
         Itna kar liya toh aapka poora din ka kaam ho gaya! 👍
       </div>
     </div>
+  </div>
+}
+
+// ─── Grease tracking tab ──────────────────────────────────────
+function GreaseTab({user}:{user:User}) {
+  const [stock,setStock]=useState<any[]>([])
+  const [logs,setLogs]=useState<any[]>([])
+  const [lastByMachine,setLastByMachine]=useState<any[]>([])
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [view,setView]=useState<'use'|'in'|'machines'|'history'>('use')
+
+  // forms
+  const [useForm,setUseForm]=useState({greaseName:'',machine:'',plant:'Plant 477',qty:'',machineCounter:'',remarks:''})
+  const [inForm,setInForm]=useState({greaseName:'',qty:'',vendor:'',price:'',plant:'Plant 477',remarks:''})
+  const [newGrease,setNewGrease]=useState('')
+  const [showNew,setShowNew]=useState(false)
+
+  const load=()=>{fetch('/api/grease').then(r=>r.json()).then(d=>{
+    setStock(d.stock||[]);setLogs(d.logs||[]);setLastByMachine(d.lastByMachine||[]);setLoading(false)
+  }).catch(()=>setLoading(false))}
+  useEffect(()=>{load()},[])
+
+  const PLANTS=['Plant 477','Plant 488','Plant 433']
+
+  const saveUse=async()=>{
+    if(!useForm.greaseName||!useForm.machine||!useForm.qty){setToast({msg:'Grease, machine aur qty daalo!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/grease',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'used',...useForm,doneBy:user.name})}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.msg,ok:res.success})
+    if(res.success){setUseForm({greaseName:'',machine:'',plant:useForm.plant,qty:'',machineCounter:'',remarks:''});load()}
+  }
+  const saveIn=async()=>{
+    if(!inForm.greaseName||!inForm.qty){setToast({msg:'Grease aur qty daalo!',ok:false});return}
+    setSaving(true)
+    const res=await fetch('/api/grease',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'stock_in',...inForm,doneBy:user.name})}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.msg,ok:res.success})
+    if(res.success){setInForm({greaseName:'',qty:'',vendor:'',price:'',plant:inForm.plant,remarks:''});load()}
+  }
+  const addGrease=async()=>{
+    if(!newGrease.trim()){return}
+    setSaving(true)
+    const res=await fetch('/api/grease',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'new_grease',greaseName:newGrease.trim(),unit:'kg'})}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.msg,ok:res.success})
+    if(res.success){setNewGrease('');setShowNew(false);load()}
+  }
+  const delLog=async(id:string)=>{
+    if(!confirm('Yeh record delete karein? Stock recalculate ho jayega.'))return
+    const res=await fetch('/api/grease?log_id='+id,{method:'DELETE'}).then(r=>r.json())
+    setToast({msg:res.msg,ok:res.success});if(res.success)load()
+  }
+
+  if(loading) return <div style={{textAlign:'center',padding:40,color:'#666'}}>Loading grease data...</div>
+
+  const totalStock=stock.reduce((a,s)=>a+(s.current_stock||0),0)
+  const lowStock=stock.filter(s=>s.current_stock<=(s.min_qty||0)).length
+
+  return <div style={{maxWidth:760,margin:'0 auto'}}>
+    {toast&&<div style={{position:'fixed' as const,top:20,left:'50%',transform:'translateX(-50%)',background:toast.ok?'#276221':'#C00000',color:'#fff',padding:'10px 20px',borderRadius:8,zIndex:2000,fontSize:13,fontWeight:600}}>{toast.msg}</div>}
+
+    <div style={{textAlign:'center',marginBottom:12}}>
+      <div style={{fontWeight:800,color:'#1F3864',fontSize:20}}>🛢️ Grease Management</div>
+    </div>
+
+    {/* Stock summary */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+      <div style={{...S.met}}><div style={{fontSize:10,color:'#666'}}>Total Grease Stock</div><div style={{fontSize:20,fontWeight:700,color:'#1F3864'}}>{totalStock} <span style={{fontSize:11}}>kg</span></div></div>
+      <div style={{...S.met}}><div style={{fontSize:10,color:'#666'}}>Low Stock Types</div><div style={{fontSize:20,fontWeight:700,color:lowStock>0?'#C00000':'#276221'}}>{lowStock}</div></div>
+    </div>
+
+    {/* Stock list */}
+    <div style={{...S.card,marginBottom:10}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>Grease Stock</div>
+        <button onClick={()=>setShowNew(!showNew)} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'4px 10px',fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Naya Grease</button>
+      </div>
+      {showNew&&<div style={{display:'flex',gap:6,marginBottom:8}}>
+        <input value={newGrease} onChange={e=>setNewGrease(e.target.value)} placeholder="Grease ka naam (jaise Servo Grease)" style={{...S.fi,flex:1}}/>
+        <button onClick={addGrease} disabled={saving} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,cursor:'pointer'}}>Add</button>
+      </div>}
+      {stock.length===0?<div style={{textAlign:'center',color:'#666',padding:12,fontSize:12}}>Koi grease nahi. "+ Naya Grease" se add karo.</div>:
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead><tr>{['Grease','Stock','Min','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+        <tbody>{stock.map((s:any,i:number)=>{
+          const out=s.current_stock<=0,low=s.current_stock<=(s.min_qty||0)&&!out
+          return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+            <td style={{padding:'5px 8px',fontWeight:600}}>{s.grease_name}</td>
+            <td style={{padding:'5px 8px',fontWeight:700,color:out?'#C00000':'#276221'}}>{s.current_stock} {s.unit}</td>
+            <td style={{padding:'5px 8px'}}>{s.min_qty||0}</td>
+            <td style={{padding:'5px 8px'}}><span style={{background:out?'#FFEBEE':low?'#FFF3E0':'#E8F5E9',color:out?'#C00000':low?'#854F0B':'#276221',padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{out?'Out of Stock':low?'Low':'OK'}</span></td>
+          </tr>
+        })}</tbody>
+      </table></div>}
+    </div>
+
+    {/* View tabs */}
+    <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap' as const}}>
+      {[{k:'use',l:'🔧 Grease Change'},{k:'in',l:'📥 Stock In'},{k:'machines',l:'📋 Machine-wise'},{k:'history',l:'🕐 History'}].map(v=>
+        <button key={v.k} onClick={()=>setView(v.k as any)} style={{background:view===v.k?'#1F3864':'#fff',color:view===v.k?'#fff':'#1F3864',border:'1px solid #1F3864',borderRadius:6,padding:'6px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{v.l}</button>
+      )}
+    </div>
+
+    {/* Grease change (used in machine) */}
+    {view==='use'&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>🔧 Machine pe Grease Change</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div><label style={S.lbl}>Grease</label>
+          <select style={S.fi} value={useForm.greaseName} onChange={e=>setUseForm(p=>({...p,greaseName:e.target.value}))}>
+            <option value="">-- Select --</option>{stock.map((s:any)=><option key={s.id} value={s.grease_name}>{s.grease_name} (stock: {s.current_stock})</option>)}
+          </select></div>
+        <div><label style={S.lbl}>Machine</label><input style={S.fi} value={useForm.machine} onChange={e=>setUseForm(p=>({...p,machine:e.target.value}))} placeholder="jaise M5-Sumitomo 350T"/></div>
+        <div><label style={S.lbl}>Plant</label><select style={S.fi} value={useForm.plant} onChange={e=>setUseForm(p=>({...p,plant:e.target.value}))}>{PLANTS.map(p=><option key={p}>{p}</option>)}</select></div>
+        <div><label style={S.lbl}>Qty (kg/gm)</label><input type="number" style={S.fi} value={useForm.qty} onChange={e=>setUseForm(p=>({...p,qty:e.target.value}))} placeholder="kitni grease"/></div>
+        <div><label style={S.lbl}>Machine Counter (total shots)</label><input type="number" style={S.fi} value={useForm.machineCounter} onChange={e=>setUseForm(p=>({...p,machineCounter:e.target.value}))} placeholder="abhi ka counter"/></div>
+        <div><label style={S.lbl}>Remarks</label><input style={S.fi} value={useForm.remarks} onChange={e=>setUseForm(p=>({...p,remarks:e.target.value}))} placeholder="optional"/></div>
+      </div>
+      <button onClick={saveUse} disabled={saving} style={{...S.sb,marginTop:12,background:'#276221'}}>{saving?'Saving...':'💾 Grease Change Save Karo'}</button>
+    </div>}
+
+    {/* Stock In */}
+    {view==='in'&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>📥 Grease Stock In (nayi grease aayi)</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div><label style={S.lbl}>Grease</label>
+          <select style={S.fi} value={inForm.greaseName} onChange={e=>setInForm(p=>({...p,greaseName:e.target.value}))}>
+            <option value="">-- Select --</option>{stock.map((s:any)=><option key={s.id} value={s.grease_name}>{s.grease_name}</option>)}
+          </select></div>
+        <div><label style={S.lbl}>Qty (kg)</label><input type="number" style={S.fi} value={inForm.qty} onChange={e=>setInForm(p=>({...p,qty:e.target.value}))}/></div>
+        <div><label style={S.lbl}>Vendor</label><input style={S.fi} value={inForm.vendor} onChange={e=>setInForm(p=>({...p,vendor:e.target.value}))} placeholder="optional"/></div>
+        <div><label style={S.lbl}>Price/kg</label><input type="number" style={S.fi} value={inForm.price} onChange={e=>setInForm(p=>({...p,price:e.target.value}))} placeholder="optional"/></div>
+      </div>
+      <button onClick={saveIn} disabled={saving} style={{...S.sb,marginTop:12}}>{saving?'Saving...':'💾 Stock In Save Karo'}</button>
+    </div>}
+
+    {/* Machine-wise last change */}
+    {view==='machines'&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>📋 Har Machine ka Last Grease Change</div>
+      {lastByMachine.length===0?<div style={{textAlign:'center',color:'#666',padding:12,fontSize:12}}>Abhi koi record nahi.</div>:
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+        <thead><tr>{['Machine','Plant','Last Change','Counter','Grease'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+        <tbody>{lastByMachine.map((m:any,i:number)=>(
+          <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+            <td style={{padding:'5px 8px',fontWeight:600}}>{m.machine}</td>
+            <td style={{padding:'5px 8px'}}>{m.plant||'--'}</td>
+            <td style={{padding:'5px 8px'}}>{m.date}</td>
+            <td style={{padding:'5px 8px',textAlign:'center'}}>{m.machine_counter!=null?Number(m.machine_counter).toLocaleString():'--'}</td>
+            <td style={{padding:'5px 8px'}}>{m.grease_name}</td>
+          </tr>
+        ))}</tbody>
+      </table></div>}
+    </div>}
+
+    {/* Full history */}
+    {view==='history'&&<div style={S.card}>
+      <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>🕐 Grease History</div>
+      {logs.length===0?<div style={{textAlign:'center',color:'#666',padding:12,fontSize:12}}>Koi record nahi.</div>:
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+        <thead><tr>{['Date','Action','Grease','Qty','Machine','Counter','PM Baad','Stock','By',''].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 6px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+        <tbody>{logs.map((l:any,i:number)=>(
+          <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+            <td style={{padding:'5px 6px',whiteSpace:'nowrap' as const}}>{l.date}</td>
+            <td style={{padding:'5px 6px'}}><span style={{color:l.action==='Stock In'?'#276221':'#854F0B',fontWeight:600,fontSize:10}}>{l.action==='Stock In'?'📥 In':'🔧 Used'}</span></td>
+            <td style={{padding:'5px 6px'}}>{l.grease_name}</td>
+            <td style={{padding:'5px 6px',textAlign:'center',fontWeight:600}}>{l.action==='Stock In'?'+':'-'}{l.qty}</td>
+            <td style={{padding:'5px 6px'}}>{l.machine||'--'}</td>
+            <td style={{padding:'5px 6px',textAlign:'center'}}>{l.machine_counter!=null?Number(l.machine_counter).toLocaleString():'--'}</td>
+            <td style={{padding:'5px 6px',textAlign:'center',color:'#1F3864',fontWeight:600}}>{l.since_last!=null?Number(l.since_last).toLocaleString():'--'}</td>
+            <td style={{padding:'5px 6px',textAlign:'center'}}>{l.new_stock}</td>
+            <td style={{padding:'5px 6px',fontSize:10}}>{l.done_by||'--'}</td>
+            <td style={{padding:'5px 6px'}}><button onClick={()=>delLog(l.id)} style={{background:'none',border:'none',color:'#C00000',cursor:'pointer',fontSize:12}}>🗑️</button></td>
+          </tr>
+        ))}</tbody>
+      </table></div>}
+    </div>}
   </div>
 }
