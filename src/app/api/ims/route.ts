@@ -35,6 +35,8 @@ const IMS_ITEMS = [
   {name:"650 ml Rectangle Container (Black)",category:"Rectangle",pkg:200,minC:20},
   {name:"750 ml Rectangle Container (Black)",category:"Rectangle",pkg:175,minC:20},
   {name:"1000 ml Rectangle Container (Black)",category:"Rectangle",pkg:150,minC:20},
+  {name:"650 ml Half Round Container (Black)",category:"Rectangle",pkg:300,minC:20},
+  {name:"650 ml Half Round Container (Milky)",category:"Rectangle",pkg:300,minC:20},
   {name:"Cafe Glass With Sipper Lid 350 ml",category:"Glass",pkg:200,minC:20},
   {name:"Cafe Glass With Sipper Lid 500 ml",category:"Glass",pkg:150,minC:20},
   {name:"Cafe Sipper XL With Lid 300 ml",category:"Glass",pkg:200,minC:20},
@@ -90,7 +92,6 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
 
-  // Get min stock overrides
   const { data: minOverrides } = await supabase
     .from('ims_min_stock')
     .select('item_name, min_cartons')
@@ -100,7 +101,6 @@ export async function GET(req: Request) {
     minOverrides.forEach((r: any) => { minMap[r.item_name] = r.min_cartons })
   }
 
-  // Get stock for specific date — get latest entry on or before that date
   const { data: stockData } = await supabase
     .from('ims_stock')
     .select('item_name, stock_cartons, unpack_cartons, unpack_lid, status, date, entered_by')
@@ -108,7 +108,6 @@ export async function GET(req: Request) {
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
 
-  // Get latest entry per item on or before selected date
   const stockMap: Record<string, any> = {}
   if (stockData) {
     for (const row of stockData) {
