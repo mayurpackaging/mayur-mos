@@ -8931,12 +8931,8 @@ function GreaseTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [view,setView]=useState<'use'|'in'|'machines'|'history'>('use')
-
-  // forms
   const [useForm,setUseForm]=useState({greaseName:'',machine:'',plant:'Plant 477',qty:'',machineCounter:'',remarks:''})
   const [inForm,setInForm]=useState({greaseName:'',qty:'',vendor:'',price:'',plant:'Plant 477',remarks:''})
-  const [newGrease,setNewGrease]=useState('')
-  const [showNew,setShowNew]=useState(false)
 
   const load=()=>{fetch('/api/grease').then(r=>r.json()).then(d=>{
     setStock(d.stock||[]);setLogs(d.logs||[]);setLastByMachine(d.lastByMachine||[]);setLoading(false)
@@ -8960,14 +8956,6 @@ function GreaseTab({user}:{user:User}) {
       body:JSON.stringify({type:'stock_in',...inForm,doneBy:user.name})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
     if(res.success){setInForm({greaseName:'',qty:'',vendor:'',price:'',plant:inForm.plant,remarks:''});load()}
-  }
-  const addGrease=async()=>{
-    if(!newGrease.trim()){return}
-    setSaving(true)
-    const res=await fetch('/api/grease',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:'new_grease',greaseName:newGrease.trim(),unit:'kg'})}).then(r=>r.json())
-    setSaving(false);setToast({msg:res.msg,ok:res.success})
-    if(res.success){setNewGrease('');setShowNew(false);load()}
   }
   const delLog=async(id:string)=>{
     if(!confirm('Yeh record delete karein? Stock recalculate ho jayega.'))return
@@ -8996,14 +8984,9 @@ function GreaseTab({user}:{user:User}) {
     {/* Stock list */}
     <div style={{...S.card,marginBottom:10}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>Grease Stock</div>
-        <button onClick={()=>setShowNew(!showNew)} style={{background:'#276221',color:'#fff',border:'none',borderRadius:6,padding:'4px 10px',fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Naya Grease</button>
+        <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>Grease Stock <span style={{fontSize:10,color:'#666',fontWeight:400}}>(Spares se)</span></div>
       </div>
-      {showNew&&<div style={{display:'flex',gap:6,marginBottom:8}}>
-        <input value={newGrease} onChange={e=>setNewGrease(e.target.value)} placeholder="Grease ka naam (jaise Servo Grease)" style={{...S.fi,flex:1}}/>
-        <button onClick={addGrease} disabled={saving} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,cursor:'pointer'}}>Add</button>
-      </div>}
-      {stock.length===0?<div style={{textAlign:'center',color:'#666',padding:12,fontSize:12}}>Koi grease nahi. "+ Naya Grease" se add karo.</div>:
+      {stock.length===0?<div style={{textAlign:'center',color:'#666',padding:12,fontSize:12}}>Koi grease spares mein nahi mili. Spares tab mein grease add karo.</div>:
       <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
         <thead><tr>{['Grease','Stock','Min','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
         <tbody>{stock.map((s:any,i:number)=>{
@@ -9033,8 +9016,19 @@ function GreaseTab({user}:{user:User}) {
           <select style={S.fi} value={useForm.greaseName} onChange={e=>setUseForm(p=>({...p,greaseName:e.target.value}))}>
             <option value="">-- Select --</option>{stock.map((s:any)=><option key={s.id} value={s.grease_name}>{s.grease_name} (stock: {s.current_stock})</option>)}
           </select></div>
-        <div><label style={S.lbl}>Machine</label><input style={S.fi} value={useForm.machine} onChange={e=>setUseForm(p=>({...p,machine:e.target.value}))} placeholder="jaise M5-Sumitomo 350T"/></div>
-        <div><label style={S.lbl}>Plant</label><select style={S.fi} value={useForm.plant} onChange={e=>setUseForm(p=>({...p,plant:e.target.value}))}>{PLANTS.map(p=><option key={p}>{p}</option>)}</select></div>
+        <div><label style={S.lbl}>Machine</label>
+          <select style={S.fi} value={useForm.machine} onChange={e=>{
+            const mc=e.target.value
+            // auto-suggest grease by machine type
+            let g=useForm.greaseName
+            if(mc.includes('JSW')){const jsw=stock.find((s:any)=>s.part_name.toLowerCase().includes('jsw'));if(jsw)g=jsw.part_name}
+            else if(mc.includes('Sumitomo')){const su=stock.find((s:any)=>s.part_name.toLowerCase().includes('sumitomo'));if(su)g=su.part_name}
+            setUseForm(p=>({...p,machine:mc,greaseName:g}))
+          }}>
+            <option value="">-- Select Machine --</option>
+            {(MACH[useForm.plant]||[]).map((m:string)=><option key={m} value={m}>{m}</option>)}
+          </select></div>
+        <div><label style={S.lbl}>Plant</label><select style={S.fi} value={useForm.plant} onChange={e=>setUseForm(p=>({...p,plant:e.target.value,machine:''}))}>{PLANTS.map(p=><option key={p}>{p}</option>)}</select></div>
         <div><label style={S.lbl}>Qty (kg/gm)</label><input type="number" style={S.fi} value={useForm.qty} onChange={e=>setUseForm(p=>({...p,qty:e.target.value}))} placeholder="kitni grease"/></div>
         <div><label style={S.lbl}>Machine Counter (total shots)</label><input type="number" style={S.fi} value={useForm.machineCounter} onChange={e=>setUseForm(p=>({...p,machineCounter:e.target.value}))} placeholder="abhi ka counter"/></div>
         <div><label style={S.lbl}>Remarks</label><input style={S.fi} value={useForm.remarks} onChange={e=>setUseForm(p=>({...p,remarks:e.target.value}))} placeholder="optional"/></div>
