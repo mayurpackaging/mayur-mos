@@ -8995,7 +8995,7 @@ function GreaseTab({user}:{user:User}) {
         <tbody>{stock.map((s:any,i:number)=>{
           const out=s.current_stock<=0,low=s.current_stock<=(s.min_qty||0)&&!out
           const pw=plantWise[s.part_name]||{}
-          const plantStr=Object.entries(pw).filter(([k,v]:any)=>k!=='No Plant'&&v!==0).map(([k,v]:any)=>`${k.replace('Plant ','P')}: ${v}`).join('  •  ')
+          const plantStr=Object.entries(pw).filter(([k,v]:any)=>v!==0).map(([k,v]:any)=>`${k==='No Plant'?'Other':k.replace('Plant ','P')}: ${v}`).join('  •  ')
           return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
             <td style={{padding:'5px 8px',fontWeight:600}}>{s.part_name}</td>
             <td style={{padding:'5px 8px',fontWeight:700,color:out?'#C00000':'#276221'}}>{s.current_stock} {s.unit}</td>
