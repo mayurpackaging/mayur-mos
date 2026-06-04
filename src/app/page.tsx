@@ -120,6 +120,8 @@ const PRODUCT_MOULD_MAP: Record<string, string> = {
   "Re Series - Re 28 Black":"6760 - RE 28 Tub",
   "Re Series - Re 38 Natural":"6761 - RE 38 Tub",
   "Re Series - Re 38 Black":"6761 - RE 38 Tub",
+  "650 ml Half Round Container (Black)":"6502 - 650 ml Half Round",
+  "650 ml Half Round Container (Milky)":"6502 - 650 ml Half Round",
 }
 
 const SPARE_CATEGORIES = [
@@ -8927,6 +8929,7 @@ function GreaseTab({user}:{user:User}) {
   const [stock,setStock]=useState<any[]>([])
   const [logs,setLogs]=useState<any[]>([])
   const [lastByMachine,setLastByMachine]=useState<any[]>([])
+  const [plantWise,setPlantWise]=useState<any>({})
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
@@ -8935,7 +8938,7 @@ function GreaseTab({user}:{user:User}) {
   const [inForm,setInForm]=useState({greaseName:'',qty:'',vendor:'',price:'',plant:'Plant 477',remarks:''})
 
   const load=()=>{fetch('/api/grease').then(r=>r.json()).then(d=>{
-    setStock(d.stock||[]);setLogs(d.logs||[]);setLastByMachine(d.lastByMachine||[]);setLoading(false)
+    setStock(d.stock||[]);setLogs(d.logs||[]);setLastByMachine(d.lastByMachine||[]);setPlantWise(d.plantWise||{});setLoading(false)
   }).catch(()=>setLoading(false))}
   useEffect(()=>{load()},[])
 
@@ -8988,13 +8991,15 @@ function GreaseTab({user}:{user:User}) {
       </div>
       {stock.length===0?<div style={{textAlign:'center',color:'#666',padding:12,fontSize:12}}>Koi grease spares mein nahi mili. Spares tab mein grease add karo.</div>:
       <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-        <thead><tr>{['Grease','Stock','Min','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Grease','Total Stock','Plant-wise','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
         <tbody>{stock.map((s:any,i:number)=>{
           const out=s.current_stock<=0,low=s.current_stock<=(s.min_qty||0)&&!out
+          const pw=plantWise[s.part_name]||{}
+          const plantStr=Object.entries(pw).filter(([k,v]:any)=>k!=='No Plant'&&v!==0).map(([k,v]:any)=>`${k.replace('Plant ','P')}: ${v}`).join('  •  ')
           return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
             <td style={{padding:'5px 8px',fontWeight:600}}>{s.part_name}</td>
             <td style={{padding:'5px 8px',fontWeight:700,color:out?'#C00000':'#276221'}}>{s.current_stock} {s.unit}</td>
-            <td style={{padding:'5px 8px'}}>{s.min_qty||0}</td>
+            <td style={{padding:'5px 8px',fontSize:11,color:'#1F3864'}}>{plantStr||'--'}</td>
             <td style={{padding:'5px 8px'}}><span style={{background:out?'#FFEBEE':low?'#FFF3E0':'#E8F5E9',color:out?'#C00000':low?'#854F0B':'#276221',padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{out?'Out of Stock':low?'Low':'OK'}</span></td>
           </tr>
         })}</tbody>
