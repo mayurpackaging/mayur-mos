@@ -42,7 +42,7 @@ const MOULDS = [
   {code:"6714",name:"500 ml Oval"},{code:"6715",name:"750 ml Oval"},{code:"6716",name:"1000 ml Oval"},
   // Glass
   {code:"6709",name:"350 ml Glass Old"},{code:"6903",name:"300 ml Glass"},
-  {code:"6904",name:"350 ml Glass"},{code:"6905",name:"500 ml Glass"},{code:"6502",name:"650 ml Bowl"},
+  {code:"6904",name:"350 ml Glass"},{code:"6905",name:"500 ml Glass"},{code:"6502",name:"650 ml Half Round"},
   // RO Series
   {code:"6753",name:"RO 16 Tub"},{code:"6754",name:"RO 24 Tub"},{code:"6755",name:"RO 32 Tub"},
   // RE Series
@@ -8992,7 +8992,7 @@ function GreaseTab({user}:{user:User}) {
         <tbody>{stock.map((s:any,i:number)=>{
           const out=s.current_stock<=0,low=s.current_stock<=(s.min_qty||0)&&!out
           return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-            <td style={{padding:'5px 8px',fontWeight:600}}>{s.grease_name}</td>
+            <td style={{padding:'5px 8px',fontWeight:600}}>{s.part_name}</td>
             <td style={{padding:'5px 8px',fontWeight:700,color:out?'#C00000':'#276221'}}>{s.current_stock} {s.unit}</td>
             <td style={{padding:'5px 8px'}}>{s.min_qty||0}</td>
             <td style={{padding:'5px 8px'}}><span style={{background:out?'#FFEBEE':low?'#FFF3E0':'#E8F5E9',color:out?'#C00000':low?'#854F0B':'#276221',padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{out?'Out of Stock':low?'Low':'OK'}</span></td>
@@ -9014,7 +9014,7 @@ function GreaseTab({user}:{user:User}) {
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         <div><label style={S.lbl}>Grease</label>
           <select style={S.fi} value={useForm.greaseName} onChange={e=>setUseForm(p=>({...p,greaseName:e.target.value}))}>
-            <option value="">-- Select --</option>{stock.map((s:any)=><option key={s.id} value={s.grease_name}>{s.grease_name} (stock: {s.current_stock})</option>)}
+            <option value="">-- Select --</option>{stock.map((s:any)=><option key={s.id} value={s.part_name}>{s.part_name} (stock: {s.current_stock})</option>)}
           </select></div>
         <div><label style={S.lbl}>Machine</label>
           <select style={S.fi} value={useForm.machine} onChange={e=>{
@@ -9042,7 +9042,7 @@ function GreaseTab({user}:{user:User}) {
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         <div><label style={S.lbl}>Grease</label>
           <select style={S.fi} value={inForm.greaseName} onChange={e=>setInForm(p=>({...p,greaseName:e.target.value}))}>
-            <option value="">-- Select --</option>{stock.map((s:any)=><option key={s.id} value={s.grease_name}>{s.grease_name}</option>)}
+            <option value="">-- Select --</option>{stock.map((s:any)=><option key={s.id} value={s.part_name}>{s.part_name}</option>)}
           </select></div>
         <div><label style={S.lbl}>Qty (kg)</label><input type="number" style={S.fi} value={inForm.qty} onChange={e=>setInForm(p=>({...p,qty:e.target.value}))}/></div>
         <div><label style={S.lbl}>Vendor</label><input style={S.fi} value={inForm.vendor} onChange={e=>setInForm(p=>({...p,vendor:e.target.value}))} placeholder="optional"/></div>
