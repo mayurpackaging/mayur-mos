@@ -13,6 +13,7 @@ const ML: Record<string, string> = {
   qcalerts:"QC Alerts",
   processcheck:"✅ Process Checker",
   guide:"📖 Help / Guide",
+  checklist:"✅ My Checklist",
   grease:"🛢️ Grease",
   reports:"Reports", users:"Users", performance:"Performance"
 }
@@ -288,8 +289,9 @@ export default function MOS() {
         {tab==='qcalerts'&&<QCAlertsTab user={user}/>}
         {tab==='processcheck'&&<ProcessCheckTab user={user}/>}
         {tab==='guide'&&<GuideTab/>}
+        {tab==='checklist'&&<MyChecklistTab user={user}/>}
         {tab==='grease'&&<GreaseTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease'].includes(tab)&&(
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease','checklist'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -9096,5 +9098,133 @@ function GreaseTab({user}:{user:User}) {
         ))}</tbody>
       </table></div>}
     </div>}
+  </div>
+}
+
+// ─── My Checklist tab — role-based auto-ticking checklist ──────
+function MyChecklistTab({user}:{user:User}) {
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(true)
+  const date=nd()
+
+  const load=()=>{fetch(`/api/processcheck?date=${date}`).then(r=>r.json()).then(d=>{setData(d);setLoading(false)}).catch(()=>setLoading(false))}
+  useEffect(()=>{load()
+    const t=setInterval(load,60000)  // auto-refresh har minute
+    return ()=>clearInterval(t)
+  },[])
+
+  if(loading) return <div style={{textAlign:'center',padding:40,color:'#666'}}>Checklist load ho rahi hai...</div>
+  if(!data||!data.success) return <div style={{textAlign:'center',padding:40,color:'#C00000'}}>Data nahi mila. Refresh karo.</div>
+
+  const role=(user.role||'').toLowerCase()
+  // build checklist items by role
+  type Item={label:string,done:boolean,detail?:string,wa?:string}
+  const items:Item[]=[]
+
+  const isOp=role.includes('operator')||role.includes('production')
+  const isQual=role.includes('quality')
+  const isMaint=role.includes('maintenance')||role.includes('foreman')
+  const isCoord=role.includes('coordinator')||role.includes('admin')||role.includes('plant head')
+  const showAll=isCoord||(!isOp&&!isQual&&!isMaint) // fallback: show all
+
+  // PRODUCTION items (operator / coordinator)
+  if(isOp||showAll){
+    (data.production||[]).forEach((p:any)=>{
+      const dayDone=p.dayMissing.length===0
+      items.push({
+        label:`Production entry — ${p.plant} (Day shift)`,
+        done:dayDone,
+        detail:dayDone?`Saare ${p.dayTotal} slots ho gaye`:`Baaki slots: ${p.dayMissing.join(', ')}`,
+        wa:dayDone?'':`🏭 *Production Entry Pending*\n${p.plant} — Day Shift\nSlots baaki: ${p.dayMissing.join(', ')}\nDate: ${date}\n\nKripya entry karein.`
+      })
+    })
+  }
+
+  // QUALITY items
+  if(isQual||showAll){
+    (data.quality||[]).forEach((q:any)=>{
+      const done=q.missing.length===0
+      items.push({
+        label:`Quality check — ${q.plant}`,
+        done,
+        detail:done?`Saare checks ho gaye`:`Baaki: ${q.missing.join(', ')}`,
+        wa:done?'':`🔬 *Quality Check Pending*\n${q.plant}\nSlots baaki: ${q.missing.join(', ')}\nDate: ${date}\n\nKripya check karein.`
+      })
+    })
+    // rejection entry
+    items.push({
+      label:`Rejection entry`,
+      done:data.rejection.done,
+      detail:data.rejection.done?`${data.rejection.entries} entries`:`Aaj koi rejection entry nahi`,
+      wa:data.rejection.done?'':`❌ *Rejection Entry Pending*\nAaj koi rejection entry nahi hui.\nDate: ${date}`
+    })
+  }
+
+  // MAINTENANCE items
+  if(isMaint||showAll){
+    items.push({
+      label:`Pending breakdowns`,
+      done:data.breakdown.pending===0,
+      detail:data.breakdown.pending===0?`Koi pending nahi`:`${data.breakdown.pending} breakdown pending`,
+      wa:data.breakdown.pending===0?'':`🔧 *${data.breakdown.pending} Breakdown Pending*\n${(data.breakdown.pendingList||[]).map((b:any)=>`${b.machine} (${b.plant})`).join('\n')}\nDate: ${date}`
+    })
+    items.push({
+      label:`Mould PM`,
+      done:data.mouldPM.overdue===0,
+      detail:data.mouldPM.overdue===0?`Koi overdue nahi`:`${data.mouldPM.overdue} overdue, ${data.mouldPM.dueSoon} due soon`,
+      wa:data.mouldPM.overdue===0?'':`⚙️ *${data.mouldPM.overdue} Mould PM Overdue*\n${(data.mouldPM.list||[]).filter((m:any)=>m.status==='OVERDUE').map((m:any)=>m.mould).join('\n')}\nDate: ${date}`
+    })
+  }
+
+  // IMS + Spares (coordinator)
+  if(isCoord||showAll){
+    items.push({
+      label:`IMS stock entry`,
+      done:data.ims.done,
+      detail:data.ims.done?`${data.ims.entries} entries`:`Aaj stock entry nahi hui`,
+      wa:data.ims.done?'':`📦 *IMS Stock Entry Pending*\nDate: ${date}`
+    })
+  }
+
+  const doneCount=items.filter(i=>i.done).length
+  const pendingItems=items.filter(i=>!i.done)
+  const pct=items.length>0?Math.round(doneCount/items.length*100):0
+
+  return <div style={{maxWidth:680,margin:'0 auto'}}>
+    <div style={{textAlign:'center',marginBottom:12}}>
+      <div style={{fontWeight:800,color:'#1F3864',fontSize:20}}>✅ {user.name} ki Checklist</div>
+      <div style={{color:'#666',fontSize:12}}>{date} · {user.role}</div>
+    </div>
+
+    {/* Progress */}
+    <div style={{background:pct===100?'#E8F5E9':'#FFF3E0',borderRadius:12,padding:'14px 16px',marginBottom:12,textAlign:'center'}}>
+      <div style={{fontSize:28,fontWeight:800,color:pct===100?'#276221':'#E65100'}}>{doneCount} / {items.length}</div>
+      <div style={{fontSize:12,color:'#666',marginTop:2}}>{pct===100?'🎉 Sab kaam ho gaya!':`${pendingItems.length} kaam baaki hain`}</div>
+      <div style={{background:'#E0E0E0',borderRadius:999,height:8,marginTop:8,overflow:'hidden'}}>
+        <div style={{width:`${pct}%`,height:'100%',background:pct===100?'#276221':'#E65100',transition:'width 0.4s'}}/>
+      </div>
+    </div>
+
+    {/* Checklist items */}
+    <div style={{display:'flex',flexDirection:'column' as const,gap:8}}>
+      {items.map((it,i)=>(
+        <div key={i} style={{background:'#fff',border:`1px solid ${it.done?'#C8E6C9':'#FFCDD2'}`,borderRadius:10,padding:'12px 14px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{fontSize:22}}>{it.done?'✅':'⬜'}</div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:600,fontSize:14,color:it.done?'#276221':'#1F3864',textDecoration:it.done?'line-through':'none'}}>{it.label}</div>
+              <div style={{fontSize:11,color:it.done?'#666':'#C00000',marginTop:2}}>{it.detail}</div>
+            </div>
+          </div>
+          {!it.done&&it.wa&&<CopyMsgBtn user={user} message={it.wa}/>}
+        </div>
+      ))}
+    </div>
+
+    {items.length===0&&<div style={{textAlign:'center',color:'#666',padding:30}}>Aapke role ke liye koi checklist item nahi.</div>}
+
+    <div style={{textAlign:'center',marginTop:14}}>
+      <button onClick={load} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',fontSize:12,fontWeight:600,cursor:'pointer'}}>🔄 Refresh</button>
+    </div>
   </div>
 }
