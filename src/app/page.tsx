@@ -68,7 +68,7 @@ const PRODUCT_MOULD_MAP: Record<string, string> = {
   "50 ml Container Black":"6640 - 50 ml Tub",
   "50 ml Container Natural":"6641 - 50 ml Lid",
   "100 ml Container Milky":"6774 - 100 ml Tub",
-  "100 ml Container Natural":"6775 - 100 ml Lid",
+  "100 ml Container Natural":"6774 - 100 ml Tub",
   "100 ml Container Black":"6774 - 100 ml Tub",
   "175 ml Container Milky":"6619 - 175 ml Tub",
   "175 ml Container Black":"6619 - 175 ml Tub",
