@@ -7734,6 +7734,69 @@ function MouldHistoryTab() {
   const [activeTab,setActiveTab]=useState('all')
   const [stats,setStats]=useState(null)
   const [pmDetail,setPmDetail]=useState<any>(null)
+  const [copiedReport,setCopiedReport]=useState(false)
+
+  const typeLabel=(t:string)=>t==='PM'?'Preventive Maintenance':t==='BD'?'Breakdown':t==='RM'?'Routine Maintenance':t==='MC'?'Mould Change':t
+
+  const copyMouldReport=(mould:any,st:any,hist:any[])=>{
+    let msg=`⚙️ *Mould Report — ${mould.name}*\nCode: ${mould.code}\n`
+    if(st) msg+=`Period: ${st.firstDate} → ${st.lastDate}\n\n*Summary:*\nTotal records: ${st.total}\nPM: ${st.pmCount} | Breakdown: ${st.bdCount} | Routine: ${st.rmCount}\n`
+    if(st?.lastPM) msg+=`Last PM: ${st.lastPM.record_date}\n`
+    if(st?.lastBD) msg+=`Last Breakdown: ${st.lastBD.record_date}\n`
+    msg+=`\n*History:*\n`
+    hist.forEach((r:any)=>{
+      msg+=`\n${r.record_date} — ${typeLabel(r.record_type)}`
+      if(r.machine_no) msg+=` (${r.machine_no})`
+      if(r.issue) msg+=`\nIssue: ${r.issue}`
+      if(r.work_done) msg+=`\nWork: ${r.work_done}`
+      if(r.parts_changed) msg+=`\nParts: ${r.parts_changed}`
+      msg+='\n'
+    })
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(msg).then(()=>{setCopiedReport(true);setTimeout(()=>setCopiedReport(false),3000)})}
+      else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);setCopiedReport(true);setTimeout(()=>setCopiedReport(false),3000)}
+    }catch(e){}
+  }
+
+  const printMould=(mould:any,st:any,hist:any[])=>{
+    const rows=hist.map((r:any,i:number)=>{
+      const tc=r.record_type==='BD'?'#C00000':r.record_type==='PM'?'#276221':r.record_type==='RM'?'#555':'#854F0B'
+      return `<tr>
+        <td style="text-align:center">${i+1}</td>
+        <td style="white-space:nowrap">${r.record_date||''}</td>
+        <td style="color:${tc};font-weight:bold">${typeLabel(r.record_type)}</td>
+        <td>${r.machine_no||'--'}</td>
+        <td>${r.issue||'--'}</td>
+        <td>${(r.work_done||'--').replace(/\n/g,'<br>')}</td>
+        <td>${r.parts_changed||'--'}</td>
+        <td>${r.result||'--'}</td>
+      </tr>`
+    }).join('')
+    const html=`<html><head><title>Mould Report - ${mould.name}</title>
+      <style>
+        body{font-family:Arial,sans-serif;padding:20px;color:#222}
+        h1{color:#1F3864;font-size:20px;margin:0}
+        .sub{color:#666;font-size:12px;margin:4px 0}
+        .summary{background:#f0f4f9;border-radius:8px;padding:12px;margin:12px 0;font-size:12px}
+        table{width:100%;border-collapse:collapse;font-size:10px;margin-top:8px}
+        th{background:#1F3864;color:#fff;padding:6px;text-align:left;border:1px solid #1F3864}
+        td{padding:5px 6px;border:1px solid #ddd;vertical-align:top}
+        tr:nth-child(even){background:#f7f7f7}
+        @media print{button{display:none}}
+      </style></head><body>
+      <h1>Mayur - Mould Report</h1>
+      <div class="sub"><b>${mould.name}</b> (Code: ${mould.code})</div>
+      ${st?`<div class="summary"><b>Summary:</b> Total ${st.total} records | PM: ${st.pmCount} | Breakdown: ${st.bdCount} | Routine: ${st.rmCount} &nbsp; | &nbsp; Period: ${st.firstDate} to ${st.lastDate}</div>`:''}
+      <table>
+        <thead><tr><th>#</th><th>Date</th><th>Type</th><th>Machine</th><th>Issue</th><th>Work Done</th><th>Parts</th><th>Result</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button>
+      </body></html>`
+    const w=window.open('','_blank')
+    if(w){w.document.write(html);w.document.close()}
+  }
+
 
   const filteredMoulds = !search ? [] : MOULDS.filter(
     m=>m.name.toLowerCase().includes(search.toLowerCase())||m.code.includes(search)
@@ -7833,7 +7896,14 @@ function MouldHistoryTab() {
         </div>
 
         <div style={S.card}>
-          <div style={{fontWeight:700,color:'#1F3864',fontSize:13,marginBottom:12}}>📅 Timeline — {shown.length} records</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap' as const,gap:8}}>
+            <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>📅 Timeline — {shown.length} records</div>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={()=>printMould(selected,stats,history)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>🖨️ Print Report</button>
+              <button onClick={()=>copyMouldReport(selected,stats,history)} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 WhatsApp</button>
+            </div>
+          </div>
+          {copiedReport&&<div style={{background:'#E8F5E9',color:'#276221',padding:'6px 10px',borderRadius:6,fontSize:11,marginBottom:8,fontWeight:600}}>✅ Report copy ho gayi! WhatsApp pe paste karo.</div>}
           {shown.length===0
             ?<div style={{textAlign:'center',color:'#888',padding:24}}>Koi record nahi!</div>
             :<div>
