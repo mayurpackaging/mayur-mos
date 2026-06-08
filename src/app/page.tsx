@@ -7521,7 +7521,8 @@ function DailyReportTab({user}:{user:User}) {
   const totalGood=data?.prod?.reduce((a:number,e:any)=>a+(e.good_parts||0),0)||0
   const totalRej=data?.prod?.reduce((a:number,e:any)=>a+(e.rejection||0),0)||0
   const totalDown=data?.prod?.reduce((a:number,e:any)=>a+(e.downtime||0),0)||0
-  const eff=totalGood+totalRej>0?Math.round(totalGood/(totalGood+totalRej)*100*10)/10:0
+  const totalProj=data?.prod?.reduce((a:number,e:any)=>{const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)||0
+  const eff=totalProj>0?Math.round(totalGood/totalProj*100):0
   const dayProd=data?.prod?.filter(e=>e.shift?.toLowerCase().includes('day'))||[]
   const nightProd=data?.prod?.filter(e=>e.shift?.toLowerCase().includes('night'))||[]
   const dayGood=dayProd.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
@@ -7540,7 +7541,8 @@ function DailyReportTab({user}:{user:User}) {
     const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
     const rej=mp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
     const down=mp.reduce((a:number,e:any)=>a+(e.downtime||0),0)
-    const eff=good+rej>0?Math.round(good/(good+rej)*100):0
+    const proj=mp.reduce((a:number,e:any)=>{const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)
+    const eff=proj>0?Math.round(good/proj*100):0
     const remarks=mp.map(e=>e.remarks).filter(Boolean).join(' | ')
     return {machine:m,good,rej,down,eff,product:mp[mp.length-1]?.product||'',shift:mp[0]?.shift||'',remarks}
   }).sort((a,b)=>b.good-a.good)
