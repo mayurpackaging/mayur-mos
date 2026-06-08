@@ -3057,7 +3057,34 @@ function ReportsTab({user}:{user:User}) {
               })()}
               {/* Date-wise table */}
               <div style={S.card}>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Date-wise Summary</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap' as const,gap:8}}>
+                  <div style={{ fontWeight: 700 }}>Date-wise Summary</div>
+                  <div style={{display:'flex',gap:6}}>
+                    {(()=>{
+                      const allD=data.data||[]
+                      const calcEff=(rows:any[])=>{const g=rows.reduce((a:number,r:any)=>a+(r.good_parts||0),0);const p=rows.reduce((a:number,r:any)=>{const ct=parseFloat(r.cycle_time)||0,cav=parseInt(r.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0);return p>0?Math.round(g/p*100):0}
+                      const totG=allD.reduce((a:number,r:any)=>a+(r.good_parts||0),0)
+                      const totP=allD.reduce((a:number,r:any)=>{const ct=parseFloat(r.cycle_time)||0,cav=parseInt(r.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)
+                      const totR=allD.reduce((a:number,r:any)=>a+(r.rejection||0),0)
+                      const totD=allD.reduce((a:number,r:any)=>a+(r.downtime||0),0)
+                      const oEff=totP>0?Math.round(totG/totP*100):0
+                      const printDR=()=>{
+                        const rows=(data.byDate||[]).map((r:any,i:number)=>{const dp=allD.filter((d:any)=>d.date===r.date);const ef=calcEff(dp);return `<tr><td style="text-align:center">${i+1}</td><td>${r.date}</td><td style="text-align:right">${r.good.toLocaleString()}</td><td style="text-align:right">${r.rej.toLocaleString()}</td><td style="text-align:center;font-weight:bold;color:${ef>=90?'#276221':ef>=75?'#854F0B':'#C00000'}">${ef}%</td><td style="text-align:right">${Math.round(r.down)} min</td><td style="text-align:center">${r.entries}</td></tr>`}).join('')
+                        const html=`<html><head><title>Production Summary Report</title><style>body{font-family:Arial;padding:20px;color:#222}h1{color:#1F3864;font-size:20px;margin:0}.sub{color:#666;font-size:12px;margin:4px 0 12px}.box{background:#1F3864;color:#fff;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1F3864;color:#fff;padding:6px;text-align:left;border:1px solid #1F3864}td{padding:5px 6px;border:1px solid #ddd}tr:nth-child(even){background:#f7f7f7}@media print{button{display:none}}</style></head><body><h1>Mayur - Production Summary</h1><div class="sub">${from} to ${to}${plant?' | '+plant:''}</div><div class="box"><b>Projected:</b> ${totP.toLocaleString()} &nbsp; <b>Actual:</b> ${totG.toLocaleString()} &nbsp; <b>Efficiency:</b> ${oEff}% &nbsp; <b>Rejection:</b> ${totR.toLocaleString()} &nbsp; <b>Downtime:</b> ${totD} min</div><table><thead><tr><th>#</th><th>Date</th><th>Good</th><th>Rejection</th><th>Efficiency</th><th>Downtime</th><th>Entries</th></tr></thead><tbody>${rows}</tbody></table><button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button></body></html>`
+                        const w=window.open('','_blank');if(w){w.document.write(html);w.document.close()}
+                      }
+                      const waDR=()=>{
+                        let msg=`📊 *Production Summary*\n${from} → ${to}${plant?' ('+plant+')':''}\n\n*Total:*\nProjected: ${totP.toLocaleString()}\nActual: ${totG.toLocaleString()}\nEfficiency: ${oEff}%\nRejection: ${totR.toLocaleString()}\nDowntime: ${totD} min\n\n*Date-wise:*\n`
+                        ;(data.byDate||[]).forEach((r:any)=>{const dp=allD.filter((d:any)=>d.date===r.date);const ef=calcEff(dp);msg+=`${r.date}: ${r.good.toLocaleString()} pc, ${ef}% eff, ${Math.round(r.down)}min down\n`})
+                        try{if(navigator.clipboard){navigator.clipboard.writeText(msg)}else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Summary copy ho gayi!',ok:true})}catch(e){}
+                      }
+                      return <>
+                        <button onClick={printDR} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>🖨️ Print</button>
+                        <button onClick={waDR} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 WhatsApp</button>
+                      </>
+                    })()}
+                  </div>
+                </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                     <thead><tr>
