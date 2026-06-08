@@ -2951,6 +2951,8 @@ function ReportsTab({user}:{user:User}) {
   })
   const [to, setTo] = useState(nd())
   const [plant, setPlant] = useState('')
+  const [prodFilter, setProdFilter] = useState('')
+  const [machFilter, setMachFilter] = useState('')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any>(null)
   const [rejTrack, setRejTrack] = useState<any>(null)
@@ -3077,15 +3079,40 @@ function ReportsTab({user}:{user:User}) {
               </div>
               {/* Detail records */}
               <div style={S.card}>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Detailed Records ({data.data?.length || 0})</div>
-                <div style={{ overflowX: 'auto' }}>
+                {(()=>{
+                  const allRecs=(data.data||[])
+                  const products=Array.from(new Set(allRecs.map((r:any)=>r.product).filter(Boolean))).sort()
+                  const machines=Array.from(new Set(allRecs.map((r:any)=>r.machine).filter(Boolean))).sort()
+                  const filtered=allRecs.filter((r:any)=>(!prodFilter||r.product===prodFilter)&&(!machFilter||r.machine===machFilter))
+                  const printProd=()=>{
+                    const rows=filtered.map((r:any,i:number)=>`<tr><td style="text-align:center">${i+1}</td><td>${r.date}</td><td>${r.shift||''}</td><td>${r.plant||''}</td><td>${r.machine||''}</td><td>${r.product||''}</td><td>${r.mould||''}</td><td style="text-align:right;color:#276221;font-weight:bold">${(r.good_parts||0).toLocaleString()}</td><td style="text-align:right;color:#C00000">${r.rejection||0}</td><td>${r.remarks||'--'}</td><td>${r.entered_by||''}</td></tr>`).join('')
+                    const tg=filtered.reduce((a:number,r:any)=>a+(r.good_parts||0),0), tr=filtered.reduce((a:number,r:any)=>a+(r.rejection||0),0)
+                    const html=`<html><head><title>Production Report</title><style>body{font-family:Arial;padding:20px;color:#222}h1{color:#1F3864;font-size:20px;margin:0}.sub{color:#666;font-size:12px;margin:4px 0 12px}table{width:100%;border-collapse:collapse;font-size:10px}th{background:#1F3864;color:#fff;padding:6px;text-align:left;border:1px solid #1F3864}td{padding:5px 6px;border:1px solid #ddd}tr:nth-child(even){background:#f7f7f7}@media print{button{display:none}}</style></head><body><h1>Mayur - Production Report</h1><div class="sub">${from} to ${to}${prodFilter?' | Product: '+prodFilter:''}${machFilter?' | Machine: '+machFilter:''}${plant?' | '+plant:''}<br>Total Good: ${tg.toLocaleString()} | Rejection: ${tr.toLocaleString()} | Records: ${filtered.length}</div><table><thead><tr><th>#</th><th>Date</th><th>Shift</th><th>Plant</th><th>Machine</th><th>Product</th><th>Mould</th><th>Good</th><th>Rej</th><th>Remarks</th><th>By</th></tr></thead><tbody>${rows}</tbody></table><button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button></body></html>`
+                    const w=window.open('','_blank');if(w){w.document.write(html);w.document.close()}
+                  }
+                  return <>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap' as const,gap:8}}>
+                    <div style={{fontWeight:700}}>Detailed Records ({filtered.length})</div>
+                    <button onClick={printProd} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>🖨️ Print Report</button>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                    <select style={S.fi} value={prodFilter} onChange={e=>setProdFilter(e.target.value)}>
+                      <option value="">-- Saare Products --</option>
+                      {products.map((p:any)=><option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <select style={S.fi} value={machFilter} onChange={e=>setMachFilter(e.target.value)}>
+                      <option value="">-- Saari Machines --</option>
+                      {machines.map((m:any)=><option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                     <thead><tr>
-                      {['Date', 'Shift', 'Plant', 'Machine', 'Product', 'Good', 'Rej', 'By'].map(h =>
+                      {['Date', 'Shift', 'Plant', 'Machine', 'Product', 'Good', 'Rej', 'Remarks', 'By'].map(h =>
                         <th key={h} style={{ background: '#1F3864', color: '#fff', padding: '6px 8px', textAlign: 'left' }}>{h}</th>)}
                     </tr></thead>
                     <tbody>
-                      {(data.data || []).map((r: any, i: number) => (
+                      {filtered.map((r: any, i: number) => (
                         <tr key={i} style={{ background: i % 2 === 0 ? '#FAFAFA' : '#fff' }}>
                           <td style={{ padding: '6px 8px' }}>{r.date}</td>
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.shift}</td>
@@ -3094,12 +3121,16 @@ function ReportsTab({user}:{user:User}) {
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.product}</td>
                           <td style={{ padding: '6px 8px', color: '#276221', fontWeight: 700 }}>{(r.good_parts || 0).toLocaleString()}</td>
                           <td style={{ padding: '6px 8px', color: '#C00000', fontWeight: 700 }}>{r.rejection || 0}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 10, color: '#555', maxWidth: 160 }}>{r.remarks || '--'}</td>
                           <td style={{ padding: '6px 8px', fontSize: 10 }}>{r.entered_by}</td>
                         </tr>
                       ))}
+                      {filtered.length===0&&<tr><td colSpan={9} style={{textAlign:'center',color:'#666',padding:16}}>Koi record nahi!</td></tr>}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                  </>
+                })()}
               </div>
             </div>
           )}
