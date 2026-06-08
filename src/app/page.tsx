@@ -3043,12 +3043,18 @@ function ReportsTab({user}:{user:User}) {
           {/* Production Report */}
           {module === 'production' && data.summary && (
             <div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-                <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Good Parts</div><div style={{ fontSize: 18, fontWeight: 700, color: '#276221' }}>{(data.summary.totalGood || 0).toLocaleString()}</div></div>
+              {(()=>{
+                const allD=data.data||[]
+                const totGood=allD.reduce((a:number,r:any)=>a+(r.good_parts||0),0)
+                const totProj=allD.reduce((a:number,r:any)=>{const ct=parseFloat(r.cycle_time)||0,cav=parseInt(r.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)
+                const realEff=totProj>0?Math.round(totGood/totProj*100):0
+                return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Projected</div><div style={{ fontSize: 18, fontWeight: 700, color: '#854F0B' }}>{totProj.toLocaleString()}</div></div>
+                <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Actual Good</div><div style={{ fontSize: 18, fontWeight: 700, color: '#276221' }}>{totGood.toLocaleString()}</div></div>
+                <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Efficiency</div><div style={{ fontSize: 18, fontWeight: 700, color: realEff>=90?'#276221':realEff>=75?'#854F0B':'#C00000' }}>{realEff}%</div></div>
                 <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Rejection</div><div style={{ fontSize: 18, fontWeight: 700, color: '#C00000' }}>{(data.summary.totalRej || 0).toLocaleString()}</div></div>
-                <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Efficiency</div><div style={{ fontSize: 18, fontWeight: 700, color: '#1F3864' }}>{data.summary.avgEff}%</div></div>
-                <div style={S.met}><div style={{ fontSize: 10, color: '#666' }}>Entries</div><div style={{ fontSize: 18, fontWeight: 700 }}>{data.summary.entries}</div></div>
               </div>
+              })()}
               {/* Date-wise table */}
               <div style={S.card}>
                 <div style={{ fontWeight: 700, marginBottom: 8 }}>Date-wise Summary</div>
@@ -3062,12 +3068,15 @@ function ReportsTab({user}:{user:User}) {
                       {(data.byDate || []).map((r: any, i: number) => {
                         const total = r.good + r.rej
                         const rejPct = total > 0 ? Math.round(r.rej / total * 100 * 10) / 10 : 0
+                        // projected for this date from data.data
+                        const dayProj=(data.data||[]).filter((d:any)=>d.date===r.date).reduce((a:number,d:any)=>{const ct=parseFloat(d.cycle_time)||0,cav=parseInt(d.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)
+                        const eff=dayProj>0?Math.round(r.good/dayProj*100):0
                         return <tr key={i} style={{ background: i % 2 === 0 ? '#FAFAFA' : '#fff' }}>
                           <td style={{ padding: '6px 8px', fontWeight: 600 }}>{r.date}</td>
                           <td style={{ padding: '6px 8px', color: '#276221', fontWeight: 700 }}>{r.good.toLocaleString()}</td>
                           <td style={{ padding: '6px 8px', color: '#C00000', fontWeight: 700 }}>{r.rej.toLocaleString()}</td>
                           <td style={{ padding: '6px 8px', color: rejPct > 3 ? '#C00000' : '#276221', fontWeight: 700 }}>{rejPct}%</td>
-                          <td style={{ padding: '6px 8px', fontWeight: 700, color: r.good+r.rej>0?(Math.round(r.good/(r.good+r.rej)*100)>=90?'#276221':Math.round(r.good/(r.good+r.rej)*100)>=75?'#854F0B':'#C00000'):'#999' }}>{r.good+r.rej>0?Math.round(r.good/(r.good+r.rej)*100)+'%':'--'}</td>
+                          <td style={{ padding: '6px 8px', fontWeight: 700, color: eff>=90?'#276221':eff>=75?'#854F0B':'#C00000' }}>{dayProj>0?eff+'%':'--'}</td>
                           <td style={{ padding: '6px 8px' }}>{Math.round(r.down)} min</td>
                           <td style={{ padding: '6px 8px' }}>{r.entries}</td>
                         </tr>
