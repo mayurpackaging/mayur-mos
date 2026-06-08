@@ -3110,42 +3110,64 @@ function ReportsTab({user}:{user:User}) {
                     const tr=filtered.reduce((a:number,r:any)=>a+(r.rejection||0),0)
                     const td=filtered.reduce((a:number,r:any)=>a+(r.downtime||0),0)
                     const packets=Math.floor(tg/50)
+                    // projected = (43200/cycle) * cavities per shift entry
+                    const projected=filtered.reduce((a:number,r:any)=>{
+                      const ct=parseFloat(r.cycle_time)||0, cav=parseInt(r.cavities)||0
+                      if(ct>0&&cav>0) return a+Math.round(43200/ct*cav)
+                      return a
+                    },0)
+                    const achPct=projected>0?Math.round(tg/projected*100):0
                     // machine-wise breakup
-                    const byMach:Record<string,{good:number,rej:number,down:number,probs:number}>={}
+                    const byMach:Record<string,{good:number,rej:number,down:number,probs:number,proj:number}>={}
                     filtered.forEach((r:any)=>{
                       const m=r.machine||'?'
-                      if(!byMach[m])byMach[m]={good:0,rej:0,down:0,probs:0}
+                      if(!byMach[m])byMach[m]={good:0,rej:0,down:0,probs:0,proj:0}
                       byMach[m].good+=(r.good_parts||0); byMach[m].rej+=(r.rejection||0); byMach[m].down+=(r.downtime||0)
+                      const ct=parseFloat(r.cycle_time)||0,cav=parseInt(r.cavities)||0
+                      if(ct>0&&cav>0)byMach[m].proj+=Math.round(43200/ct*cav)
                       if((r.downtime||0)>0||(r.stop_reason&&r.stop_reason!=='')||(r.remarks&&/breakdown|problem|stop|issue/i.test(r.remarks)))byMach[m].probs++
                     })
                     const probCount=Object.values(byMach).reduce((a,m)=>a+m.probs,0)
                     const days=Array.from(new Set(filtered.map((r:any)=>r.date))).length
+                    // reasons (remarks where production short / downtime)
+                    const reasons=filtered.filter((r:any)=>r.remarks&&r.remarks.trim()!=='').map((r:any)=>({date:r.date,machine:r.machine,down:r.downtime||0,remark:r.remarks}))
                     return <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:16,marginBottom:10,color:'#fff'}}>
                       <div style={{fontSize:16,fontWeight:700,marginBottom:2}}>📊 {prodFilter}</div>
                       <div style={{fontSize:11,opacity:0.8,marginBottom:10}}>{from} → {to} · {days} din</div>
                       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginBottom:8}}>
-                        {[{l:'Total PC',v:tg.toLocaleString()},{l:'Packets (÷50)',v:packets.toLocaleString()},{l:'Rejection',v:tr.toLocaleString()},{l:'Problems',v:probCount},{l:'Downtime',v:td+' min'},{l:'Machines',v:Object.keys(byMach).length}].map((k,i)=>(
+                        {[{l:'Projected',v:projected.toLocaleString()},{l:'Actual PC',v:tg.toLocaleString()},{l:'Achieved',v:achPct+'%'},{l:'Packets (÷50)',v:packets.toLocaleString()},{l:'Rejection',v:tr.toLocaleString()},{l:'Downtime',v:td+' min'}].map((k,i)=>(
                           <div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
-                            <div style={{fontSize:17,fontWeight:700}}>{k.v}</div>
+                            <div style={{fontSize:17,fontWeight:700,color:k.l==='Achieved'?(achPct>=90?'#A7F3A0':achPct>=70?'#FFE08A':'#FFB3B3'):'#fff'}}>{k.v}</div>
                             <div style={{fontSize:9,opacity:0.85}}>{k.l}</div>
                           </div>
                         ))}
                       </div>
-                      <div style={{background:'rgba(255,255,255,0.1)',borderRadius:8,padding:10}}>
+                      <div style={{background:'rgba(255,255,255,0.1)',borderRadius:8,padding:10,marginBottom:8}}>
                         <div style={{fontSize:11,fontWeight:700,marginBottom:6,opacity:0.9}}>Machine-wise:</div>
-                        {Object.entries(byMach).map(([m,v]:any)=>(
-                          <div key={m} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:'1px solid rgba(255,255,255,0.1)'}}>
+                        {Object.entries(byMach).map(([m,v]:any)=>{
+                          const mp=v.proj>0?Math.round(v.good/v.proj*100):0
+                          return <div key={m} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:'1px solid rgba(255,255,255,0.1)'}}>
                             <span style={{fontWeight:600}}>{m}</span>
-                            <span style={{opacity:0.9}}>{v.good.toLocaleString()} pc · {Math.floor(v.good/50)} pkt · {v.probs} prob · {v.down}min</span>
+                            <span style={{opacity:0.9}}>{v.good.toLocaleString()}/{v.proj.toLocaleString()} ({mp}%) · {Math.floor(v.good/50)}pkt · {v.probs}prob · {v.down}min</span>
+                          </div>
+                        })}
+                      </div>
+                      {reasons.length>0&&<div style={{background:'rgba(255,255,255,0.1)',borderRadius:8,padding:10,marginBottom:8}}>
+                        <div style={{fontSize:11,fontWeight:700,marginBottom:6,opacity:0.9}}>Reasons / Remarks (kyun kam/problem):</div>
+                        {reasons.slice(0,15).map((r:any,i:number)=>(
+                          <div key={i} style={{fontSize:10,padding:'3px 0',borderBottom:'1px solid rgba(255,255,255,0.08)',opacity:0.92}}>
+                            <b>{r.date}</b> · {r.machine}{r.down>0?` · ${r.down}min down`:''} → {r.remark}
                           </div>
                         ))}
-                      </div>
+                        {reasons.length>15&&<div style={{fontSize:9,opacity:0.7,marginTop:4}}>+{reasons.length-15} aur...</div>}
+                      </div>}
                       <button onClick={()=>{
                         let msg=`📊 *${prodFilter} — Production Report*\n${from} → ${to} (${days} din)\n\n`
-                        msg+=`*Total:*\nPC: ${tg.toLocaleString()}\nPackets: ${packets.toLocaleString()} (÷50)\nRejection: ${tr.toLocaleString()}\nProblems: ${probCount}\nDowntime: ${td} min\n\n*Machine-wise:*\n`
-                        Object.entries(byMach).forEach(([m,v]:any)=>{msg+=`${m}: ${v.good.toLocaleString()} pc, ${Math.floor(v.good/50)} pkt, ${v.probs} problem, ${v.down}min down\n`})
+                        msg+=`*Summary:*\nProjected: ${projected.toLocaleString()}\nActual: ${tg.toLocaleString()} (${achPct}%)\nPackets: ${packets.toLocaleString()} (÷50)\nRejection: ${tr.toLocaleString()}\nProblems: ${probCount}\nDowntime: ${td} min\n\n*Machine-wise:*\n`
+                        Object.entries(byMach).forEach(([m,v]:any)=>{const mp=v.proj>0?Math.round(v.good/v.proj*100):0;msg+=`${m}: ${v.good.toLocaleString()}/${v.proj.toLocaleString()} (${mp}%), ${Math.floor(v.good/50)}pkt, ${v.probs}prob, ${v.down}min\n`})
+                        if(reasons.length>0){msg+=`\n*Reasons/Remarks:*\n`;reasons.slice(0,20).forEach((r:any)=>{msg+=`${r.date} ${r.machine}${r.down>0?` (${r.down}min)`:''}: ${r.remark}\n`})}
                         try{if(navigator.clipboard){navigator.clipboard.writeText(msg)}else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Report copy ho gayi!',ok:true})}catch(e){}
-                      }} style={{marginTop:10,background:'#25D366',color:'#fff',border:'none',borderRadius:6,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:'pointer',width:'100%'}}>📋 WhatsApp Report Copy</button>
+                      }} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:6,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:'pointer',width:'100%'}}>📋 WhatsApp Report Copy</button>
                     </div>
                   })()}
                   <div style={{ overflowX: 'auto' }}>
