@@ -3087,7 +3087,11 @@ function ReportsTab({user}:{user:User}) {
                   const printProd=()=>{
                     const rows=filtered.map((r:any,i:number)=>`<tr><td style="text-align:center">${i+1}</td><td>${r.date}</td><td>${r.shift||''}</td><td>${r.plant||''}</td><td>${r.machine||''}</td><td>${r.product||''}</td><td>${r.mould||''}</td><td style="text-align:right;color:#276221;font-weight:bold">${(r.good_parts||0).toLocaleString()}</td><td style="text-align:right;color:#C00000">${r.rejection||0}</td><td>${r.remarks||'--'}</td><td>${r.entered_by||''}</td></tr>`).join('')
                     const tg=filtered.reduce((a:number,r:any)=>a+(r.good_parts||0),0), tr=filtered.reduce((a:number,r:any)=>a+(r.rejection||0),0)
-                    const html=`<html><head><title>Production Report</title><style>body{font-family:Arial;padding:20px;color:#222}h1{color:#1F3864;font-size:20px;margin:0}.sub{color:#666;font-size:12px;margin:4px 0 12px}table{width:100%;border-collapse:collapse;font-size:10px}th{background:#1F3864;color:#fff;padding:6px;text-align:left;border:1px solid #1F3864}td{padding:5px 6px;border:1px solid #ddd}tr:nth-child(even){background:#f7f7f7}@media print{button{display:none}}</style></head><body><h1>Mayur - Production Report</h1><div class="sub">${from} to ${to}${prodFilter?' | Product: '+prodFilter:''}${machFilter?' | Machine: '+machFilter:''}${plant?' | '+plant:''}<br>Total Good: ${tg.toLocaleString()} | Rejection: ${tr.toLocaleString()} | Records: ${filtered.length}</div><table><thead><tr><th>#</th><th>Date</th><th>Shift</th><th>Plant</th><th>Machine</th><th>Product</th><th>Mould</th><th>Good</th><th>Rej</th><th>Remarks</th><th>By</th></tr></thead><tbody>${rows}</tbody></table><button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button></body></html>`
+                    const tdn=filtered.reduce((a:number,r:any)=>a+(r.downtime||0),0)
+                    const proj=filtered.reduce((a:number,r:any)=>{const ct=parseFloat(r.cycle_time)||0,cav=parseInt(r.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)
+                    const ach=proj>0?Math.round(tg/proj*100):0
+                    const pkts=Math.floor(tg/50)
+                    const html=`<html><head><title>Production Report</title><style>body{font-family:Arial;padding:20px;color:#222}h1{color:#1F3864;font-size:20px;margin:0}.sub{color:#666;font-size:12px;margin:4px 0 12px}table{width:100%;border-collapse:collapse;font-size:10px}th{background:#1F3864;color:#fff;padding:6px;text-align:left;border:1px solid #1F3864}td{padding:5px 6px;border:1px solid #ddd}tr:nth-child(even){background:#f7f7f7}@media print{button{display:none}}</style></head><body><h1>Mayur - Production Report</h1><div class="sub">${from} to ${to}${prodFilter?' | Product: '+prodFilter:''}${machFilter?' | Machine: '+machFilter:''}${plant?' | '+plant:''}<br><b>Projected: ${proj.toLocaleString()} | Actual: ${tg.toLocaleString()} (${ach}%) | Packets: ${pkts.toLocaleString()} | Rejection: ${tr.toLocaleString()} | Downtime: ${tdn} min | Records: ${filtered.length}</b></div><table><thead><tr><th>#</th><th>Date</th><th>Shift</th><th>Plant</th><th>Machine</th><th>Product</th><th>Mould</th><th>Good</th><th>Rej</th><th>Remarks</th><th>By</th></tr></thead><tbody>${rows}</tbody></table><button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button></body></html>`
                     const w=window.open('','_blank');if(w){w.document.write(html);w.document.close()}
                   }
                   return <>
@@ -3105,7 +3109,7 @@ function ReportsTab({user}:{user:User}) {
                       {machines.map((m:any)=><option key={m} value={m}>{m}</option>)}
                     </select>
                   </div>
-                  {prodFilter&&(()=>{
+                  {(prodFilter||machFilter)&&(()=>{
                     const tg=filtered.reduce((a:number,r:any)=>a+(r.good_parts||0),0)
                     const tr=filtered.reduce((a:number,r:any)=>a+(r.rejection||0),0)
                     const td=filtered.reduce((a:number,r:any)=>a+(r.downtime||0),0)
@@ -3132,7 +3136,7 @@ function ReportsTab({user}:{user:User}) {
                     // reasons (remarks where production short / downtime)
                     const reasons=filtered.filter((r:any)=>r.remarks&&r.remarks.trim()!=='').map((r:any)=>({date:r.date,machine:r.machine,down:r.downtime||0,remark:r.remarks}))
                     return <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:16,marginBottom:10,color:'#fff'}}>
-                      <div style={{fontSize:16,fontWeight:700,marginBottom:2}}>📊 {prodFilter}</div>
+                      <div style={{fontSize:16,fontWeight:700,marginBottom:2}}>📊 {prodFilter||machFilter}</div>
                       <div style={{fontSize:11,opacity:0.8,marginBottom:10}}>{from} → {to} · {days} din</div>
                       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginBottom:8}}>
                         {[{l:'Projected',v:projected.toLocaleString()},{l:'Actual PC',v:tg.toLocaleString()},{l:'Achieved',v:achPct+'%'},{l:'Packets (÷50)',v:packets.toLocaleString()},{l:'Rejection',v:tr.toLocaleString()},{l:'Downtime',v:td+' min'}].map((k,i)=>(
@@ -3162,7 +3166,7 @@ function ReportsTab({user}:{user:User}) {
                         {reasons.length>15&&<div style={{fontSize:9,opacity:0.7,marginTop:4}}>+{reasons.length-15} aur...</div>}
                       </div>}
                       <button onClick={()=>{
-                        let msg=`📊 *${prodFilter} — Production Report*\n${from} → ${to} (${days} din)\n\n`
+                        let msg=`📊 *${prodFilter||machFilter} — Production Report*\n${from} → ${to} (${days} din)\n\n`
                         msg+=`*Summary:*\nProjected: ${projected.toLocaleString()}\nActual: ${tg.toLocaleString()} (${achPct}%)\nPackets: ${packets.toLocaleString()} (÷50)\nRejection: ${tr.toLocaleString()}\nProblems: ${probCount}\nDowntime: ${td} min\n\n*Machine-wise:*\n`
                         Object.entries(byMach).forEach(([m,v]:any)=>{const mp=v.proj>0?Math.round(v.good/v.proj*100):0;msg+=`${m}: ${v.good.toLocaleString()}/${v.proj.toLocaleString()} (${mp}%), ${Math.floor(v.good/50)}pkt, ${v.probs}prob, ${v.down}min\n`})
                         if(reasons.length>0){msg+=`\n*Reasons/Remarks:*\n`;reasons.slice(0,20).forEach((r:any)=>{msg+=`${r.date} ${r.machine}${r.down>0?` (${r.down}min)`:''}: ${r.remark}\n`})}
