@@ -9,7 +9,8 @@ export async function GET(req: Request) {
 
   // PM logs for a specific mould (for Mould History tab) — includes checks
   if (logsMould) {
-    const { data } = await supabase.from('pm_logs').select('*').ilike('mould_name', logsMould).order('date', { ascending: true })
+    // match by name prefix (pm_logs stores "Name (code)", app sends just "Name")
+    const { data } = await supabase.from('pm_logs').select('*').ilike('mould_name', logsMould + '%').order('date', { ascending: true })
     return NextResponse.json({ success: true, logs: data || [] })
   }
 
