@@ -3105,6 +3105,49 @@ function ReportsTab({user}:{user:User}) {
                       {machines.map((m:any)=><option key={m} value={m}>{m}</option>)}
                     </select>
                   </div>
+                  {prodFilter&&(()=>{
+                    const tg=filtered.reduce((a:number,r:any)=>a+(r.good_parts||0),0)
+                    const tr=filtered.reduce((a:number,r:any)=>a+(r.rejection||0),0)
+                    const td=filtered.reduce((a:number,r:any)=>a+(r.downtime||0),0)
+                    const packets=Math.floor(tg/50)
+                    // machine-wise breakup
+                    const byMach:Record<string,{good:number,rej:number,down:number,probs:number}>={}
+                    filtered.forEach((r:any)=>{
+                      const m=r.machine||'?'
+                      if(!byMach[m])byMach[m]={good:0,rej:0,down:0,probs:0}
+                      byMach[m].good+=(r.good_parts||0); byMach[m].rej+=(r.rejection||0); byMach[m].down+=(r.downtime||0)
+                      if((r.downtime||0)>0||(r.stop_reason&&r.stop_reason!=='')||(r.remarks&&/breakdown|problem|stop|issue/i.test(r.remarks)))byMach[m].probs++
+                    })
+                    const probCount=Object.values(byMach).reduce((a,m)=>a+m.probs,0)
+                    const days=Array.from(new Set(filtered.map((r:any)=>r.date))).length
+                    return <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',borderRadius:12,padding:16,marginBottom:10,color:'#fff'}}>
+                      <div style={{fontSize:16,fontWeight:700,marginBottom:2}}>📊 {prodFilter}</div>
+                      <div style={{fontSize:11,opacity:0.8,marginBottom:10}}>{from} → {to} · {days} din</div>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginBottom:8}}>
+                        {[{l:'Total PC',v:tg.toLocaleString()},{l:'Packets (÷50)',v:packets.toLocaleString()},{l:'Rejection',v:tr.toLocaleString()},{l:'Problems',v:probCount},{l:'Downtime',v:td+' min'},{l:'Machines',v:Object.keys(byMach).length}].map((k,i)=>(
+                          <div key={i} style={{background:'rgba(255,255,255,0.15)',borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
+                            <div style={{fontSize:17,fontWeight:700}}>{k.v}</div>
+                            <div style={{fontSize:9,opacity:0.85}}>{k.l}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{background:'rgba(255,255,255,0.1)',borderRadius:8,padding:10}}>
+                        <div style={{fontSize:11,fontWeight:700,marginBottom:6,opacity:0.9}}>Machine-wise:</div>
+                        {Object.entries(byMach).map(([m,v]:any)=>(
+                          <div key={m} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:'1px solid rgba(255,255,255,0.1)'}}>
+                            <span style={{fontWeight:600}}>{m}</span>
+                            <span style={{opacity:0.9}}>{v.good.toLocaleString()} pc · {Math.floor(v.good/50)} pkt · {v.probs} prob · {v.down}min</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{
+                        let msg=`📊 *${prodFilter} — Production Report*\n${from} → ${to} (${days} din)\n\n`
+                        msg+=`*Total:*\nPC: ${tg.toLocaleString()}\nPackets: ${packets.toLocaleString()} (÷50)\nRejection: ${tr.toLocaleString()}\nProblems: ${probCount}\nDowntime: ${td} min\n\n*Machine-wise:*\n`
+                        Object.entries(byMach).forEach(([m,v]:any)=>{msg+=`${m}: ${v.good.toLocaleString()} pc, ${Math.floor(v.good/50)} pkt, ${v.probs} problem, ${v.down}min down\n`})
+                        try{if(navigator.clipboard){navigator.clipboard.writeText(msg)}else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Report copy ho gayi!',ok:true})}catch(e){}
+                      }} style={{marginTop:10,background:'#25D366',color:'#fff',border:'none',borderRadius:6,padding:'8px 14px',fontSize:12,fontWeight:700,cursor:'pointer',width:'100%'}}>📋 WhatsApp Report Copy</button>
+                    </div>
+                  })()}
                   <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                     <thead><tr>
