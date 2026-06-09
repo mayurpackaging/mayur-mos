@@ -3133,7 +3133,24 @@ function ReportsTab({user}:{user:User}) {
                   return <>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap' as const,gap:8}}>
                     <div style={{fontWeight:700}}>Detailed Records ({filtered.length})</div>
-                    <button onClick={printProd} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>🖨️ Print Report</button>
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={printProd} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>🖨️ Print Report</button>
+                      <button onClick={()=>{
+                        const tg=filtered.reduce((a:number,r:any)=>a+(r.good_parts||0),0)
+                        const tr=filtered.reduce((a:number,r:any)=>a+(r.rejection||0),0)
+                        const tdn=filtered.reduce((a:number,r:any)=>a+(r.downtime||0),0)
+                        const proj=filtered.reduce((a:number,r:any)=>{const ct=parseFloat(r.cycle_time)||0,cav=parseInt(r.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)
+                        const ach=proj>0?Math.round(tg/proj*100):0
+                        const pkts=Math.floor(tg/50)
+                        let msg=`📊 *Production Report (Detailed)*\n${from} → ${to}`
+                        if(prodFilter)msg+=`\nProduct: ${prodFilter}`
+                        if(machFilter)msg+=`\nMachine: ${machFilter}`
+                        if(plant)msg+=`\nPlant: ${plant}`
+                        msg+=`\n\n*Summary:*\nProjected: ${proj.toLocaleString()}\nActual: ${tg.toLocaleString()} (${ach}%)\nPackets: ${pkts.toLocaleString()}\nRejection: ${tr.toLocaleString()}\nDowntime: ${tdn} min\nRecords: ${filtered.length}\n\n*Entries:*\n`
+                        filtered.forEach((r:any)=>{msg+=`\n${r.date} ${r.shift?.includes('Night')?'🌙':'☀️'} ${r.machine}\n${r.product} | Good: ${(r.good_parts||0).toLocaleString()} | Rej: ${r.rejection||0}${r.remarks?'\nRemark: '+r.remarks:''}\n`})
+                        try{if(navigator.clipboard){navigator.clipboard.writeText(msg)}else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Report copy ho gayi!',ok:true})}catch(e){}
+                      }} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 WhatsApp</button>
+                    </div>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
                     <select style={S.fi} value={prodFilter} onChange={e=>setProdFilter(e.target.value)}>
