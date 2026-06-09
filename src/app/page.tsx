@@ -225,7 +225,7 @@ export default function MOS() {
     setLoading(true);setLoginErr('')
     const res = await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})}).then(r=>r.json())
     setLoading(false)
-    if(res.success){setUser(res.user);setScreen('main');setTab(res.user.modules.split(',')[0].trim().toLowerCase())}
+    if(res.success){setUser(res.user);setScreen('main');setTab('home')}
     else setLoginErr(res.msg||'Login failed!')
   }
 
@@ -291,15 +291,14 @@ export default function MOS() {
           <button onClick={()=>{setUser(null);setScreen('login');setUsername('');setPassword('')}} style={{background:'transparent',border:'1px solid rgba(255,255,255,.3)',color:'#fff',fontSize:11,padding:'5px 12px',borderRadius:8,cursor:'pointer'}}>Logout</button>
         </div>
       </div>
-      <div style={S.nav}>
-        {modules.map((m:string)=><button key={m} style={{...(tab===m?S.nbA:S.nb),position:'relative'}} onClick={()=>setTab(m)}>
-            {ML[m]||m}
-            {m==='mouldpm'&&pmAlertCount>0&&<span style={{position:'absolute',top:-4,right:-4,background:'#C00000',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,lineHeight:'16px'}}>{pmAlertCount}</span>}
-          </button>)}
-      </div>
-      <TodaysPlanBanner/>
+      {tab!=='home'&&<div style={S.nav}>
+        <button onClick={()=>setTab('home')} style={{...S.nbA,background:'linear-gradient(135deg,#D62828,#B81E1E)',border:'1px solid #D62828',display:'flex',alignItems:'center',gap:4}}>← Home</button>
+        <div style={{display:'flex',alignItems:'center',fontSize:13,fontWeight:700,color:'#1F3864',paddingLeft:6}}>{ML[tab]||tab}</div>
+      </div>}
+      {tab!=='home'&&<TodaysPlanBanner/>}
       <div style={{padding:'0 12px',marginTop:8}}><QCAlertBanner user={user}/></div>
       <div style={{padding:12}}>
+        {tab==='home'&&<HomeGrid user={user} modules={modules} setTab={setTab} pmAlertCount={pmAlertCount}/>}
         {tab==='mis'&&<MISTab/>}
         {tab==='ims'&&<IMSTab user={user}/>}
         {tab==='production'&&<ProductionTab user={user}/>}
@@ -9497,5 +9496,70 @@ function MyChecklistTab({user}:{user:User}) {
     <div style={{textAlign:'center',marginTop:14}}>
       <button onClick={load} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',fontSize:12,fontWeight:600,cursor:'pointer'}}>🔄 Refresh</button>
     </div>
+  </div>
+}
+
+// ─── Home Grid — corporate landing with banner + category cards ──────
+function HomeGrid({user,modules,setTab,pmAlertCount}:{user:User,modules:string[],setTab:(t:string)=>void,pmAlertCount:number}) {
+  // icon + colour for each module
+  const META:Record<string,{icon:string,color:string,label:string}>={
+    mis:{icon:'📊',color:'#1F3864',label:'MIS Dashboard'},
+    ims:{icon:'📦',color:'#0F6E56',label:'IMS Stock'},
+    production:{icon:'🏭',color:'#185FA5',label:'Production'},
+    bulkproduction:{icon:'⚡',color:'#185FA5',label:'Bulk Production'},
+    planning:{icon:'🗓️',color:'#534AB7',label:'Planning'},
+    quality:{icon:'🔬',color:'#0F6E56',label:'Quality'},
+    rejection:{icon:'❌',color:'#C00000',label:'Rejection'},
+    mouldchange:{icon:'🔄',color:'#854F0B',label:'Mould Change'},
+    mouldpm:{icon:'⚙️',color:'#854F0B',label:'Mould PM'},
+    mouldhistory:{icon:'📜',color:'#5F5E5A',label:'Mould History'},
+    breakdown:{icon:'🔧',color:'#C00000',label:'Breakdown'},
+    maintenance:{icon:'🛠️',color:'#993C1D',label:'Maintenance'},
+    spares:{icon:'🔩',color:'#5F5E5A',label:'Spares'},
+    grease:{icon:'🛢️',color:'#854F0B',label:'Grease'},
+    dispatch:{icon:'🚚',color:'#185FA5',label:'Dispatch'},
+    batch:{icon:'🏷️',color:'#534AB7',label:'Batch'},
+    sales:{icon:'💰',color:'#0F6E56',label:'Sales'},
+    reports:{icon:'📈',color:'#1F3864',label:'Reports'},
+    dailyreport:{icon:'📋',color:'#1F3864',label:'Daily Report'},
+    performance:{icon:'🎯',color:'#534AB7',label:'Performance'},
+    processcheck:{icon:'✅',color:'#0F6E56',label:'Process Checker'},
+    checklist:{icon:'✅',color:'#0F6E56',label:'My Checklist'},
+    qcalerts:{icon:'🚨',color:'#C00000',label:'QC Alerts'},
+    users:{icon:'👥',color:'#5F5E5A',label:'Users'},
+    guide:{icon:'📖',color:'#534AB7',label:'Help / Guide'},
+  }
+  // dedupe modules (some users have spares_edit etc — skip non-module ones)
+  const skip=['spares_edit']
+  const seen=new Set<string>()
+  const tiles=modules.filter(m=>!skip.includes(m)&&META[m]&&!seen.has(m)&&seen.add(m))
+
+  return <div style={{maxWidth:760,margin:'0 auto'}}>
+    {/* Why Choose Mayur banner */}
+    <div style={{borderRadius:14,overflow:'hidden',marginBottom:16,boxShadow:'0 4px 20px rgba(0,0,0,0.1)',border:'1px solid #eee'}}>
+      <img src="/why-mayur.jpeg" alt="Why Choose Mayur" style={{width:'100%',height:'auto',display:'block'}}/>
+    </div>
+
+    {/* Greeting */}
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:20,fontWeight:800,color:'#1F3864'}}>Namaste, {user.name?.split(' ')[0]} 👋</div>
+      <div style={{fontSize:12,color:'#888'}}>Kahan jaana hai? Neeche se select karo.</div>
+    </div>
+
+    {/* Category cards grid */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      {tiles.map(m=>{
+        const meta=META[m]
+        return <button key={m} onClick={()=>setTab(m)} style={{position:'relative' as const,background:'#fff',border:'1px solid #ECECEC',borderRadius:14,padding:'18px 14px',cursor:'pointer',textAlign:'left' as const,display:'flex',alignItems:'center',gap:12,boxShadow:'0 2px 8px rgba(0,0,0,0.04)',transition:'all 0.15s'}}>
+          <div style={{width:46,height:46,borderRadius:12,background:meta.color+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,flexShrink:0}}>{meta.icon}</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:700,color:'#222',lineHeight:1.2}}>{meta.label}</div>
+          </div>
+          {m==='mouldpm'&&pmAlertCount>0&&<span style={{position:'absolute' as const,top:8,right:8,background:'#C00000',color:'#fff',borderRadius:'50%',minWidth:18,height:18,fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,padding:'0 4px'}}>{pmAlertCount}</span>}
+        </button>
+      })}
+    </div>
+
+    <div style={{textAlign:'center',marginTop:20,fontSize:10,color:'#bbb'}}>Mayur Food Packaging · Shreeja Packaging Industries Pvt. Ltd.</div>
   </div>
 }
