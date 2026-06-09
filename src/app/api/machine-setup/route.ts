@@ -99,12 +99,13 @@ export async function POST(req: Request) {
         continue
       }
 
-      // ── Find existing production row (same date+machine+shift+plant+mould) ──
+      // ── Find existing production row (same date+machine+shift+plant+mould+product) ──
+      // product bhi match karte hain taaki colour change (same mould, naya product) ki alag row bane
       const { data: existRows } = await supabase.from('production')
         .select('id')
         .eq('date', entryDate).eq('machine', entryMachine)
         .eq('shift', entryShift).eq('plant', entryPlant)
-        .eq('mould', entryMould)
+        .eq('mould', entryMould).eq('product', entry.product || '')
         .order('created_at', { ascending: true }).limit(1)
       const existing = (existRows && existRows.length > 0) ? existRows[0] : null
 
@@ -148,6 +149,7 @@ export async function POST(req: Request) {
         downtime: Math.round(sumDown), shots_this_shift: sumShots,
         machine_status: entry.status || 'running',
         stop_reason: entry.stopReason || '',
+        product: entry.product || '', mould: entryMould,
         operator: entry.operator || '', operator2: entry.operator2 || '',
       }).eq('id', prodId)
 
