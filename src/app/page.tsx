@@ -298,6 +298,7 @@ export default function MOS() {
           </button>)}
       </div>
       <TodaysPlanBanner/>
+      <div style={{padding:'0 12px',marginTop:8}}><QCAlertBanner user={user}/></div>
       <div style={{padding:12}}>
         {tab==='mis'&&<MISTab/>}
         {tab==='ims'&&<IMSTab user={user}/>}
@@ -1573,7 +1574,7 @@ function QCAlertBanner({user}:{user:User}) {
     fetch('/api/qcalerts?status=Pending'+(plant?'&plant='+plant:'')).then(r=>r.json()).then(d=>setAlerts(d.data||[])).catch(()=>{})
   }
 
-  useEffect(()=>{ load() },[])
+  useEffect(()=>{ load(); const t=setInterval(load,60000); return ()=>clearInterval(t) },[])
 
   if(alerts.length===0) return null
 
@@ -1746,7 +1747,6 @@ function ProductionTab({user}:{user:User}) {
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>
 
   return <div>
-    <QCAlertBanner user={user}/>
     {/* Today's entries summary */}
     {todayEntries.length>0&&<div style={{...S.card,border:'1px solid #276221',background:'#F0FFF4',marginBottom:8}}>
       <div style={{fontWeight:700,color:'#276221',marginBottom:8}}>📋 Aaj Ki Entries ({nd()})</div>
