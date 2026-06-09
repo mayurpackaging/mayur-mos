@@ -230,19 +230,41 @@ export default function MOS() {
   }
 
   if(screen==='login') return (
-    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:16,background:'#F2F4F7'}}>
-      <div style={{background:'#1F3864',color:'#fff',padding:'16px 32px',borderRadius:12,textAlign:'center',marginBottom:24}}>
-        <div style={{fontSize:16,fontWeight:700}}>Mayur Operations System</div>
-        <div style={{fontSize:11,color:'#90A8C8',marginTop:4}}>Mayur Food Packaging Products — Bawana, Delhi</div>
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:16,background:'linear-gradient(135deg,#FFFFFF 0%,#FFF5F5 50%,#F0FAF4 100%)',position:'relative' as const,overflow:'hidden'}}>
+      {/* animated background circles */}
+      <div style={{position:'absolute' as const,top:'-12%',right:'-8%',width:340,height:340,borderRadius:'50%',background:'radial-gradient(circle,rgba(214,40,40,0.07),transparent 70%)',animation:'floatA 9s ease-in-out infinite'}}/>
+      <div style={{position:'absolute' as const,bottom:'-15%',left:'-10%',width:400,height:400,borderRadius:'50%',background:'radial-gradient(circle,rgba(20,120,70,0.08),transparent 70%)',animation:'floatB 11s ease-in-out infinite'}}/>
+      <style>{`
+        @keyframes floatA{0%,100%{transform:translateY(0) translateX(0)}50%{transform:translateY(-22px) translateX(14px)}}
+        @keyframes floatB{0%,100%{transform:translateY(0) translateX(0)}50%{transform:translateY(18px) translateX(-18px)}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+      `}</style>
+
+      {/* Logo */}
+      <div style={{textAlign:'center',marginBottom:24,position:'relative' as const,zIndex:2,animation:'fadeUp 0.8s ease'}}>
+        <img src="/mayur-logo.jpeg" alt="Mayur Food Packaging" style={{width:200,maxWidth:'70%',height:'auto',marginBottom:8}}/>
+        <div style={{fontSize:10,color:'#999',marginTop:4,letterSpacing:1}}>Shreeja Packaging Industries Pvt. Ltd. · Bawana, Delhi</div>
       </div>
-      <div style={{background:'#fff',borderRadius:12,padding:24,width:'100%',maxWidth:340,boxShadow:'0 2px 8px rgba(0,0,0,.08)'}}>
-        <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>Welcome</div>
-        <div style={{fontSize:13,color:'#666',marginBottom:20}}>Apni ID se login karein</div>
+
+      {/* Feature badges */}
+      <div style={{display:'flex',gap:8,marginBottom:22,position:'relative' as const,zIndex:2,animation:'fadeUp 1s ease',flexWrap:'wrap' as const,justifyContent:'center',maxWidth:360}}>
+        {['Food Grade','Leakproof','Microwave Safe','Airtight'].map((f,i)=>(
+          <div key={i} style={{background:i%2===0?'#FDECEC':'#E8F6EE',color:i%2===0?'#D62828':'#147846',border:`1px solid ${i%2===0?'#F5C4C4':'#B8E0CB'}`,borderRadius:999,padding:'5px 14px',fontSize:11,fontWeight:600}}>✓ {f}</div>
+        ))}
+      </div>
+
+      {/* Login card */}
+      <div style={{background:'#fff',borderRadius:18,padding:28,width:'100%',maxWidth:360,boxShadow:'0 16px 50px rgba(0,0,0,0.12)',position:'relative' as const,zIndex:2,animation:'fadeUp 1.2s ease',borderTop:'4px solid #D62828'}}>
+        <div style={{fontSize:22,fontWeight:800,color:'#1F3864',marginBottom:2}}>Welcome Back</div>
+        <div style={{fontSize:13,color:'#888',marginBottom:22}}>Operations System mein login karein</div>
         <div style={S.f}><label style={S.lbl}>Username</label><input style={S.fi} value={username} onChange={e=>setUsername(e.target.value)} placeholder="username" onKeyDown={e=>e.key==='Enter'&&doLogin()}/></div>
         <div style={S.f}><label style={S.lbl}>Password</label><input style={S.fi} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="password" onKeyDown={e=>e.key==='Enter'&&doLogin()}/></div>
-        <button style={S.sb} onClick={doLogin} disabled={loading}>{loading?'Logging in...':'Login'}</button>
-        {loginErr&&<div style={{fontSize:12,color:'#C00000',marginTop:8,textAlign:'center'}}>{loginErr}</div>}
+        <button style={{...S.sb,background:'linear-gradient(135deg,#D62828,#B81E1E)',marginTop:4}} onClick={doLogin} disabled={loading}>{loading?'Logging in...':'🔐 Login'}</button>
+        {loginErr&&<div style={{fontSize:12,color:'#C00000',marginTop:10,textAlign:'center'}}>{loginErr}</div>}
       </div>
+
+      <div style={{fontSize:10,color:'#999',marginTop:22,position:'relative' as const,zIndex:2,textAlign:'center'}}>Trusted by Domino's · Dr. Oetker · Tropolite</div>
     </div>
   )
 
