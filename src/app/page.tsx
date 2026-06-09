@@ -1567,6 +1567,7 @@ function QCAlertBanner({user}:{user:User}) {
   const [resolveId,setResolveId]=useState(null)
   const [resolution,setResolution]=useState('')
   const [saving,setSaving]=useState(false)
+  const [expanded,setExpanded]=useState(false)
 
   const load=()=>{
     const plant=user?.modules?.includes('Plant 488')?'Plant 488':user?.modules?.includes('Plant 477')?'Plant 477':''
@@ -1577,7 +1578,16 @@ function QCAlertBanner({user}:{user:User}) {
 
   if(alerts.length===0) return null
 
+  // Collapsed — sirf ek patli line
+  if(!expanded) return <div onClick={()=>setExpanded(true)} style={{marginBottom:8,background:'#C00000',color:'#fff',borderRadius:8,padding:'8px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',boxShadow:'0 2px 8px rgba(192,0,0,0.3)'}}>
+    <div style={{fontSize:12,fontWeight:700}}>🚨 {alerts.length} QC Alert{alerts.length>1?'s':''} — Action chahiye</div>
+    <div style={{fontSize:11,opacity:0.9}}>Tap karein ▼</div>
+  </div>
+
   return <div style={{marginBottom:8}}>
+    <div onClick={()=>setExpanded(false)} style={{background:'#C00000',color:'#fff',borderRadius:'8px 8px 0 0',padding:'6px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',fontSize:12,fontWeight:700}}>
+      <span>🚨 {alerts.length} QC Alert{alerts.length>1?'s':''}</span><span style={{fontSize:11,opacity:0.9}}>Band karein ▲</span>
+    </div>
     {alerts.map((a:any)=><div key={a.id} style={{background:'#FFEBEE',border:'2px solid #C00000',borderRadius:10,padding:12,marginBottom:6}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
         <div>
