@@ -187,10 +187,10 @@ const PM_CHECKLIST = [
 const nd = () => new Date().toISOString().slice(0,10)
 
 const S = {
-  topbar:{background:'#1F3864',padding:'10px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky' as const,top:0,zIndex:100},
-  nav:{display:'flex',gap:6,padding:'8px 12px',overflowX:'auto' as const,background:'#fff',borderBottom:'1px solid #E0E0E0',position:'sticky' as const,top:44,zIndex:99},
-  nb:{padding:'6px 12px',fontSize:11,fontWeight:600,border:'1px solid #E0E0E0',borderRadius:6,background:'#fff',color:'#666',cursor:'pointer',whiteSpace:'nowrap' as const,flexShrink:0},
-  nbA:{padding:'6px 12px',fontSize:11,fontWeight:600,border:'1px solid #1F3864',borderRadius:6,background:'#1F3864',color:'#fff',cursor:'pointer',whiteSpace:'nowrap' as const,flexShrink:0},
+  topbar:{background:'linear-gradient(135deg,#1F3864,#16294A)',padding:'9px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky' as const,top:0,zIndex:100,boxShadow:'0 2px 12px rgba(0,0,0,0.15)'},
+  nav:{display:'flex',gap:6,padding:'10px 12px',overflowX:'auto' as const,background:'#fff',borderBottom:'1px solid #E8E8E8',position:'sticky' as const,top:54,zIndex:99,boxShadow:'0 1px 4px rgba(0,0,0,0.04)'},
+  nb:{padding:'7px 14px',fontSize:11,fontWeight:600,border:'1px solid #E5E5E5',borderRadius:8,background:'#FAFAFA',color:'#555',cursor:'pointer',whiteSpace:'nowrap' as const,flexShrink:0,transition:'all 0.15s'},
+  nbA:{padding:'7px 14px',fontSize:11,fontWeight:700,border:'1px solid #1F3864',borderRadius:8,background:'linear-gradient(135deg,#1F3864,#2E4A7A)',color:'#fff',cursor:'pointer',whiteSpace:'nowrap' as const,flexShrink:0,boxShadow:'0 2px 8px rgba(31,56,100,0.25)',transition:'all 0.15s'},
   card:{background:'#fff',borderRadius:10,padding:'14px 16px',marginBottom:8,boxShadow:'0 1px 3px rgba(0,0,0,.06)'},
   sb:{width:'100%',padding:10,fontSize:14,fontWeight:700,background:'#1F3864',color:'#fff',border:'none',borderRadius:8,cursor:'pointer',marginTop:4},
   fi:{padding:'9px 12px',fontSize:13,border:'1px solid #E0E0E0',borderRadius:8,outline:'none',background:'#FAFAFA',color:'#1a1a1a',width:'100%'},
@@ -272,12 +272,23 @@ export default function MOS() {
   const modules = user.modules.split(',').map((m:string)=>m.trim().toLowerCase())
 
   return (
-    <div>
+    <div style={{minHeight:'100vh',background:'#F4F6F9'}}>
       <div style={S.topbar}>
-        <div><div style={{color:'#fff',fontSize:13,fontWeight:700}}>Mayur Operations System</div><div style={{fontSize:10,color:'#90A8C8'}}>{new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</div></div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:36,height:36,borderRadius:9,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0}}>
+            <img src="/mayur-logo.jpeg" alt="Mayur" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
+          </div>
+          <div>
+            <div style={{color:'#fff',fontSize:14,fontWeight:700,letterSpacing:0.3}}>Mayur Operations</div>
+            <div style={{fontSize:10,color:'rgba(255,255,255,0.65)'}}>{new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</div>
+          </div>
+        </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div style={{background:'rgba(255,255,255,.15)',color:'#fff',fontSize:11,padding:'4px 10px',borderRadius:999}}>{user.name} — {user.role}</div>
-          <button onClick={()=>{setUser(null);setScreen('login');setUsername('');setPassword('')}} style={{background:'transparent',border:'1px solid rgba(255,255,255,.3)',color:'#fff',fontSize:11,padding:'4px 10px',borderRadius:8,cursor:'pointer'}}>Logout</button>
+          <div style={{display:'flex',alignItems:'center',gap:6,background:'rgba(255,255,255,.15)',padding:'4px 8px 4px 4px',borderRadius:999}}>
+            <div style={{width:24,height:24,borderRadius:'50%',background:'#D62828',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{(user.name||'U').charAt(0)}</div>
+            <div style={{color:'#fff',fontSize:11,fontWeight:600,lineHeight:1.2}}>{user.name}<div style={{fontSize:9,color:'rgba(255,255,255,0.6)',fontWeight:400}}>{user.role}</div></div>
+          </div>
+          <button onClick={()=>{setUser(null);setScreen('login');setUsername('');setPassword('')}} style={{background:'transparent',border:'1px solid rgba(255,255,255,.3)',color:'#fff',fontSize:11,padding:'5px 12px',borderRadius:8,cursor:'pointer'}}>Logout</button>
         </div>
       </div>
       <div style={S.nav}>
