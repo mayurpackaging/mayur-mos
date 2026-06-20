@@ -211,6 +211,21 @@ export default function MOS() {
   const [tab,setTab] = useState('')
   const [scanPart,setScanPart] = useState('')
   const [pmAlertCount,setPmAlertCount]=useState(0)
+  // Auto-login — saved user ho toh seedhа login (ek baar login, phir yaad)
+  useEffect(()=>{
+    try{
+      const saved=localStorage.getItem('mayur_user')
+      if(saved){
+        const u=JSON.parse(saved)
+        if(u&&u.username){
+          setUser(u);setScreen('main')
+          const sp=typeof window!=='undefined'?new URLSearchParams(window.location.search).get('scan'):null
+          if(sp){ setScanPart(sp); setTab('spares') }
+          else setTab('home')
+        }
+      }
+    }catch(e){}
+  },[])
   // PWA setup — manifest, theme, apple touch icon
   useEffect(()=>{
     const head=document.head
@@ -246,6 +261,7 @@ export default function MOS() {
     setLoading(false)
     if(res.success){
       setUser(res.user);setScreen('main')
+      try{localStorage.setItem('mayur_user',JSON.stringify(res.user))}catch(e){}
       // URL mein ?scan=PartName ho toh seedhа spares entry kholo
       const sp=typeof window!=='undefined'?new URLSearchParams(window.location.search).get('scan'):null
       if(sp){ setScanPart(sp); setTab('spares') }
@@ -313,7 +329,7 @@ export default function MOS() {
             <div style={{width:24,height:24,borderRadius:'50%',background:'#D62828',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{(user.name||'U').charAt(0)}</div>
             <div style={{color:'#fff',fontSize:11,fontWeight:600,lineHeight:1.2}}>{user.name}<div style={{fontSize:9,color:'rgba(255,255,255,0.6)',fontWeight:400}}>{user.role}</div></div>
           </div>
-          <button onClick={()=>{setUser(null);setScreen('login');setUsername('');setPassword('')}} style={{background:'transparent',border:'1px solid rgba(255,255,255,.3)',color:'#fff',fontSize:11,padding:'5px 12px',borderRadius:8,cursor:'pointer'}}>Logout</button>
+          <button onClick={()=>{try{localStorage.removeItem('mayur_user')}catch(e){};setUser(null);setScreen('login');setUsername('');setPassword('')}} style={{background:'transparent',border:'1px solid rgba(255,255,255,.3)',color:'#fff',fontSize:11,padding:'5px 12px',borderRadius:8,cursor:'pointer'}}>Logout</button>
         </div>
       </div>
       {tab!=='home'&&<div style={S.nav}>
