@@ -9511,6 +9511,10 @@ function MyChecklistTab({user}:{user:User}) {
 
 // ─── Home Grid — corporate landing with banner + category cards ──────
 function HomeGrid({user,modules,setTab,pmAlertCount}:{user:User,modules:string[],setTab:(t:string)=>void,pmAlertCount:number}) {
+  const [work,setWork]=useState<any>(null)
+  useEffect(()=>{
+    fetch(`/api/processcheck?date=${nd()}`).then(r=>r.json()).then(d=>setWork(d)).catch(()=>{})
+  },[])
   // icon + colour for each module
   const META:Record<string,{icon:string,color:string,label:string}>={
     mis:{icon:'📊',color:'#1F3864',label:'MIS Dashboard'},
@@ -9555,6 +9559,45 @@ function HomeGrid({user,modules,setTab,pmAlertCount}:{user:User,modules:string[]
       <div style={{fontSize:20,fontWeight:800,color:'#1F3864'}}>Namaste, {user.name?.split(' ')[0]} 👋</div>
       <div style={{fontSize:12,color:'#888'}}>Kahan jaana hai? Neeche se select karo.</div>
     </div>
+
+    {/* Aaj ka Kaam — pending work summary */}
+    {work&&work.success&&(()=>{
+      const items:{icon:string,text:string,tab:string,urgent:boolean}[]=[]
+      // pending production slots
+      ;(work.production||[]).forEach((p:any)=>{
+        if(p.dayMissing&&p.dayMissing.length>0)items.push({icon:'🏭',text:`${p.plant} Day: ${p.dayMissing.length} slot baaki`,tab:'bulkproduction',urgent:false})
+        if(p.nightMissing&&p.nightMissing.length>0)items.push({icon:'🏭',text:`${p.plant} Night: ${p.nightMissing.length} slot baaki`,tab:'bulkproduction',urgent:false})
+      })
+      // pending QC / quality
+      ;(work.quality||[]).forEach((q:any)=>{if(q.missing&&q.missing.length>0)items.push({icon:'🔬',text:`${q.plant} Quality: ${q.missing.length} check baaki`,tab:'quality',urgent:false})})
+      // pending breakdowns
+      if(work.breakdown&&work.breakdown.pending>0)items.push({icon:'🔧',text:`${work.breakdown.pending} Breakdown pending`,tab:'breakdown',urgent:true})
+      // overdue PM
+      if(work.mouldPM&&work.mouldPM.overdue>0)items.push({icon:'⚙️',text:`${work.mouldPM.overdue} Mould PM overdue`,tab:'mouldpm',urgent:true})
+      // rejection entry
+      if(work.rejection&&!work.rejection.done)items.push({icon:'❌',text:`Aaj rejection entry baaki`,tab:'rejection',urgent:false})
+
+      if(items.length===0) return <div style={{background:'#E8F5E9',border:'1px solid #B8E0CB',borderRadius:14,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+        <div style={{fontSize:24}}>✅</div>
+        <div><div style={{fontWeight:700,color:'#276221',fontSize:14}}>Sab kaam ho gaya!</div><div style={{fontSize:11,color:'#5A8A6A'}}>Aaj koi pending kaam nahi.</div></div>
+      </div>
+
+      return <div style={{background:'#fff',border:'1px solid #FFE0B2',borderRadius:14,padding:16,marginBottom:16,boxShadow:'0 2px 8px rgba(0,0,0,0.05)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+          <div style={{fontSize:18}}>📋</div>
+          <div style={{fontWeight:800,color:'#854F0B',fontSize:15}}>Aaj ka Kaam ({items.length} pending)</div>
+        </div>
+        <div style={{display:'flex',flexDirection:'column' as const,gap:6}}>
+          {items.map((it,i)=>(
+            <button key={i} onClick={()=>setTab(it.tab)} style={{display:'flex',alignItems:'center',gap:10,background:it.urgent?'#FFEBEE':'#FFF8E1',border:`1px solid ${it.urgent?'#FFCDD2':'#FFE082'}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',textAlign:'left' as const,width:'100%'}}>
+              <span style={{fontSize:18}}>{it.icon}</span>
+              <span style={{flex:1,fontSize:13,fontWeight:600,color:it.urgent?'#C00000':'#5D4037'}}>{it.text}</span>
+              <span style={{fontSize:16,color:'#999'}}>›</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    })()}
 
     {/* Category cards grid */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
