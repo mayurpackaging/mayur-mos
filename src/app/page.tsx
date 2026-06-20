@@ -209,6 +209,23 @@ export default function MOS() {
   const [user,setUser] = useState<User|null>(null)
   const [tab,setTab] = useState('')
   const [pmAlertCount,setPmAlertCount]=useState(0)
+  // PWA setup — manifest, theme, apple touch icon
+  useEffect(()=>{
+    const head=document.head
+    const add=(tag:string,attrs:Record<string,string>)=>{
+      const existing=document.querySelector(`${tag}[${Object.keys(attrs)[0]}="${Object.values(attrs)[0]}"]`)
+      if(existing)return
+      const el=document.createElement(tag)
+      Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v))
+      head.appendChild(el)
+    }
+    add('link',{rel:'manifest',href:'/manifest.json'})
+    add('meta',{name:'theme-color',content:'#1F3864'})
+    add('meta',{name:'apple-mobile-web-app-capable',content:'yes'})
+    add('meta',{name:'apple-mobile-web-app-status-bar-style',content:'default'})
+    add('meta',{name:'apple-mobile-web-app-title',content:'Mayur Ops'})
+    add('link',{rel:'apple-touch-icon',href:'/mayur-logo.jpeg'})
+  },[])
   useEffect(()=>{
     fetch('/api/mouldpm').then(r=>r.json()).then(d=>{
       const moulds=d.moulds||[]
