@@ -343,7 +343,7 @@ export default function MOS() {
         {tab==='guide'&&<GuideTab/>}
         {tab==='checklist'&&<MyChecklistTab user={user}/>}
         {tab==='grease'&&<GreaseTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease','checklist'].includes(tab)&&(
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease','checklist','snapshot'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
