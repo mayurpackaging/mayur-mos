@@ -3792,6 +3792,75 @@ function SparesTab({user}:{user:User}) {
     setPartHistory(res.movements||[])
     setPartHistoryLoading(false)
   }
+
+  // ── QR Generate — saare spares ke QR print ──
+  const printQRCodes=(list:any[])=>{
+    const cards=list.map((s:any)=>{
+      const data=encodeURIComponent(s.part_name||'')
+      const loc=[s.plant,s.room,s.almirah,s.box_no].filter(Boolean).join(' / ')
+      return `<div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${data}" width="120" height="120"/><div class="nm">${s.part_name||''}</div><div class="lc">${loc||''}</div></div>`
+    }).join('')
+    const html=`<html><head><title>Spares QR Codes</title><style>body{font-family:Arial;padding:16px}h1{color:#1F3864;font-size:18px}.grid{display:flex;flex-wrap:wrap;gap:10px}.qr{border:1px solid #333;border-radius:8px;padding:8px;text-align:center;width:140px;page-break-inside:avoid}.nm{font-size:11px;font-weight:bold;margin-top:4px}.lc{font-size:9px;color:#666}@media print{button{display:none}}</style></head><body><h1>Mayur Spares — QR Codes</h1><p style="font-size:11px;color:#666">Print karke har part ke box/almirah pe chipka do. App mein Scan se scan karo.</p><div class="grid">${cards}</div><button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button></body></html>`
+    const w=window.open('','_blank')
+    if(w){ w.document.write(html); w.document.close() }
+  }
+
+  // ── Camera scan ──
+  const [scanning,setScanning]=useState(false)
+  const [scanTarget,setScanTarget]=useState<number|null>(null)
+  const videoRef=useRef<HTMLVideoElement|null>(null)
+  const scanStreamRef=useRef<any>(null)
+  const scanningRef=useRef(false)
+
+  const startScan=async(itemIdx:number|null)=>{
+    setScanTarget(itemIdx)
+    setScanning(true); scanningRef.current=true
+    if(!(window as any).jsQR){
+      await new Promise<void>((res)=>{
+        const sc=document.createElement('script')
+        sc.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'
+        sc.onload=()=>res(); sc.onerror=()=>res()
+        document.body.appendChild(sc)
+      })
+    }
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+      scanStreamRef.current=stream
+      if(videoRef.current){videoRef.current.srcObject=stream;await videoRef.current.play()}
+      requestAnimationFrame(tick)
+    }catch(e){ setToast({msg:'Camera nahi khula. Permission do.',ok:false}); setScanning(false); scanningRef.current=false }
+  }
+  const stopScan=()=>{
+    setScanning(false); scanningRef.current=false
+    if(scanStreamRef.current){scanStreamRef.current.getTracks().forEach((t:any)=>t.stop());scanStreamRef.current=null}
+  }
+  const tick=()=>{
+    const jsQR=(window as any).jsQR
+    const v=videoRef.current
+    if(!scanningRef.current||!v){ return }
+    if(jsQR&&v.readyState===v.HAVE_ENOUGH_DATA){
+      const canvas=document.createElement('canvas')
+      canvas.width=v.videoWidth; canvas.height=v.videoHeight
+      const ctx=canvas.getContext('2d')
+      if(ctx){
+        ctx.drawImage(v,0,0,canvas.width,canvas.height)
+        const img=ctx.getImageData(0,0,canvas.width,canvas.height)
+        const code=jsQR(img.data,img.width,img.height)
+        if(code&&code.data){ handleScanned(decodeURIComponent(code.data)); stopScan(); return }
+      }
+    }
+    requestAnimationFrame(tick)
+  }
+  const handleScanned=(partName:string)=>{
+    const match=spares.find((s:any)=>(s.part_name||'').toLowerCase()===partName.toLowerCase())||spares.find((s:any)=>(s.part_name||'').toLowerCase().includes(partName.toLowerCase()))
+    const name=match?match.part_name:partName
+    if(scanTarget!==null){
+      updateItem(scanTarget,'partName',name)
+      if(match){updateItem(scanTarget,'category',match.category||'')}
+      setToast({msg:`✅ Scan: ${name}`,ok:true})
+    }else{ setToast({msg:`✅ Scan: ${name}`,ok:true}) }
+  }
+
   const [editForm,setEditForm]=useState<any>({})
   const [editSaving,setEditSaving]=useState(false)
   const [vendor,setVendor]=useState(()=>localStorage.getItem('lastVendor')||'')
@@ -3857,6 +3926,14 @@ function SparesTab({user}:{user:User}) {
   const vendors=spares.map(s=>s.last_vendor).filter((v:any,i:number,a:any[])=>v&&a.indexOf(v)===i)
 
   return <div>
+    {/* Camera Scanner Modal */}
+    {scanning&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.92)',zIndex:9999,display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{color:'#fff',fontSize:16,fontWeight:700,marginBottom:12}}>📷 QR pe camera point karo</div>
+      <video ref={videoRef} playsInline style={{width:'100%',maxWidth:360,borderRadius:12,border:'3px solid #534AB7'}}/>
+      <div style={{color:'#90A8C8',fontSize:12,marginTop:10,textAlign:'center' as const}}>Part ka QR camera ke saamne laao — apne aap fill ho jayega</div>
+      <button onClick={stopScan} style={{marginTop:16,background:'#C00000',color:'#fff',border:'none',borderRadius:10,padding:'12px 28px',fontSize:14,fontWeight:700,cursor:'pointer'}}>✕ Cancel</button>
+    </div>}
+
     {/* Stock status */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Total Spares</div><div style={{fontSize:20,fontWeight:700}}>{spares.length}</div></div>
@@ -3911,6 +3988,7 @@ function SparesTab({user}:{user:User}) {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
         <div style={{fontWeight:700,color:'#1F3864',fontSize:13}}>📦 Spares Stock Status {canEdit&&<span style={{fontSize:10,color:'#854F0B',marginLeft:8}}>✏️ Edit rights: Sirf aapke paas</span>}</div>
         <button onClick={()=>printSpares(spares.filter((s:any)=>!spareSearch||s.part_name?.toLowerCase().includes(spareSearch.toLowerCase())))} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>🖨️ Print List</button>
+        <button onClick={()=>printQRCodes(spares.filter((s:any)=>!spareSearch||s.part_name?.toLowerCase().includes(spareSearch.toLowerCase())))} style={{background:'#534AB7',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer',marginLeft:6}}>▦ QR Print</button>
       </div>
       <div style={{overflowX:'auto'}}>
         {/* Part History Modal */}
@@ -4093,6 +4171,9 @@ function SparesTab({user}:{user:User}) {
         }} style={{...S.sb,marginTop:0,background:'#854F0B'}}>Opening Stock Entry Shuru Karo</button>
       </div>}
     </div>
+
+    {/* Scan QR button */}
+    <button onClick={()=>startScan(0)} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#534AB7,#3F37A0)',color:'#fff',border:'none',borderRadius:10,fontSize:15,fontWeight:700,cursor:'pointer',marginBottom:8,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>📷 Scan QR — Part Auto-Fill</button>
 
     {/* Entry Type Tabs */}
     <div style={{display:'flex',gap:8,marginBottom:8}}>
