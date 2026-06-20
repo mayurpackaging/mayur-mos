@@ -209,6 +209,7 @@ export default function MOS() {
   const [screen,setScreen] = useState<'login'|'main'>('login')
   const [user,setUser] = useState<User|null>(null)
   const [tab,setTab] = useState('')
+  const [scanPart,setScanPart] = useState('')
   const [pmAlertCount,setPmAlertCount]=useState(0)
   // PWA setup — manifest, theme, apple touch icon
   useEffect(()=>{
@@ -243,7 +244,13 @@ export default function MOS() {
     setLoading(true);setLoginErr('')
     const res = await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})}).then(r=>r.json())
     setLoading(false)
-    if(res.success){setUser(res.user);setScreen('main');setTab('home')}
+    if(res.success){
+      setUser(res.user);setScreen('main')
+      // URL mein ?scan=PartName ho toh seedhа spares entry kholo
+      const sp=typeof window!=='undefined'?new URLSearchParams(window.location.search).get('scan'):null
+      if(sp){ setScanPart(sp); setTab('spares') }
+      else setTab('home')
+    }
     else setLoginErr(res.msg||'Login failed!')
   }
 
@@ -326,7 +333,7 @@ export default function MOS() {
         {tab==='rejection'&&<RejectionTab user={user}/>}
         {tab==='reports'&&<ReportsTab user={user}/>}
         {tab==='dispatch'&&<DispatchTab user={user}/>}
-        {tab==='spares'&&<SparesTab user={user}/>}
+        {tab==='spares'&&<SparesTab user={user} scanPart={scanPart} clearScan={()=>setScanPart('')}/>}
         {tab==='quality'&&<QualityTab user={user}/>}
         {tab==='batch'&&<BatchTab user={user}/>}
         {tab==='sales'&&<SalesTab user={user}/>}
@@ -3760,7 +3767,7 @@ function DispatchTab({user}:{user:User}) {
 }
 
 // ─── Spares Tab ───────────────────────────────────────────────
-function SparesTab({user}:{user:User}) {
+function SparesTab({user,scanPart,clearScan}:{user:User,scanPart?:string,clearScan?:()=>void}) {
   const canEdit = user?.modules?.includes('spares_edit') || user?.role==='Admin'
   const [spares,setSpares]=useState<any[]>([])
   const [movements,setMovements]=useState<any[]>([])
@@ -3793,14 +3800,16 @@ function SparesTab({user}:{user:User}) {
     setPartHistoryLoading(false)
   }
 
-  // ── QR Generate — saare spares ke QR print ──
+  // ── QR Generate — saare spares ke QR print (URL embedded, camera se app khule) ──
   const printQRCodes=(list:any[])=>{
+    const base=typeof window!=='undefined'?window.location.origin:'https://mayur-mos.vercel.app'
     const cards=list.map((s:any)=>{
-      const data=encodeURIComponent(s.part_name||'')
+      const url=`${base}/?scan=${encodeURIComponent(s.part_name||'')}`
+      const qrData=encodeURIComponent(url)
       const loc=[s.plant,s.room,s.almirah,s.box_no].filter(Boolean).join(' / ')
-      return `<div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${data}" width="120" height="120"/><div class="nm">${s.part_name||''}</div><div class="lc">${loc||''}</div></div>`
+      return `<div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${qrData}" width="120" height="120"/><div class="nm">${s.part_name||''}</div><div class="lc">${loc||''}</div></div>`
     }).join('')
-    const html=`<html><head><title>Spares QR Codes</title><style>body{font-family:Arial;padding:16px}h1{color:#1F3864;font-size:18px}.grid{display:flex;flex-wrap:wrap;gap:10px}.qr{border:1px solid #333;border-radius:8px;padding:8px;text-align:center;width:140px;page-break-inside:avoid}.nm{font-size:11px;font-weight:bold;margin-top:4px}.lc{font-size:9px;color:#666}@media print{button{display:none}}</style></head><body><h1>Mayur Spares — QR Codes</h1><p style="font-size:11px;color:#666">Print karke har part ke box/almirah pe chipka do. App mein Scan se scan karo.</p><div class="grid">${cards}</div><button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button></body></html>`
+    const html=`<html><head><title>Spares QR Codes</title><style>body{font-family:Arial;padding:16px}h1{color:#1F3864;font-size:18px}.grid{display:flex;flex-wrap:wrap;gap:10px}.qr{border:1px solid #333;border-radius:8px;padding:8px;text-align:center;width:140px;page-break-inside:avoid}.nm{font-size:11px;font-weight:bold;margin-top:4px}.lc{font-size:9px;color:#666}@media print{button{display:none}}</style></head><body><h1>Mayur Spares — QR Codes</h1><p style="font-size:11px;color:#666">Print karke har part ke box/almirah pe chipka do. Phone camera se scan karo \u2014 app khud khul jayega.</p><div class="grid">${cards}</div><button onclick="window.print()" style="margin-top:16px;padding:8px 16px;background:#1F3864;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold">Print / Save PDF</button></body></html>`
     const w=window.open('','_blank')
     if(w){ w.document.write(html); w.document.close() }
   }
@@ -3878,7 +3887,19 @@ function SparesTab({user}:{user:User}) {
   const load=useCallback(()=>{fetch('/api/spares').then(r=>r.json()).then(d=>{setSpares(d.spares||[]);setMovements(d.recentMovements||[]);setLoading(false)})},[])
   useEffect(()=>{load()},[load])
 
-  const addItem=()=>setSpareItems(p=>[...p,{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}])
+  // ── URL scan (?scan=PartName) — camera se aaya, entry pre-fill karo ──
+  useEffect(()=>{
+    if(scanPart&&spares.length>0){
+      const match=spares.find((s:any)=>(s.part_name||'').toLowerCase()===scanPart.toLowerCase())||spares.find((s:any)=>(s.part_name||'').toLowerCase().includes(scanPart.toLowerCase()))
+      const name=match?match.part_name:scanPart
+      setSpareView('entry')
+      setAction('Used in Machine')
+      setSpareItems([{partName:name,category:match?.category||'',unit:match?.unit||'Pcs',qty:'',minQty:String(match?.min_qty||0),pricePerPc:String(match?.last_price||0),total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:match?.last_vendor||'',lastPrice:match?.last_price||0,currentStock:match?.current_stock||0,historyInfo:''}])
+      setToast({msg:`📷 Scan: ${name} — qty daalo`,ok:true})
+      clearScan&&clearScan()
+      setTimeout(()=>document.getElementById('spares-entry-form')?.scrollIntoView({behavior:'smooth'}),300)
+    }
+  },[scanPart,spares])
   const removeItem=(i:number)=>setSpareItems(p=>p.filter((_,idx)=>idx!==i))
   const updateItem=(i:number,field:string,val:string)=>{
     setSpareItems(p=>{
