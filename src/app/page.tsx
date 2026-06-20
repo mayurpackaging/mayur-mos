@@ -9,6 +9,7 @@ const ML: Record<string, string> = {
   dispatch:"Dispatch", batch:"Batch", sales:"Sales", spares:"Spares",
   mouldpm:"Mould PM", breakdown:"Breakdown", maintenance:"Maintenance",
   bulkproduction:"Bulk Production", dailyreport:"Daily Report",
+  snapshot:"📸 Daily Snapshot",
   mouldhistory:"Mould History",
   qcalerts:"QC Alerts",
   processcheck:"✅ Process Checker",
@@ -334,6 +335,7 @@ export default function MOS() {
         {tab==='performance'&&<PerformanceTab user={user}/>}
         {tab==='maintenance'&&<MaintenanceTab user={user}/>}
         {tab==='dailyreport'&&<DailyReportTab user={user}/>}
+        {tab==='snapshot'&&<DailySnapshotTab user={user}/>}
         {tab==='mouldhistory'&&<MouldHistoryTab/>}
         {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
         {tab==='qcalerts'&&<QCAlertsTab user={user}/>}
@@ -9553,6 +9555,7 @@ function HomeGrid({user,modules,setTab,pmAlertCount}:{user:User,modules:string[]
     sales:{icon:'💰',color:'#0F6E56',label:'Sales'},
     reports:{icon:'📈',color:'#1F3864',label:'Reports'},
     dailyreport:{icon:'📋',color:'#1F3864',label:'Daily Report'},
+    snapshot:{icon:'📸',color:'#C00000',label:'Daily Snapshot'},
     performance:{icon:'🎯',color:'#534AB7',label:'Performance'},
     processcheck:{icon:'✅',color:'#0F6E56',label:'Process Checker'},
     checklist:{icon:'✅',color:'#0F6E56',label:'My Checklist'},
@@ -9631,5 +9634,113 @@ function HomeGrid({user,modules,setTab,pmAlertCount}:{user:User,modules:string[]
     </div>
 
     <div style={{textAlign:'center',marginTop:20,fontSize:10,color:'#bbb'}}>Mayur Food Packaging · Shreeja Packaging Industries Pvt. Ltd.</div>
+  </div>
+}
+
+// ─── Daily Snapshot — Admin morning report (sirf important, short) ───
+function DailySnapshotTab({user}:{user:User}) {
+  const [date,setDate]=useState(nd())
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+
+  const load=()=>{
+    setLoading(true)
+    fetch(`/api/snapshot?date=${date}`).then(r=>r.json()).then(d=>{setData(d);setLoading(false)}).catch(()=>setLoading(false))
+  }
+  useEffect(()=>{load()},[date])
+
+  const Section=({icon,title,color,children}:any)=>(
+    <div style={{...S.card,marginBottom:10,borderLeft:`4px solid ${color}`}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+        <span style={{fontSize:18}}>{icon}</span>
+        <span style={{fontWeight:800,fontSize:14,color:'#222'}}>{title}</span>
+      </div>
+      {children}
+    </div>
+  )
+
+  return <div style={{maxWidth:720,margin:'0 auto'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap' as const,gap:8}}>
+      <div style={{fontSize:18,fontWeight:800,color:'#1F3864'}}>📸 Daily Snapshot</div>
+      <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...S.fi,width:'auto',padding:'6px 10px'}}/>
+    </div>
+
+    {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>}
+
+    {!loading&&data&&data.success&&<>
+      {/* 1. Production Health */}
+      <Section icon="🏭" title="Production Health" color="#185FA5">
+        {data.production.plants.length===0?<div style={{fontSize:12,color:'#999'}}>Aaj koi production entry nahi.</div>:<>
+          <div style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap' as const}}>
+            <div style={{background:'#F0F7FF',borderRadius:8,padding:'6px 12px',fontSize:12}}>Total: <b>{data.production.totalGood.toLocaleString()}</b> pc</div>
+            <div style={{background:data.production.overallEff>=85?'#E8F5E9':data.production.overallEff>=70?'#FFF8E1':'#FFEBEE',borderRadius:8,padding:'6px 12px',fontSize:12}}>Efficiency: <b>{data.production.overallEff}%</b></div>
+            <div style={{background:'#FFEBEE',borderRadius:8,padding:'6px 12px',fontSize:12}}>Rejection: <b>{data.production.totalRej}</b></div>
+          </div>
+          {data.production.plants.map((p:any,i:number)=>(
+            <div key={i} style={{fontSize:12,padding:'4px 0',borderTop:i>0?'1px solid #f0f0f0':'none'}}>
+              <b>{p.plant}</b> — {p.machinesRun}/{p.totalMachines} machine · {p.eff}% eff
+              {p.notRunning.length>0&&<div style={{color:'#C00000',fontSize:11,marginTop:2}}>⚠️ Band/missing: {p.notRunning.join(', ')}</div>}
+            </div>
+          ))}
+        </>}
+      </Section>
+
+      {/* 2. Problems */}
+      <Section icon="⚠️" title={`Problems (${data.problems.length})`} color="#C00000">
+        {data.problems.length===0?<div style={{fontSize:12,color:'#276221'}}>✅ Koi problem nahi.</div>:
+          data.problems.map((p:any,i:number)=>(
+            <div key={i} style={{fontSize:12,padding:'4px 0',color:'#5D4037'}}>
+              <b style={{color:'#C00000'}}>{p.machine}</b> ({p.plant?.replace('Plant ','P')}) {p.product} — {p.detail}
+            </div>
+          ))
+        }
+      </Section>
+
+      {/* 3. Breakdowns */}
+      <Section icon="🔧" title={`Breakdown (${data.breakdowns.length})`} color="#854F0B">
+        {data.breakdowns.length===0?<div style={{fontSize:12,color:'#276221'}}>✅ Koi breakdown nahi.</div>:
+          data.breakdowns.map((b:any,i:number)=>(
+            <div key={i} style={{fontSize:12,padding:'4px 0',display:'flex',justifyContent:'space-between',gap:8}}>
+              <span><b>{b.machine}</b> — {b.problem}</span>
+              <span style={{color:'#854F0B',whiteSpace:'nowrap' as const}}>{b.time} min {b.status==='Pending'?'🔴':'✅'}</span>
+            </div>
+          ))
+        }
+      </Section>
+
+      {/* 4. Spares */}
+      <Section icon="🔩" title="Spares Movement" color="#5F5E5A">
+        <div style={{fontSize:12,fontWeight:700,color:'#276221',marginBottom:4}}>📥 Aaya ({data.spares.stockIn.length})</div>
+        {data.spares.stockIn.length===0?<div style={{fontSize:11,color:'#999',marginBottom:8}}>Aaj kuch nahi aaya.</div>:
+          data.spares.stockIn.map((s:any,i:number)=><div key={i} style={{fontSize:12,padding:'2px 0'}}>• {s.part} — <b>{s.qty}</b> pc {s.vendor?`(${s.vendor})`:''}</div>)
+        }
+        <div style={{fontSize:12,fontWeight:700,color:'#C00000',margin:'8px 0 4px'}}>📤 Use hua ({data.spares.used.length})</div>
+        {data.spares.used.length===0?<div style={{fontSize:11,color:'#999'}}>Aaj kuch use nahi hua.</div>:
+          data.spares.used.map((s:any,i:number)=><div key={i} style={{fontSize:12,padding:'2px 0'}}>• {s.part} — <b>{s.qty}</b> pc {s.machine?`→ ${s.machine}`:''}</div>)
+        }
+      </Section>
+
+      {/* 5. Pending */}
+      <Section icon="📋" title="Abhi Pending" color="#534AB7">
+        <div style={{display:'flex',gap:8,flexWrap:'wrap' as const}}>
+          <div style={{background:data.pending.breakdowns>0?'#FFEBEE':'#E8F5E9',borderRadius:8,padding:'8px 14px',fontSize:12}}>🔧 Breakdown: <b>{data.pending.breakdowns}</b></div>
+          <div style={{background:data.pending.qcAlerts>0?'#FFEBEE':'#E8F5E9',borderRadius:8,padding:'8px 14px',fontSize:12}}>🚨 QC Alert: <b>{data.pending.qcAlerts}</b></div>
+          <div style={{background:data.pending.pmOverdue>0?'#FFEBEE':'#E8F5E9',borderRadius:8,padding:'8px 14px',fontSize:12}}>⚙️ PM Overdue: <b>{data.pending.pmOverdue}</b></div>
+        </div>
+      </Section>
+
+      {/* WhatsApp button */}
+      <button onClick={()=>{
+        const p=data.production
+        let msg=`📸 *Daily Snapshot — ${date}*\n\n🏭 *Production:* ${p.totalGood.toLocaleString()} pc, ${p.overallEff}% eff, ${p.totalRej} rej\n`
+        p.plants.forEach((pl:any)=>{msg+=`${pl.plant}: ${pl.machinesRun}/${pl.totalMachines} machine, ${pl.eff}%${pl.notRunning.length>0?' (band: '+pl.notRunning.join(', ')+')':''}\n`})
+        if(data.problems.length>0){msg+=`\n⚠️ *Problems:*\n`;data.problems.forEach((x:any)=>msg+=`${x.machine}: ${x.detail}\n`)}
+        if(data.breakdowns.length>0){msg+=`\n🔧 *Breakdown:*\n`;data.breakdowns.forEach((b:any)=>msg+=`${b.machine} — ${b.problem} (${b.time}min)\n`)}
+        if(data.spares.stockIn.length>0){msg+=`\n📥 *Spares aaya:*\n`;data.spares.stockIn.forEach((s:any)=>msg+=`${s.part}: ${s.qty}pc\n`)}
+        if(data.spares.used.length>0){msg+=`\n📤 *Spares use:*\n`;data.spares.used.forEach((s:any)=>msg+=`${s.part}: ${s.qty}pc${s.machine?' ('+s.machine+')':''}\n`)}
+        msg+=`\n📋 *Pending:* ${data.pending.breakdowns} breakdown, ${data.pending.qcAlerts} QC, ${data.pending.pmOverdue} PM`
+        try{if(navigator.clipboard){navigator.clipboard.writeText(msg)}else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}alert('Snapshot copy ho gaya!')}catch(e){}
+      }} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:700,cursor:'pointer',width:'100%',marginTop:4}}>📋 WhatsApp pe Bhejo</button>
+    </>}
   </div>
 }
