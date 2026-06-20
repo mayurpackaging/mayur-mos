@@ -3916,6 +3916,7 @@ function SparesTab({user,scanPart,clearScan}:{user:User,scanPart?:string,clearSc
       setTimeout(()=>document.getElementById('spares-entry-form')?.scrollIntoView({behavior:'smooth'}),300)
     }
   },[scanPart,spares])
+  const addItem=()=>setSpareItems(p=>[...p,{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}])
   const removeItem=(i:number)=>setSpareItems(p=>p.filter((_,idx)=>idx!==i))
   const updateItem=(i:number,field:string,val:string)=>{
     setSpareItems(p=>{
