@@ -4363,6 +4363,28 @@ function SparesTab({user,scanPart,clearScan}:{user:User,scanPart?:string,clearSc
             <div style={S.f}><label style={S.lbl}>Qty</label><input type="number" min="0" style={S.fi} value={item.qty} onChange={e=>updateItem(i,'qty',e.target.value)} placeholder="0"/></div>
             {action==='Stock In'&&<div style={S.f}><label style={S.lbl}>Price/Pc (₹)</label><input type="number" min="0" style={S.fi} value={item.pricePerPc} onChange={e=>updateItem(i,'pricePerPc',e.target.value)} placeholder="0"/></div>}
           </div>
+          {/* Stock info — Use mode mein dikhe kitna hai, kitna use, kitna bachega */}
+          {action==='Used in Machine'&&item.partName&&(()=>{
+            const sp=spares.find((s:any)=>s.part_name.toLowerCase()===item.partName.toLowerCase())
+            if(!sp)return null
+            const cur=sp.current_stock||0
+            const useQty=parseFloat(item.qty||'0')
+            const after=cur-useQty
+            return <div style={{display:'flex',gap:6,marginTop:6}}>
+              <div style={{flex:1,background:'#E8F5E9',borderRadius:8,padding:'8px',textAlign:'center' as const}}>
+                <div style={{fontSize:18,fontWeight:800,color:'#276221'}}>{cur}</div>
+                <div style={{fontSize:9,color:'#276221'}}>Stock mein hai</div>
+              </div>
+              <div style={{flex:1,background:'#FFF3E0',borderRadius:8,padding:'8px',textAlign:'center' as const}}>
+                <div style={{fontSize:18,fontWeight:800,color:'#854F0B'}}>{useQty||0}</div>
+                <div style={{fontSize:9,color:'#854F0B'}}>Use kar rahe</div>
+              </div>
+              <div style={{flex:1,background:after<0?'#FFEBEE':after<=(sp.min_qty||0)?'#FFF3E0':'#E8EDF5',borderRadius:8,padding:'8px',textAlign:'center' as const}}>
+                <div style={{fontSize:18,fontWeight:800,color:after<0?'#C00000':after<=(sp.min_qty||0)?'#854F0B':'#1F3864'}}>{after}</div>
+                <div style={{fontSize:9,color:after<0?'#C00000':'#666'}}>{after<0?'Stock kam!':'Bachega'}</div>
+              </div>
+            </div>
+          })()}
           {/* Storage Location — only for Stock In */}
           {action==='Stock In'&&<div style={{background:'#F0F4FF',border:'1px solid #1F3864',borderRadius:8,padding:'8px 10px',marginTop:6}}>
             <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:6}}>📍 Storage Location</div>
