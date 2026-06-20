@@ -76,6 +76,28 @@ export async function POST(req: Request) {
       const entryMould = entry.mould || ''
       const slotName = d.slot
 
+      // ── VALIDATION 1: slot shift ke saath match kare ──
+      const DAY_SLOTS = ['8am-11am','11am-2pm','2pm-5pm','5pm-8pm']
+      const NIGHT_SLOTS = ['8pm-11pm','11pm-2am','2am-5am','5am-8am']
+      const isNight = (entryShift||'').toLowerCase().includes('night')
+      const validSlots = isNight ? NIGHT_SLOTS : DAY_SLOTS
+      if (slotName && !validSlots.includes(slotName)) {
+        errors.push(`${entryMachine}: "${slotName}" slot ${isNight?'Night':'Day'} shift mein nahi ho sakta`)
+        continue
+      }
+
+      // ── VALIDATION 2: good_parts projected se zyada (10% margin) ──
+      const ct = parseFloat(entry.cycleTime) || parseFloat(entry.cycle_time) || 0
+      if (ct > 0 && cavities > 0 && slotGood > 0) {
+        // ek slot = 3 ghante = 10800 sec
+        const slotProj = Math.round(10800 / ct * cavities)
+        const maxAllowed = Math.round(slotProj * 1.10)
+        if (slotGood > maxAllowed) {
+          errors.push(`${entryMachine} (${slotName}): ${slotGood} entry projected ${slotProj} se bahut zyada hai. Check karo.`)
+          continue
+        }
+      }
+
       // ── Direct edit by id (from history edit) ──
       if (entry.editId) {
         await supabase.from('production_slots').delete()
@@ -156,6 +178,7 @@ export async function POST(req: Request) {
       saved++
     }
 
+    if (saved > 0 && errors.length > 0) return NextResponse.json({ success: true, msg: `${saved} slot saved. ⚠️ ${errors.length} reject hue:\n${errors.join('\n')}` })
     if (saved > 0) return NextResponse.json({ success: true, msg: `${saved} machines ka ${d.slot} slot saved!` })
     return NextResponse.json({ success: false, msg: errors[0] || 'Koi data nahi bhara!' })
   }
