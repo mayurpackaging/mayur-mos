@@ -38,7 +38,27 @@ export async function GET(req: Request) {
       return { ...it, season, consumption: cons, maxLevel, status, orderQty }
     })
 
-    return NextResponse.json({ success: true, season, month, items: out })
+    // ── Monthly movement grid (item × day) ──
+    const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()))
+    const mm = String(month + 1).padStart(2, '0')
+    const startDate = `${year}-${mm}-01`
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const endDate = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+    const { data: logs } = await supabase.from('ims_smart_log')
+      .select('date,item_name,total_pcs,physical_ctn,unpack_packets')
+      .eq('category', category).gte('date', startDate).lte('date', endDate)
+    // grid[item_name][day] = cartons
+    const grid: Record<string, Record<number, number>> = {}
+    for (const l of (logs || [])) {
+      const day = parseInt(String(l.date).slice(8, 10))
+      const it = (items || []).find(x => x.item_name === l.item_name)
+      const ppc = it?.pcs_per_ctn || 0
+      const cartons = ppc > 0 ? +(l.total_pcs / ppc).toFixed(1) : Math.round((l.total_pcs || 0) / 50)
+      if (!grid[l.item_name]) grid[l.item_name] = {}
+      grid[l.item_name][day] = cartons
+    }
+
+    return NextResponse.json({ success: true, season, month, year, daysInMonth: lastDay, items: out, grid })
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 })
   }
