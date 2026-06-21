@@ -70,9 +70,9 @@ export async function POST(req: Request) {
             total_pcs: totalPcs, entered_by: body.user || ''
           })
         }
-        // update current_stock (in packets, since consumption is in packets)
-        const stockPackets = Math.round(totalPcs / 50)
-        await supabase.from('ims_smart').update({ current_stock: stockPackets, updated_at: new Date().toISOString() })
+        // update current_stock in CARTONS (consumption is cartons/day)
+        const stockCartons = (parseFloat(e.pcs_per_ctn||0)>0) ? +(totalPcs/parseFloat(e.pcs_per_ctn)).toFixed(2) : Math.round(totalPcs/50)
+        await supabase.from('ims_smart').update({ current_stock: stockCartons, updated_at: new Date().toISOString() })
           .eq('item_name', e.item_name).eq('category', e.category)
         saved++
       }
