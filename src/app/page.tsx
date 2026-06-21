@@ -1466,6 +1466,89 @@ function IMSTab({user}:{user:User}) {
   const [trendDays,setTrendDays]=useState(15)
   const [trendLoading,setTrendLoading]=useState(false)
 
+  // ── WhatsApp paste parser ──
+  const [showPaste,setShowPaste]=useState(false)
+  const [pasteText,setPasteText]=useState('')
+  const [parsed,setParsed]=useState<{matched:any[],unmatched:string[]}|null>(null)
+
+  const parsePaste=()=>{
+    const lines=pasteText.split('\n').map(l=>l.trim()).filter(Boolean)
+    const matched:any[]=[]
+    const unmatched:string[]=[]
+    // header lines to skip
+    const skipLine=(l:string)=>/^(unpack stock|daily stock|dana stock|with handle|with out handle|without handle)$/i.test(l.trim())
+
+    const norm=(s:string)=>s.toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
+
+    for(const raw of lines){
+      if(skipLine(raw)){continue}
+      // qty is first number, rest is item description
+      const m=raw.match(/^(\d+)\s+(.+)$/)
+      if(!m){ continue } // no qty — skip (like 'dana stock' header already skipped)
+      const qty=parseInt(m[1])
+      let desc=norm(m[2])
+
+      // skip dana items (rm30, h2620 etc) — these are raw material, not IMS
+      if(/^(rm|h\d|cp|p\d|pp)/.test(desc.replace(/\s/g,''))){ continue }
+
+      // colour map
+      let colour=''
+      if(/\bpearl\b/.test(desc))colour='Pearl'
+      else if(/\bb\b|black/.test(desc))colour='Black'
+      else if(/\bn\b|natural/.test(desc))colour='Natural'
+      else if(/\bm\b|milky/.test(desc))colour='Milky'
+
+      // size (first number in desc)
+      const sizeM=desc.match(/(\d+)/)
+      const size=sizeM?sizeM[1]:''
+
+      // find best matching IMS item
+      const cand=items.filter((it:any)=>{
+        const n=norm(it.name)
+        // size match
+        if(size&&!n.includes(size))return false
+        return true
+      })
+      let best:any=null
+      // shape keywords
+      const isRO=/\bro\b/.test(desc), isRE=/\bre\b/.test(desc), isOval=/oval/.test(desc)
+      const isRect=/rect|rec\b|ssre/.test(desc), isHalf=/half round/.test(desc)
+
+      for(const it of cand){
+        const n=norm(it.name)
+        if(isHalf&&!n.includes('half round'))continue
+        if(isRO&&!n.includes('ro series')&&!n.includes('ro '))continue
+        if(isRE&&!n.includes('re series')&&!n.includes('re '))continue
+        if(isOval&&!n.includes('oval'))continue
+        if(isRect&&!isHalf&&!n.includes('rectangle'))continue
+        if(!isRO&&!isRE&&!isOval&&!isRect&&!isHalf){
+          // 2000/2500 with no shape word = Tamper Lock; else Container
+          if(size==='2000'||size==='2500'){
+            if(!n.includes('tamper lock'))continue
+          } else {
+            if(!n.includes('container'))continue
+          }
+        }
+        if(colour&&!n.includes(colour.toLowerCase()))continue
+        best=it; break
+      }
+      if(best){ matched.push({name:best.name,qty,raw}) }
+      else { unmatched.push(raw) }
+    }
+    setParsed({matched,unmatched})
+  }
+
+  const applyParsed=()=>{
+    if(!parsed)return
+    setVals(prev=>{
+      const n={...prev}
+      parsed.matched.forEach(m=>{ n[m.name]={...(n[m.name]||{uc:'',ul:''}),pk:String(m.qty)} })
+      return n
+    })
+    setShowPaste(false);setParsed(null);setPasteText('')
+    setToast({msg:`${parsed.matched.length} items bhar diye! Ab Save karo.`,ok:true})
+  }
+
   const loadTrend=async(days:number)=>{
     setTrendLoading(true)
     const res=await fetch(`/api/ims-trend?days=${days}`).then(r=>r.json())
@@ -1508,11 +1591,40 @@ function IMSTab({user}:{user:User}) {
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading stock...</div>
   const safe=items.filter(i=>i.status==='SAFE').length,critical=items.filter(i=>i.status==='CRITICAL').length,low=items.filter(i=>['LOW','DANGER'].includes(i.status)).length
   return <div>
+    {/* WhatsApp Paste Modal */}
+    {showPaste&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={()=>{setShowPaste(false);setParsed(null)}}>
+      <div style={{background:'#fff',borderRadius:14,padding:20,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto' as const}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:16,fontWeight:800,color:'#1F3864',marginBottom:4}}>📋 WhatsApp se Paste karo</div>
+        <div style={{fontSize:11,color:'#888',marginBottom:10}}>Stock message yahan paste karo, app khud items match karega.</div>
+        <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={"Yahan paste karo...\n3 250 m\n102 400 m\n150 ro 16 b"} style={{width:'100%',minHeight:120,padding:10,border:'1px solid #ccc',borderRadius:8,fontSize:12,fontFamily:'monospace'}}/>
+        <button onClick={parsePaste} style={{width:'100%',padding:10,background:'#1F3864',color:'#fff',border:'none',borderRadius:8,fontWeight:700,fontSize:13,cursor:'pointer',marginTop:8}}>🔍 Parse karo</button>
+
+        {parsed&&<div style={{marginTop:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:'#276221',marginBottom:6}}>✅ Match hue ({parsed.matched.length})</div>
+          <div style={{maxHeight:200,overflowY:'auto' as const,border:'1px solid #E0E0E0',borderRadius:8,padding:8}}>
+            {parsed.matched.map((m,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0',borderBottom:'1px solid #f5f5f5'}}>
+                <span>{m.name}</span><span style={{fontWeight:700,color:'#1F3864'}}>{m.qty} ctn</span>
+              </div>
+            ))}
+          </div>
+          {parsed.unmatched.length>0&&<div style={{marginTop:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#C00000',marginBottom:4}}>⚠️ Match nahi hue ({parsed.unmatched.length}) — manually daalna</div>
+            <div style={{fontSize:11,color:'#888'}}>{parsed.unmatched.join(' · ')}</div>
+          </div>}
+          <button onClick={applyParsed} style={{width:'100%',padding:12,background:'#276221',color:'#fff',border:'none',borderRadius:8,fontWeight:700,fontSize:14,cursor:'pointer',marginTop:10}}>✓ {parsed.matched.length} Items Bhar do</button>
+        </div>}
+
+        <button onClick={()=>{setShowPaste(false);setParsed(null)}} style={{width:'100%',padding:8,background:'transparent',color:'#888',border:'1px solid #ccc',borderRadius:8,fontSize:12,cursor:'pointer',marginTop:8}}>Cancel</button>
+      </div>
+    </div>}
+
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Safe</div><div style={{fontSize:20,fontWeight:700,color:'#276221'}}>{safe}</div></div>
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Critical</div><div style={{fontSize:20,fontWeight:700,color:'#C00000'}}>{critical}</div></div>
       <div style={S.met}><div style={{fontSize:10,color:'#666'}}>Low</div><div style={{fontSize:20,fontWeight:700,color:'#854F0B'}}>{low}</div></div>
     </div>
+    <button onClick={()=>setShowPaste(true)} style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,#25D366,#1DA851)',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:8}}>📋 WhatsApp se Stock Paste karo</button>
     <div style={S.card}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
         <div style={{fontWeight:700}}>Bulk Stock Entry</div>
