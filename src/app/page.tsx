@@ -10033,6 +10033,80 @@ function IMSSmartTab({user}:{user:User}) {
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
   const [setForm,setSetForm]=useState<Record<string,any>>({})
+  const [showPaste,setShowPaste]=useState(false)
+  const [pasteText,setPasteText]=useState('')
+
+  // WhatsApp stock paste — header se Unpack/Daily samajhe, dono format, missing=0
+  const parsePasteStock=()=>{
+    const lines=pasteText.split('\n').map(l=>l.trim()).filter(Boolean)
+    const norm=(s:string)=>s.toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
+    const its=data?.items||[]
+    let section:'unpack'|'daily'='daily'
+    const result:Record<string,{ctn:number,pkt:number}>={}
+
+    const matchItem=(desc:string):string|null=>{
+      let colour=''
+      if(/\bpearl\b/.test(desc))colour='Pearl'
+      else if(/\bb\b|black/.test(desc))colour='Black'
+      else if(/\bn\b|natural/.test(desc))colour='Natural'
+      else if(/\bm\b|milky/.test(desc))colour='Milky'
+      const sizeM=desc.match(/(\d+)/); const size=sizeM?sizeM[1]:''
+      const isRO=/\bro\b/.test(desc),isRE=/\bre\b/.test(desc),isOval=/oval/.test(desc)
+      const isRect=/rect|rec\b|ssre/.test(desc),isHalf=/half round|\bhr\b/.test(desc),isSipper=/sipper|\bxl\b/.test(desc)
+      const cand=its.filter((it:any)=>{const n=norm(it.name||it.item_name);if(size&&!n.includes(size))return false;return true})
+      for(const it of cand){
+        const n=norm(it.item_name)
+        if(isSipper){if(!n.includes('sipper xl'))continue;return it.item_name}
+        if(isHalf&&!n.includes('half round'))continue
+        if(isRO&&!n.includes('ro series')&&!n.includes('ro '))continue
+        if(isRE&&!n.includes('re series')&&!n.includes('re '))continue
+        if(isOval&&!n.includes('oval'))continue
+        if(isRect&&!isHalf&&!n.includes('rectangle'))continue
+        if(!isRO&&!isRE&&!isOval&&!isRect&&!isHalf&&!isSipper){
+          if(size==='2000'||size==='2500'){if(!n.includes('tamper lock'))continue}
+          else{if(!n.includes('container'))continue}
+        }
+        if(colour&&!n.includes(colour.toLowerCase()))continue
+        return it.item_name
+      }
+      return null
+    }
+
+    for(const raw of lines){
+      const t=raw.toLowerCase()
+      // section headers
+      if(/unpack stock/.test(t)){section='unpack';continue}
+      if(/daily stock/.test(t)){section='daily';continue}
+      if(/dana stock/.test(t))break // daana alag, skip rest
+      if(/(with\s*out|with)\s*handle\s*$/.test(t))continue
+      // qty + desc (qty aage ya peeche, ya dash)
+      let qty=0,descRaw=''
+      const dashM=raw.match(/^(.+?)\s*[-–]\s*(\d+\.?\d*)\s*$/)
+      const frontM=raw.match(/^(\d+\.?\d*)\s+(.+)$/)
+      const backM=raw.match(/^(.+?)\s+(\d+\.?\d*)\s*$/)
+      if(dashM){qty=parseFloat(dashM[2]);descRaw=dashM[1]}
+      else if(frontM){qty=parseFloat(frontM[1]);descRaw=frontM[2]}
+      else if(backM){qty=parseFloat(backM[2]);descRaw=backM[1]}
+      else continue
+      const desc=norm(descRaw)
+      if(/^(rm|h\d|cp|p\d|pp)/.test(desc.replace(/\s/g,'')))continue
+      const item=matchItem(desc)
+      if(!item)continue
+      if(!result[item])result[item]={ctn:0,pkt:0}
+      result[item].ctn+=qty // unpack + daily dono cartons mein, add
+    }
+
+    // build entries: matched get values, ALL OTHERS = 0
+    const newEntries:Record<string,{ctn:string,pkt:string}>={}
+    its.forEach((it:any)=>{
+      const r=result[it.item_name]
+      newEntries[it.item_name]={ctn:r?String(r.ctn):'0',pkt:r?String(r.pkt):'0'}
+    })
+    setEntries(newEntries)
+    setShowPaste(false);setPasteText('')
+    const cnt=Object.keys(result).length
+    setToast({msg:`${cnt} items bhar diye, baaki 0. Ab Save karo.`,ok:true})
+  }
 
   const load=()=>{
     setLoading(true)
@@ -10077,6 +10151,17 @@ function IMSSmartTab({user}:{user:User}) {
   const orderItems=items.filter((it:any)=>it.orderQty>0)
 
   return <div style={{maxWidth:760,margin:'0 auto'}}>
+    {/* WhatsApp Paste Modal */}
+    {showPaste&&<div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={()=>setShowPaste(false)}>
+      <div style={{background:'#fff',borderRadius:14,padding:20,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto' as const}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:16,fontWeight:800,color:'#1F3864',marginBottom:4}}>📋 WhatsApp se Stock Paste</div>
+        <div style={{fontSize:11,color:'#888',marginBottom:10}}>Stock cartons mein. "Unpack stock" aur "Daily stock" header ke neeche items. Jo item nahi hai woh 0 ho jayega.</div>
+        <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={"Unpack stock\n3 250 m\n102 400 m\nDaily stock\n74 250 m\n53 400 b"} style={{width:'100%',minHeight:140,padding:10,border:'1px solid #ccc',borderRadius:8,fontSize:12,fontFamily:'monospace'}}/>
+        <button onClick={parsePasteStock} style={{width:'100%',padding:12,background:'#0F6E56',color:'#fff',border:'none',borderRadius:8,fontWeight:700,fontSize:14,cursor:'pointer',marginTop:8}}>✓ Parse karke Bhar do</button>
+        <button onClick={()=>setShowPaste(false)} style={{width:'100%',padding:8,background:'transparent',color:'#888',border:'1px solid #ccc',borderRadius:8,fontSize:12,cursor:'pointer',marginTop:8}}>Cancel</button>
+      </div>
+    </div>}
+
     {/* Month + Category */}
     <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap' as const,alignItems:'center'}}>
       <select value={month} onChange={e=>setMonth(parseInt(e.target.value))} style={{...S.fi,width:'auto',padding:'8px 10px',fontWeight:700}}>
@@ -10123,9 +10208,10 @@ function IMSSmartTab({user}:{user:User}) {
 
     {/* STOCK ENTRY VIEW */}
     {!loading&&view==='stock'&&<div>
+      <button onClick={()=>setShowPaste(true)} style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,#25D366,#1DA851)',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:8}}>📋 WhatsApp se Stock Paste karo</button>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
         <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...S.fi,width:'auto',padding:'6px 10px'}}/>
-        <div style={{fontSize:11,color:'#888'}}>1 packet = 50 pcs</div>
+        <div style={{fontSize:11,color:'#888'}}>Stock cartons mein</div>
       </div>
       {items.map((it:any)=>(
         <div key={it.item_name} style={{...S.card,marginBottom:6,padding:'10px 12px'}}>
