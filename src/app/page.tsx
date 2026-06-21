@@ -10,6 +10,7 @@ const ML: Record<string, string> = {
   mouldpm:"Mould PM", breakdown:"Breakdown", maintenance:"Maintenance",
   bulkproduction:"Bulk Production", dailyreport:"Daily Report",
   snapshot:"📸 Daily Snapshot",
+  imssmart:"📊 IMS Smart",
   mouldhistory:"Mould History",
   qcalerts:"QC Alerts",
   processcheck:"✅ Process Checker",
@@ -359,6 +360,7 @@ export default function MOS() {
         {tab==='maintenance'&&<MaintenanceTab user={user}/>}
         {tab==='dailyreport'&&<DailyReportTab user={user}/>}
         {tab==='snapshot'&&<DailySnapshotTab user={user}/>}
+        {tab==='imssmart'&&<IMSSmartTab user={user}/>}
         {tab==='mouldhistory'&&<MouldHistoryTab/>}
         {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
         {tab==='qcalerts'&&<QCAlertsTab user={user}/>}
@@ -366,7 +368,7 @@ export default function MOS() {
         {tab==='guide'&&<GuideTab/>}
         {tab==='checklist'&&<MyChecklistTab user={user}/>}
         {tab==='grease'&&<GreaseTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease','checklist','snapshot'].includes(tab)&&(
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease','checklist','snapshot','imssmart'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -1475,21 +1477,38 @@ function IMSTab({user}:{user:User}) {
     const lines=pasteText.split('\n').map(l=>l.trim()).filter(Boolean)
     const matched:any[]=[]
     const unmatched:string[]=[]
-    // header lines to skip
-    const skipLine=(l:string)=>/^(unpack stock|daily stock|dana stock|with handle|with out handle|without handle)$/i.test(l.trim())
+    // header lines to skip (section headers + "2000 with handle" type)
+    const skipLine=(l:string)=>{
+      const t=l.trim().toLowerCase()
+      if(/^(unpack stock|daily stock|dana stock)$/i.test(t))return true
+      // "2000 with handle", "2500 with out handle", "with handle", "without handle"
+      if(/(with\s*out|with)\s*handle\s*$/i.test(t))return true
+      return false
+    }
 
     const norm=(s:string)=>s.toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
 
     for(const raw of lines){
       if(skipLine(raw)){continue}
-      // qty is first number, rest is item description
-      const m=raw.match(/^(\d+)\s+(.+)$/)
-      if(!m){ continue } // no qty — skip (like 'dana stock' header already skipped)
-      const qty=parseInt(m[1])
-      let desc=norm(m[2])
+
+      // Two formats:
+      //  A) "28 500 b"        — qty pehle
+      //  B) "500 B - 28"      — item pehle, qty dash ke baad
+      let qty=0, descRaw=''
+      const dashM=raw.match(/^(.+?)\s*[-–]\s*(\d+)\s*$/)  // format B
+      if(dashM){
+        qty=parseInt(dashM[2]); descRaw=dashM[1]
+      } else {
+        const m=raw.match(/^(\d+)\s+(.+)$/)  // format A
+        if(!m){ continue }
+        qty=parseInt(m[1]); descRaw=m[2]
+      }
+      let desc=norm(descRaw)
 
       // skip dana items (rm30, h2620 etc) — these are raw material, not IMS
       if(/^(rm|h\d|cp|p\d|pp)/.test(desc.replace(/\s/g,''))){ continue }
+      // skip "without lid" / "with out lid" extra-text only items we can't match cleanly
+      // (handled by matching below; will fall to unmatched)
 
       // colour map
       let colour=''
@@ -1512,16 +1531,18 @@ function IMSTab({user}:{user:User}) {
       let best:any=null
       // shape keywords
       const isRO=/\bro\b/.test(desc), isRE=/\bre\b/.test(desc), isOval=/oval/.test(desc)
-      const isRect=/rect|rec\b|ssre/.test(desc), isHalf=/half round/.test(desc)
+      const isRect=/rect|rec\b|ssre/.test(desc), isHalf=/half round|\bhr\b/.test(desc)
+      const isSipper=/sipper|\bxl\b/.test(desc)
 
       for(const it of cand){
         const n=norm(it.name)
+        if(isSipper){ if(!n.includes('sipper xl'))continue; best=it; break }
         if(isHalf&&!n.includes('half round'))continue
         if(isRO&&!n.includes('ro series')&&!n.includes('ro '))continue
         if(isRE&&!n.includes('re series')&&!n.includes('re '))continue
         if(isOval&&!n.includes('oval'))continue
         if(isRect&&!isHalf&&!n.includes('rectangle'))continue
-        if(!isRO&&!isRE&&!isOval&&!isRect&&!isHalf){
+        if(!isRO&&!isRE&&!isOval&&!isRect&&!isHalf&&!isSipper){
           // 2000/2500 with no shape word = Tamper Lock; else Container
           if(size==='2000'||size==='2500'){
             if(!n.includes('tamper lock'))continue
@@ -9809,6 +9830,7 @@ function HomeGrid({user,modules,setTab,pmAlertCount}:{user:User,modules:string[]
     reports:{icon:'📈',color:'#1F3864',label:'Reports'},
     dailyreport:{icon:'📋',color:'#1F3864',label:'Daily Report'},
     snapshot:{icon:'📸',color:'#C00000',label:'Daily Snapshot'},
+    imssmart:{icon:'📊',color:'#0F6E56',label:'IMS Smart'},
     performance:{icon:'🎯',color:'#534AB7',label:'Performance'},
     processcheck:{icon:'✅',color:'#0F6E56',label:'Process Checker'},
     checklist:{icon:'✅',color:'#0F6E56',label:'My Checklist'},
@@ -9995,5 +10017,154 @@ function DailySnapshotTab({user}:{user:User}) {
         try{if(navigator.clipboard){navigator.clipboard.writeText(msg)}else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}alert('Snapshot copy ho gaya!')}catch(e){}
       }} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:700,cursor:'pointer',width:'100%',marginTop:4}}>📋 WhatsApp pe Bhejo</button>
     </>}
+  </div>
+}
+
+// ─── IMS Smart — season-wise safety days inventory ───
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December']
+function IMSSmartTab({user}:{user:User}) {
+  const [category,setCategory]=useState<'Finished'|'Box'|'Daana'>('Finished')
+  const [month,setMonth]=useState(new Date().getMonth())
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [view,setView]=useState<'stock'|'order'|'settings'>('order')
+  const [date,setDate]=useState(nd())
+  const [entries,setEntries]=useState<Record<string,{ctn:string,pkt:string}>>({})
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+  const [setForm,setSetForm]=useState<Record<string,any>>({})
+
+  const load=()=>{
+    setLoading(true)
+    fetch(`/api/ims-smart?category=${category}&month=${month}`).then(r=>r.json()).then(d=>{
+      setData(d);setLoading(false)
+      // init settings form
+      const sf:Record<string,any>={}
+      ;(d.items||[]).forEach((it:any)=>{sf[it.item_name]={cons_peak:it.cons_peak||'',cons_off:it.cons_off||'',lead_time:it.lead_time||7,safety_factor:it.safety_factor||1.5,pcs_per_ctn:it.pcs_per_ctn||0}})
+      setSetForm(sf)
+    }).catch(()=>setLoading(false))
+  }
+  useEffect(()=>{load()},[category,month])
+
+  const saveStock=async()=>{
+    setSaving(true)
+    const list=(data?.items||[]).map((it:any)=>({
+      item_name:it.item_name,category:it.category,pcs_per_ctn:it.pcs_per_ctn,
+      physical_ctn:parseFloat(entries[it.item_name]?.ctn||'0')||0,
+      unpack_packets:parseFloat(entries[it.item_name]?.pkt||'0')||0,
+    })).filter((e:any)=>e.physical_ctn>0||e.unpack_packets>0)
+    const res=await fetch('/api/ims-smart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'save_stock',date,entries:list,user:user.name})}).then(r=>r.json())
+    setSaving(false);setToast({msg:res.msg||'Saved',ok:res.success})
+    if(res.success){load()}
+  }
+
+  const saveSetting=async(item:any)=>{
+    const f=setForm[item.item_name]
+    const res=await fetch('/api/ims-smart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'update_settings',item:{item_name:item.item_name,category:item.category,...f}})}).then(r=>r.json())
+    setToast({msg:res.msg||'Saved',ok:res.success})
+    if(res.success)load()
+  }
+
+  const waOrder=()=>{
+    const items=(data?.items||[]).filter((it:any)=>it.orderQty>0)
+    let msg=`📦 *Order List — ${category}*\n${MONTHS[month]} (${data?.season})\n\n`
+    if(items.length===0)msg+='Sab stock OK, kuch order nahi karna.'
+    else items.forEach((it:any)=>{msg+=`${it.item_name}: ${it.orderQty} pkt order karo (stock ${it.current_stock}, max ${it.maxLevel})\n`})
+    try{if(navigator.clipboard)navigator.clipboard.writeText(msg);else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Order list copy ho gayi!',ok:true})}catch(e){}
+  }
+
+  const items=data?.items||[]
+  const orderItems=items.filter((it:any)=>it.orderQty>0)
+
+  return <div style={{maxWidth:760,margin:'0 auto'}}>
+    {/* Month + Category */}
+    <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap' as const,alignItems:'center'}}>
+      <select value={month} onChange={e=>setMonth(parseInt(e.target.value))} style={{...S.fi,width:'auto',padding:'8px 10px',fontWeight:700}}>
+        {MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}
+      </select>
+      <div style={{background:data?.season==='PEAK'?'#E8F5E9':'#FFF3E0',color:data?.season==='PEAK'?'#276221':'#854F0B',padding:'8px 14px',borderRadius:8,fontSize:13,fontWeight:700}}>
+        {data?.season==='PEAK'?'🔥 PEAK Season':'❄️ OFF Season'}
+      </div>
+    </div>
+
+    {/* Category tabs */}
+    <div style={{display:'flex',gap:6,marginBottom:10}}>
+      {(['Finished','Box','Daana'] as const).map(c=>(
+        <button key={c} onClick={()=>setCategory(c)} style={{flex:1,padding:'8px',border:`2px solid ${category===c?'#0F6E56':'#E0E0E0'}`,borderRadius:8,background:category===c?'#E8F6EE':'#fff',color:category===c?'#0F6E56':'#666',fontWeight:700,fontSize:12,cursor:'pointer'}}>{c==='Finished'?'📦 Finished':c==='Box'?'📦 Box':'🟤 Daana'}</button>
+      ))}
+    </div>
+
+    {/* View tabs */}
+    <div style={{display:'flex',gap:6,marginBottom:12}}>
+      {([['order','🛒 Order List'],['stock','📝 Stock Entry'],['settings','⚙️ Settings']] as const).map(([v,l])=>(
+        <button key={v} onClick={()=>setView(v as any)} style={{flex:1,padding:'7px',border:'none',borderBottom:`2px solid ${view===v?'#1F3864':'transparent'}`,background:'transparent',color:view===v?'#1F3864':'#999',fontWeight:700,fontSize:12,cursor:'pointer'}}>{l}</button>
+      ))}
+    </div>
+
+    {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>}
+
+    {/* ORDER LIST VIEW */}
+    {!loading&&view==='order'&&<div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontWeight:700,fontSize:14}}>{orderItems.length>0?`🛒 ${orderItems.length} items order karne hain`:'✅ Sab stock OK'}</div>
+        <button onClick={waOrder} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 WhatsApp</button>
+      </div>
+      {items.map((it:any)=>(
+        <div key={it.item_name} style={{...S.card,marginBottom:6,padding:'10px 12px',borderLeft:`4px solid ${it.status==='out'?'#C00000':it.status==='critical'?'#C00000':it.status==='low'?'#854F0B':'#276221'}`}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{fontWeight:700,fontSize:13}}>{it.item_name}</div>
+            {it.orderQty>0?<div style={{background:'#FFEBEE',color:'#C00000',padding:'3px 10px',borderRadius:999,fontSize:12,fontWeight:700}}>Order: {it.orderQty} pkt</div>
+              :<div style={{color:'#276221',fontSize:12,fontWeight:700}}>✓ OK</div>}
+          </div>
+          <div style={{fontSize:11,color:'#666',marginTop:3}}>Stock: <b>{it.current_stock}</b> pkt · Max: <b>{it.maxLevel}</b> · Consumption: {it.consumption}/day · Lead: {it.lead_time}d</div>
+        </div>
+      ))}
+    </div>}
+
+    {/* STOCK ENTRY VIEW */}
+    {!loading&&view==='stock'&&<div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...S.fi,width:'auto',padding:'6px 10px'}}/>
+        <div style={{fontSize:11,color:'#888'}}>1 packet = 50 pcs</div>
+      </div>
+      {items.map((it:any)=>(
+        <div key={it.item_name} style={{...S.card,marginBottom:6,padding:'10px 12px'}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{it.item_name} {it.pcs_per_ctn>0&&<span style={{fontSize:10,color:'#888',fontWeight:400}}>({it.pcs_per_ctn} pcs/ctn)</span>}</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <div style={{flex:1}}><label style={{fontSize:10,color:'#666'}}>Physical CTN</label>
+              <input type="number" min="0" value={entries[it.item_name]?.ctn||''} onChange={e=>setEntries(p=>({...p,[it.item_name]:{...p[it.item_name],ctn:e.target.value,pkt:p[it.item_name]?.pkt||''}}))} style={S.fi} placeholder="0"/></div>
+            <div style={{flex:1}}><label style={{fontSize:10,color:'#666'}}>Unpack Packets</label>
+              <input type="number" min="0" value={entries[it.item_name]?.pkt||''} onChange={e=>setEntries(p=>({...p,[it.item_name]:{...p[it.item_name],pkt:e.target.value,ctn:p[it.item_name]?.ctn||''}}))} style={S.fi} placeholder="0"/></div>
+            <div style={{flex:1,textAlign:'center' as const}}>
+              <div style={{fontSize:10,color:'#666'}}>Total Pcs</div>
+              <div style={{fontWeight:800,color:'#0F6E56',fontSize:15}}>{((parseFloat(entries[it.item_name]?.ctn||'0')||0)*(it.pcs_per_ctn||0)+(parseFloat(entries[it.item_name]?.pkt||'0')||0)*50).toLocaleString()}</div>
+            </div>
+          </div>
+        </div>
+      ))}
+      <button style={S.sb} onClick={saveStock} disabled={saving}>{saving?'Saving...':'💾 Stock Save Karo'}</button>
+    </div>}
+
+    {/* SETTINGS VIEW */}
+    {!loading&&view==='settings'&&<div>
+      <div style={{fontSize:11,color:'#888',marginBottom:8}}>Har item ka consumption (packet/day), lead time, safety set karo. MAX level auto niklega.</div>
+      {items.map((it:any)=>(
+        <div key={it.item_name} style={{...S.card,marginBottom:6,padding:'10px 12px'}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{it.item_name}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:6}}>
+            <div><label style={{fontSize:9,color:'#666'}}>PEAK use/day</label><input type="number" value={setForm[it.item_name]?.cons_peak??''} onChange={e=>setSetForm(p=>({...p,[it.item_name]:{...p[it.item_name],cons_peak:e.target.value}}))} style={S.fi} placeholder="0"/></div>
+            <div><label style={{fontSize:9,color:'#666'}}>OFF use/day</label><input type="number" value={setForm[it.item_name]?.cons_off??''} onChange={e=>setSetForm(p=>({...p,[it.item_name]:{...p[it.item_name],cons_off:e.target.value}}))} style={S.fi} placeholder="0"/></div>
+            <div><label style={{fontSize:9,color:'#666'}}>Pcs/CTN</label><input type="number" value={setForm[it.item_name]?.pcs_per_ctn??''} onChange={e=>setSetForm(p=>({...p,[it.item_name]:{...p[it.item_name],pcs_per_ctn:e.target.value}}))} style={S.fi} placeholder="0"/></div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+            <div><label style={{fontSize:9,color:'#666'}}>Lead (din)</label><input type="number" value={setForm[it.item_name]?.lead_time??7} onChange={e=>setSetForm(p=>({...p,[it.item_name]:{...p[it.item_name],lead_time:e.target.value}}))} style={S.fi}/></div>
+            <div><label style={{fontSize:9,color:'#666'}}>Safety (x)</label><input type="number" step="0.1" value={setForm[it.item_name]?.safety_factor??1.5} onChange={e=>setSetForm(p=>({...p,[it.item_name]:{...p[it.item_name],safety_factor:e.target.value}}))} style={S.fi}/></div>
+            <button onClick={()=>saveSetting(it)} style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,fontSize:11,fontWeight:700,cursor:'pointer',marginTop:14}}>Save</button>
+          </div>
+        </div>
+      ))}
+    </div>}
+
+    {toast&&<Toast {...toast}/>}
   </div>
 }
