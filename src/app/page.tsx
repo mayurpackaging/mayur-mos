@@ -10035,6 +10035,7 @@ function IMSSmartTab({user}:{user:User}) {
   const [setForm,setSetForm]=useState<Record<string,any>>({})
   const [showPaste,setShowPaste]=useState(false)
   const [pasteText,setPasteText]=useState('')
+  const [parsedPreview,setParsedPreview]=useState<{matched:{item:string,ctn:number}[],unmatchedLines:string[]}|null>(null)
 
   // WhatsApp stock paste — header se Unpack/Daily samajhe, dono format, missing=0
   const parsePasteStock=()=>{
@@ -10043,6 +10044,7 @@ function IMSSmartTab({user}:{user:User}) {
     const its=data?.items||[]
     let section:'unpack'|'daily'='daily'
     const result:Record<string,{ctn:number,pkt:number}>={}
+    const unmatchedLines:string[]=[]
 
     const matchItem=(desc:string):string|null=>{
       let colour=''
@@ -10091,21 +10093,28 @@ function IMSSmartTab({user}:{user:User}) {
       const desc=norm(descRaw)
       if(/^(rm|h\d|cp|p\d|pp)/.test(desc.replace(/\s/g,'')))continue
       const item=matchItem(desc)
-      if(!item)continue
+      if(!item){ unmatchedLines.push(raw); continue }
       if(!result[item])result[item]={ctn:0,pkt:0}
       result[item].ctn+=qty // unpack + daily dono cartons mein, add
     }
 
-    // build entries: matched get values, ALL OTHERS = 0
+    // build preview (don't fill yet — user review karega)
+    const matched=Object.entries(result).map(([item,v])=>({item,ctn:v.ctn}))
+    setParsedPreview({matched,unmatchedLines})
+  }
+
+  const applyParsedStock=()=>{
+    if(!parsedPreview)return
+    const its=data?.items||[]
+    const map:Record<string,number>={}
+    parsedPreview.matched.forEach(m=>{map[m.item]=m.ctn})
     const newEntries:Record<string,{ctn:string,pkt:string}>={}
     its.forEach((it:any)=>{
-      const r=result[it.item_name]
-      newEntries[it.item_name]={ctn:r?String(r.ctn):'0',pkt:r?String(r.pkt):'0'}
+      newEntries[it.item_name]={ctn:map[it.item_name]!==undefined?String(map[it.item_name]):'0',pkt:'0'}
     })
     setEntries(newEntries)
-    setShowPaste(false);setPasteText('')
-    const cnt=Object.keys(result).length
-    setToast({msg:`${cnt} items bhar diye, baaki 0. Ab Save karo.`,ok:true})
+    setShowPaste(false);setPasteText('');setParsedPreview(null)
+    setToast({msg:`${parsedPreview.matched.length} items bhare, baaki 0. Ab Save karo.`,ok:true})
   }
 
   const load=()=>{
@@ -10156,9 +10165,27 @@ function IMSSmartTab({user}:{user:User}) {
       <div style={{background:'#fff',borderRadius:14,padding:20,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto' as const}} onClick={e=>e.stopPropagation()}>
         <div style={{fontSize:16,fontWeight:800,color:'#1F3864',marginBottom:4}}>📋 WhatsApp se Stock Paste</div>
         <div style={{fontSize:11,color:'#888',marginBottom:10}}>Stock cartons mein. "Unpack stock" aur "Daily stock" header ke neeche items. Jo item nahi hai woh 0 ho jayega.</div>
-        <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={"Unpack stock\n3 250 m\n102 400 m\nDaily stock\n74 250 m\n53 400 b"} style={{width:'100%',minHeight:140,padding:10,border:'1px solid #ccc',borderRadius:8,fontSize:12,fontFamily:'monospace'}}/>
-        <button onClick={parsePasteStock} style={{width:'100%',padding:12,background:'#0F6E56',color:'#fff',border:'none',borderRadius:8,fontWeight:700,fontSize:14,cursor:'pointer',marginTop:8}}>✓ Parse karke Bhar do</button>
-        <button onClick={()=>setShowPaste(false)} style={{width:'100%',padding:8,background:'transparent',color:'#888',border:'1px solid #ccc',borderRadius:8,fontSize:12,cursor:'pointer',marginTop:8}}>Cancel</button>
+        <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={"Unpack stock\n3 250 m\n102 400 m\nDaily stock\n74 250 m\n53 400 b"} style={{width:'100%',minHeight:120,padding:10,border:'1px solid #ccc',borderRadius:8,fontSize:12,fontFamily:'monospace'}}/>
+        <button onClick={parsePasteStock} style={{width:'100%',padding:10,background:'#1F3864',color:'#fff',border:'none',borderRadius:8,fontWeight:700,fontSize:13,cursor:'pointer',marginTop:8}}>🔍 Parse karo (check karo)</button>
+
+        {parsedPreview&&<div style={{marginTop:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:'#276221',marginBottom:6}}>✅ Match hue ({parsedPreview.matched.length})</div>
+          <div style={{maxHeight:180,overflowY:'auto' as const,border:'1px solid #E0E0E0',borderRadius:8,padding:8}}>
+            {parsedPreview.matched.map((m,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0',borderBottom:'1px solid #f5f5f5'}}>
+                <span>{m.item}</span><span style={{fontWeight:700,color:'#0F6E56'}}>{m.ctn} ctn</span>
+              </div>
+            ))}
+          </div>
+          {parsedPreview.unmatchedLines.length>0&&<div style={{marginTop:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#C00000',marginBottom:4}}>⚠️ Match nahi hue ({parsedPreview.unmatchedLines.length})</div>
+            <div style={{fontSize:11,color:'#888'}}>{parsedPreview.unmatchedLines.join(' · ')}</div>
+          </div>}
+          <div style={{fontSize:11,color:'#854F0B',marginTop:8,background:'#FFF8E1',padding:'6px 8px',borderRadius:6}}>⚠️ Jo item list mein hai par message mein nahi → uska stock 0 set hoga</div>
+          <button onClick={applyParsedStock} style={{width:'100%',padding:12,background:'#0F6E56',color:'#fff',border:'none',borderRadius:8,fontWeight:700,fontSize:14,cursor:'pointer',marginTop:10}}>✓ {parsedPreview.matched.length} Items Bhar do (baaki 0)</button>
+        </div>}
+
+        <button onClick={()=>{setShowPaste(false);setParsedPreview(null)}} style={{width:'100%',padding:8,background:'transparent',color:'#888',border:'1px solid #ccc',borderRadius:8,fontSize:12,cursor:'pointer',marginTop:8}}>Cancel</button>
       </div>
     </div>}
 
