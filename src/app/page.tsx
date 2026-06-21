@@ -10027,7 +10027,7 @@ function IMSSmartTab({user}:{user:User}) {
   const [month,setMonth]=useState(new Date().getMonth())
   const [data,setData]=useState<any>(null)
   const [loading,setLoading]=useState(false)
-  const [view,setView]=useState<'stock'|'order'|'settings'>('order')
+  const [view,setView]=useState<'stock'|'order'|'settings'|'grid'>('order')
   const [date,setDate]=useState(nd())
   const [entries,setEntries]=useState<Record<string,{ctn:string,pkt:string}>>({})
   const [saving,setSaving]=useState(false)
@@ -10119,7 +10119,7 @@ function IMSSmartTab({user}:{user:User}) {
 
   const load=()=>{
     setLoading(true)
-    fetch(`/api/ims-smart?category=${category}&month=${month}`).then(r=>r.json()).then(d=>{
+    fetch(`/api/ims-smart?category=${category}&month=${month}&year=${new Date().getFullYear()}`).then(r=>r.json()).then(d=>{
       setData(d);setLoading(false)
       // init settings form
       const sf:Record<string,any>={}
@@ -10208,7 +10208,7 @@ function IMSSmartTab({user}:{user:User}) {
 
     {/* View tabs */}
     <div style={{display:'flex',gap:6,marginBottom:12}}>
-      {([['order','🛒 Order List'],['stock','📝 Stock Entry'],['settings','⚙️ Settings']] as const).map(([v,l])=>(
+      {([['order','🛒 Order'],['grid','📅 Movement'],['stock','📝 Entry'],['settings','⚙️ Set']] as const).map(([v,l])=>(
         <button key={v} onClick={()=>setView(v as any)} style={{flex:1,padding:'7px',border:'none',borderBottom:`2px solid ${view===v?'#1F3864':'transparent'}`,background:'transparent',color:view===v?'#1F3864':'#999',fontWeight:700,fontSize:12,cursor:'pointer'}}>{l}</button>
       ))}
     </div>
@@ -10232,6 +10232,41 @@ function IMSSmartTab({user}:{user:User}) {
         </div>
       ))}
     </div>}
+
+    {/* MOVEMENT GRID VIEW (Excel jaisa) */}
+    {!loading&&view==='grid'&&(()=>{
+      const days=data?.daysInMonth||30
+      const grid=data?.grid||{}
+      const dayArr=Array.from({length:days},(_,i)=>i+1)
+      return <div>
+        <div style={{fontSize:11,color:'#888',marginBottom:8}}>📅 {MONTHS[month]} — har din ka stock (cartons). Laal = MAX se kam.</div>
+        <div style={{overflowX:'auto' as const,border:'1px solid #E0E0E0',borderRadius:8}}>
+          <table style={{borderCollapse:'collapse' as const,fontSize:10,whiteSpace:'nowrap' as const}}>
+            <thead>
+              <tr style={{background:'#1F3864',color:'#fff'}}>
+                <th style={{padding:'6px 8px',position:'sticky' as const,left:0,background:'#1F3864',textAlign:'left' as const,minWidth:140}}>Item</th>
+                <th style={{padding:'6px',minWidth:40}}>MAX</th>
+                {dayArr.map(d=><th key={d} style={{padding:'6px',minWidth:34}}>{d}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it:any,ri:number)=>{
+                const row=grid[it.item_name]||{}
+                return <tr key={it.item_name} style={{background:ri%2===0?'#fff':'#F7F9FC'}}>
+                  <td style={{padding:'5px 8px',position:'sticky' as const,left:0,background:ri%2===0?'#fff':'#F7F9FC',fontWeight:600,borderRight:'1px solid #E0E0E0'}}>{it.item_name}</td>
+                  <td style={{padding:'5px 6px',textAlign:'center' as const,fontWeight:700,color:'#854F0B',background:'#FFF8E1'}}>{it.maxLevel||'-'}</td>
+                  {dayArr.map(d=>{
+                    const v=row[d]
+                    const low=v!==undefined&&it.maxLevel>0&&v<it.maxLevel
+                    return <td key={d} style={{padding:'5px 4px',textAlign:'center' as const,color:v===undefined?'#ddd':low?'#C00000':'#222',fontWeight:low?700:400,background:low?'#FFEBEE':'transparent'}}>{v!==undefined?v:'·'}</td>
+                  })}
+                </tr>
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    })()}
 
     {/* STOCK ENTRY VIEW */}
     {!loading&&view==='stock'&&<div>
