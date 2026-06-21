@@ -10156,6 +10156,14 @@ function IMSSmartTab({user}:{user:User}) {
     try{if(navigator.clipboard)navigator.clipboard.writeText(msg);else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Order list copy ho gayi!',ok:true})}catch(e){}
   }
 
+  // Template copy — ladke ko bhejo, woh 0 ko qty se badle, wapas paste karo
+  const copyTemplate=()=>{
+    const its=data?.items||[]
+    let msg=`Daily stock\n`
+    its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
+    try{if(navigator.clipboard)navigator.clipboard.writeText(msg);else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Template copy! Ladke ko WhatsApp pe bhejo.',ok:true})}catch(e){}
+  }
+
   const items=data?.items||[]
   const orderItems=items.filter((it:any)=>it.orderQty>0)
 
@@ -10270,7 +10278,10 @@ function IMSSmartTab({user}:{user:User}) {
 
     {/* STOCK ENTRY VIEW */}
     {!loading&&view==='stock'&&<div>
-      <button onClick={()=>setShowPaste(true)} style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,#25D366,#1DA851)',color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:8}}>📋 WhatsApp se Stock Paste karo</button>
+      <div style={{display:'flex',gap:6,marginBottom:8}}>
+        <button onClick={copyTemplate} style={{flex:1,padding:'12px',background:'#1F3864',color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:700,cursor:'pointer'}}>📋 Template Copy (ladke ko bhejo)</button>
+        <button onClick={()=>setShowPaste(true)} style={{flex:1,padding:'12px',background:'linear-gradient(135deg,#25D366,#1DA851)',color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:700,cursor:'pointer'}}>📥 Paste karo</button>
+      </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
         <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...S.fi,width:'auto',padding:'6px 10px'}}/>
         <div style={{fontSize:11,color:'#888'}}>Stock cartons mein</div>
