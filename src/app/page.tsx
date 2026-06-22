@@ -9508,12 +9508,13 @@ function GreaseTab({user}:{user:User}) {
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
-  const [view,setView]=useState<'use'|'in'|'machines'|'history'>('use')
+  const [view,setView]=useState<'use'|'in'|'machines'|'history'|'chart'>('use')
+  const [chart,setChart]=useState<any[]>([])
   const [useForm,setUseForm]=useState({greaseName:'',machine:'',plant:'Plant 477',qty:'',machineCounter:'',remarks:''})
   const [inForm,setInForm]=useState({greaseName:'',qty:'',vendor:'',price:'',plant:'Plant 477',remarks:''})
 
   const load=()=>{fetch('/api/grease').then(r=>r.json()).then(d=>{
-    setStock(d.stock||[]);setLogs(d.logs||[]);setLastByMachine(d.lastByMachine||[]);setPlantWise(d.plantWise||{});setLoading(false)
+    setStock(d.stock||[]);setLogs(d.logs||[]);setLastByMachine(d.lastByMachine||[]);setPlantWise(d.plantWise||{});setChart(d.chart||[]);setLoading(false)
   }).catch(()=>setLoading(false))}
   useEffect(()=>{load()},[])
 
@@ -9583,7 +9584,7 @@ function GreaseTab({user}:{user:User}) {
 
     {/* View tabs */}
     <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap' as const}}>
-      {[{k:'use',l:'🔧 Grease Change'},{k:'in',l:'📥 Stock In'},{k:'machines',l:'📋 Machine-wise'},{k:'history',l:'🕐 History'}].map(v=>
+      {[{k:'use',l:'🔧 Grease Change'},{k:'in',l:'📥 Stock In'},{k:'machines',l:'📋 Machine-wise'},{k:'chart',l:'📊 Chart'},{k:'history',l:'🕐 History'}].map(v=>
         <button key={v.k} onClick={()=>setView(v.k as any)} style={{background:view===v.k?'#1F3864':'#fff',color:view===v.k?'#fff':'#1F3864',border:'1px solid #1F3864',borderRadius:6,padding:'6px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{v.l}</button>
       )}
     </div>
@@ -9650,6 +9651,39 @@ function GreaseTab({user}:{user:User}) {
     </div>}
 
     {/* Full history */}
+    {view==='chart'&&<div>
+      <div style={{fontSize:11,color:'#888',marginBottom:8}}>Har machine — grease change pe counter aur pichli change se kitne shots (since last). Average bhi.</div>
+      {chart.length===0?<div style={{...S.card,textAlign:'center' as const,color:'#666',padding:16,fontSize:12}}>Abhi koi grease change record nahi.</div>:
+        ['Plant 477','Plant 488','Plant 433'].map(plant=>{
+          const pm=chart.filter((c:any)=>c.plant===plant)
+          if(pm.length===0)return null
+          return <div key={plant} style={{marginBottom:12}}>
+            <div style={{fontWeight:800,color:'#1F3864',fontSize:14,marginBottom:6}}>{plant}</div>
+            {pm.map((c:any)=>(
+              <div key={c.machine} style={{...S.card,marginBottom:6,padding:'10px 12px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                  <div style={{fontWeight:700,fontSize:13}}>{c.machine}</div>
+                  <div style={{fontSize:11,color:'#666'}}>{c.changes} change{c.changes>1?'s':''}</div>
+                </div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap' as const,fontSize:11,marginBottom:6}}>
+                  <span style={{background:'#E8EDF5',borderRadius:6,padding:'3px 8px'}}>Last counter: <b>{(c.lastCounter||0).toLocaleString()}</b></span>
+                  {c.lastSinceLast!=null&&<span style={{background:'#FFF3E0',borderRadius:6,padding:'3px 8px'}}>Last change: <b>{c.lastSinceLast.toLocaleString()}</b> shots mein</span>}
+                  {c.avgShots!=null&&<span style={{background:'#E8F5E9',borderRadius:6,padding:'3px 8px',color:'#276221'}}>Avg: <b>{c.avgShots.toLocaleString()}</b> shots</span>}
+                </div>
+                {c.history.length>1&&<div style={{borderTop:'1px solid #f0f0f0',paddingTop:6}}>
+                  {c.history.map((h:any,i:number)=>(
+                    <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:10,padding:'2px 0',color:'#555'}}>
+                      <span>{h.date} · {h.grease}</span>
+                      <span>Counter {(h.counter||0).toLocaleString()}{h.sinceLast!=null?` · +${h.sinceLast.toLocaleString()}`:''}</span>
+                    </div>
+                  ))}
+                </div>}
+              </div>
+            ))}
+          </div>
+        })}
+    </div>}
+
     {view==='history'&&<div style={S.card}>
       <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>🕐 Grease History</div>
       {logs.length===0?<div style={{textAlign:'center',color:'#666',padding:12,fontSize:12}}>Koi record nahi.</div>:
