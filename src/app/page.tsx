@@ -10424,7 +10424,10 @@ function KRAReportTab({user}:{user:User}) {
     const key=`${e.plant}||${e.machine}`
     if(!machMap[key])machMap[key]={plant:e.plant,machine:e.machine,good:0,rej:0,proj:0,down:0,product:e.product,ops:new Set(),slotsFilled:new Set(),slotsExpected:new Set(),statuses:new Set()}
     const m=machMap[key]
-    m.good+=e.good_parts||0;m.rej+=e.rejection||0;m.proj+=effProjOf(e);m.down+=e.downtime||0
+    const machIssue=isMachineIssue(e)
+    // machine-issue (breakdown/maintenance/powercut) — good aur proj DONO skip (efficiency se bahar)
+    if(!machIssue){ m.good+=e.good_parts||0; m.proj+=projOf(e) }
+    m.rej+=e.rejection||0;m.down+=e.downtime||0
     if(e.machine_status)m.statuses.add((e.machine_status||'').toLowerCase().trim())
     if(e.operator)m.ops.add(e.operator);if(e.operator2)m.ops.add(e.operator2)
     if(e.product)m.product=e.product
@@ -10449,7 +10452,8 @@ function KRAReportTab({user}:{user:User}) {
   prod.forEach((e:any)=>{
     [e.operator,e.operator2].filter(Boolean).forEach((op:string)=>{
       if(!opMap[op])opMap[op]={op,good:0,proj:0,rej:0,machines:new Set()}
-      opMap[op].good+=e.good_parts||0;opMap[op].proj+=effProjOf(e);opMap[op].rej+=e.rejection||0
+      if(!isMachineIssue(e)){ opMap[op].good+=e.good_parts||0; opMap[op].proj+=projOf(e) }
+      opMap[op].rej+=e.rejection||0
       if(e.machine)opMap[op].machines.add(e.machine)
     })
   })
@@ -10459,12 +10463,13 @@ function KRAReportTab({user}:{user:User}) {
   }).sort((a:any,b:any)=>b.score-a.score)
 
   // totals
-  const totGood=prod.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+  const totGood=prod.reduce((a:number,e:any)=>a+(e.good_parts||0),0) // actual total (sab milake)
+  const effGood=prod.reduce((a:number,e:any)=>a+(isMachineIssue(e)?0:(e.good_parts||0)),0) // efficiency ke liye
   const totProj=prod.reduce((a:number,e:any)=>a+effProjOf(e),0)
   const totRej=prod.reduce((a:number,e:any)=>a+(e.rejection||0),0)
   const totDown=prod.reduce((a:number,e:any)=>a+(e.downtime||0),0)
-  const overallEff=totProj>0?Math.round(totGood/totProj*100):0
-  const lost=Math.max(totProj-totGood,0)
+  const overallEff=totProj>0?Math.round(effGood/totProj*100):0
+  const lost=Math.max(totProj-effGood,0)
 
   // efficiency loss breakdown
   const downLoss=machines.reduce((a:number,m:any)=>a+Math.round(m.down/720*m.proj/ (m.slotNeed||1) *0),0)
