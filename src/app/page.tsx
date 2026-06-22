@@ -10047,6 +10047,10 @@ function IMSSmartTab({user}:{user:User}) {
     const unmatchedLines:string[]=[]
 
     const matchItem=(desc:string):string|null=>{
+      // Box/Daana — template se exact naam aata hai, direct match try karo
+      const exact=its.find((it:any)=>norm(it.item_name)===desc)
+      if(exact)return exact.item_name
+      // Finished — shape/colour logic
       let colour=''
       if(/\bpearl\b/.test(desc))colour='Pearl'
       else if(/\bb\b|black/.test(desc))colour='Black'
@@ -10080,8 +10084,7 @@ function IMSSmartTab({user}:{user:User}) {
       const t=raw.toLowerCase()
       // section headers
       if(/unpack stock/.test(t)){section='unpack';continue}
-      if(/daily stock/.test(t)){section='daily';continue}
-      if(/dana stock/.test(t))break // daana alag, skip rest
+      if(/daily stock|box stock|daana stock|dana stock/.test(t)){section='daily';continue}
       if(/(with\s*out|with)\s*handle\s*$/.test(t))continue
       // qty + desc (qty aage ya peeche, ya dash)
       let qty=0,descRaw=''
@@ -10093,7 +10096,7 @@ function IMSSmartTab({user}:{user:User}) {
       else if(backM){qty=parseFloat(backM[2]);descRaw=backM[1]}
       else continue
       const desc=norm(descRaw)
-      if(/^(rm|h\d|cp|p\d|pp)/.test(desc.replace(/\s/g,'')))continue
+      if(category!=='Daana'&&/^(rm|h\d|cp|p\d|pp)/.test(desc.replace(/\s/g,'')))continue
       const item=matchItem(desc)
       if(!item){ unmatchedLines.push(raw); continue }
       if(!result[item])result[item]={ctn:0,pkt:0}
@@ -10161,11 +10164,20 @@ function IMSSmartTab({user}:{user:User}) {
   // Template copy — ladke ko bhejo, woh 0 ko qty se badle, wapas paste karo
   const copyTemplate=()=>{
     const its=data?.items||[]
-    let msg=`Daily stock\n`
-    its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
-    msg+=`\nUnpack stock\n`
-    its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
-    try{if(navigator.clipboard)navigator.clipboard.writeText(msg);else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Template copy! Ladke ko WhatsApp pe bhejo.',ok:true})}catch(e){}
+    let msg=''
+    if(category==='Finished'){
+      msg=`Daily stock\n`
+      its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
+      msg+=`\nUnpack stock\n`
+      its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
+    } else if(category==='Box'){
+      msg=`Box stock\n`
+      its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
+    } else {
+      msg=`Daana stock\n`
+      its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
+    }
+    try{if(navigator.clipboard)navigator.clipboard.writeText(msg);else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:`${category} template copy! Ladke ko bhejo.`,ok:true})}catch(e){}
   }
 
   const items=data?.items||[]
