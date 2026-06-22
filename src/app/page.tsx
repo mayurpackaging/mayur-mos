@@ -6699,7 +6699,7 @@ function BulkProductionTab({user}:{user:User}) {
     if(setupLoaded&&plant){
       setEntries(prev=>prev.map(e=>{
         const s=machineSetup.find((x:any)=>x.machine===e.machine&&x.valid_from_slot===slot)||machineSetup.find((x:any)=>x.machine===e.machine)
-        return {...e,product:s?.product||e.product,mould:s?.mould||e.mould,cavities:s?.cavities||e.cavities,cycleTime:s?.cycle_time||e.cycleTime,good:'',rejection:'',down:'',remarks:'',editId:null}
+        return {...e,product:s?.product||e.product,mould:s?.mould||e.mould,cavities:s?.cavities||e.cavities,cycleTime:s?.cycle_time||e.cycleTime,status:s?.status||e.status||'running',good:'',rejection:'',down:'',remarks:'',editId:null}
       }))
     }
   },[slot])
@@ -6753,6 +6753,7 @@ function BulkProductionTab({user}:{user:User}) {
           cycleTime:parseFloat(String(m.cycleTime||m.cycle_time||0)),
           operator:m.operator||'',
           operator2:m.operator2||'',
+          status:m.status||'running',
           validFromSlot:m.validFromSlot||'8am-11am'
         }))
       })
@@ -6931,7 +6932,7 @@ function BulkProductionTab({user}:{user:User}) {
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>
-            {['Machine','Product','Mould No.','Cavities','Cycle Time (sec)','Operator 1','Operator 2'].map(h=>
+            {['Machine','Product','Mould No.','Cavities','Cycle Time (sec)','Operator 1','Operator 2','Status'].map(h=>
               <th key={h} style={{background:'#1F3864',color:'#fff',padding:'8px 6px',textAlign:'center',whiteSpace:'nowrap' as const}}>{h}</th>)}
           </tr></thead>
           <tbody>{machineSetup.map((m:any,i:number)=>(
@@ -6970,6 +6971,16 @@ function BulkProductionTab({user}:{user:User}) {
               <td style={{padding:3}}>
                 <select style={{width:'100%',padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11}} value={m.operator2||''} onChange={e=>updateSetup(m.machine,'operator2',e.target.value)}>
                   <option value="">None</option>{OPS.map(o=><option key={o}>{o}</option>)}
+                </select>
+              </td>
+              <td style={{padding:3}}>
+                <select style={{width:'100%',padding:'5px',border:'1px solid #E0E0E0',borderRadius:6,fontSize:11,background:(m.status&&m.status!=='running')?'#FFEBEE':'#fff'}} value={m.status||'running'} onChange={e=>updateSetup(m.machine,'status',e.target.value)}>
+                  <option value="running">Running</option>
+                  <option value="breakdown">Breakdown</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="mouldchange">Mould Change</option>
+                  <option value="powercut">Power Cut</option>
+                  <option value="noplan">No Plan</option>
                 </select>
               </td>
             </tr>
