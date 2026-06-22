@@ -10054,17 +10054,19 @@ function IMSSmartTab({user}:{user:User}) {
       else if(/\bm\b|milky/.test(desc))colour='Milky'
       const sizeM=desc.match(/(\d+)/); const size=sizeM?sizeM[1]:''
       const isRO=/\bro\b/.test(desc),isRE=/\bre\b/.test(desc),isOval=/oval/.test(desc)
-      const isRect=/rect|rec\b|ssre/.test(desc),isHalf=/half round|\bhr\b/.test(desc),isSipper=/sipper|\bxl\b/.test(desc)
+      const isSSRE=/ssre|ss re|ss rect/.test(desc)
+      const isRect=(/rect|rec\b/.test(desc))&&!isSSRE,isHalf=/half round|\bhr\b/.test(desc),isSipper=/sipper|\bxl\b/.test(desc)
       const cand=its.filter((it:any)=>{const n=norm(it.name||it.item_name);if(size&&!n.includes(size))return false;return true})
       for(const it of cand){
         const n=norm(it.item_name)
+        if(isSSRE){if(!n.includes('ss rectangle'))continue;return it.item_name}
         if(isSipper){if(!n.includes('sipper xl'))continue;return it.item_name}
         if(isHalf&&!n.includes('half round'))continue
         if(isRO&&!n.includes('ro series')&&!n.includes('ro '))continue
         if(isRE&&!n.includes('re series')&&!n.includes('re '))continue
         if(isOval&&!n.includes('oval'))continue
-        if(isRect&&!isHalf&&!n.includes('rectangle'))continue
-        if(!isRO&&!isRE&&!isOval&&!isRect&&!isHalf&&!isSipper){
+        if(isRect&&!isHalf&&(!n.includes('rectangle')||n.includes('ss rectangle')))continue
+        if(!isRO&&!isRE&&!isOval&&!isRect&&!isHalf&&!isSipper&&!isSSRE){
           if(size==='2000'||size==='2500'){if(!n.includes('tamper lock'))continue}
           else{if(!n.includes('container'))continue}
         }
@@ -10160,6 +10162,8 @@ function IMSSmartTab({user}:{user:User}) {
   const copyTemplate=()=>{
     const its=data?.items||[]
     let msg=`Daily stock\n`
+    its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
+    msg+=`\nUnpack stock\n`
     its.forEach((it:any)=>{msg+=`${it.item_name} - 0\n`})
     try{if(navigator.clipboard)navigator.clipboard.writeText(msg);else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Template copy! Ladke ko WhatsApp pe bhejo.',ok:true})}catch(e){}
   }
