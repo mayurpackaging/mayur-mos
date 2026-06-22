@@ -76,12 +76,46 @@ export async function GET(req: Request) {
     plantWise[gn] = byPlant
   }
 
+  // ── Machine-wise grease change chart (history + since_last + average) ──
+  const { data: allChanges } = await supabase.from('grease_log')
+    .select('machine,plant,date,machine_counter,grease_name,created_at')
+    .eq('action', 'Used in Machine')
+    .not('machine_counter', 'is', null)
+    .order('created_at', { ascending: true })
+  const byMachine: Record<string, any[]> = {}
+  for (const r of (allChanges || [])) {
+    if (!r.machine) continue
+    if (!byMachine[r.machine]) byMachine[r.machine] = []
+    byMachine[r.machine].push(r)
+  }
+  const chart: any[] = []
+  for (const m of Object.keys(byMachine)) {
+    const recs = byMachine[m]
+    const history = recs.map((r, i) => {
+      const prev = i > 0 ? recs[i - 1].machine_counter : null
+      const sinceLast = (prev != null && r.machine_counter != null) ? (r.machine_counter - prev) : null
+      return { date: r.date, plant: r.plant, counter: r.machine_counter, grease: r.grease_name, sinceLast }
+    })
+    const gaps = history.map(h => h.sinceLast).filter(x => x != null && x > 0) as number[]
+    const avg = gaps.length > 0 ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length) : null
+    const last = history[history.length - 1]
+    chart.push({
+      machine: m, plant: recs[0].plant,
+      changes: history.length,
+      lastCounter: last?.counter, lastDate: last?.date,
+      lastSinceLast: last?.sinceLast,
+      avgShots: avg, history,
+    })
+  }
+  chart.sort((a, b) => (a.plant || '').localeCompare(b.plant || '') || a.machine.localeCompare(b.machine))
+
   return NextResponse.json({
     success: true,
     stock: allSpares || [],
     logs: logs || [],
     lastByMachine: Object.values(lastByMachine),
     plantWise,
+    chart,
   })
 }
 
