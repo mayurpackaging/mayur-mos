@@ -11,6 +11,7 @@ const ML: Record<string, string> = {
   bulkproduction:"Bulk Production", dailyreport:"Daily Report",
   snapshot:"📸 Daily Snapshot",
   imssmart:"📊 IMS Smart",
+  krareport:"🎯 KRA Report",
   mouldhistory:"Mould History",
   qcalerts:"QC Alerts",
   processcheck:"✅ Process Checker",
@@ -361,6 +362,7 @@ export default function MOS() {
         {tab==='dailyreport'&&<DailyReportTab user={user}/>}
         {tab==='snapshot'&&<DailySnapshotTab user={user}/>}
         {tab==='imssmart'&&<IMSSmartTab user={user}/>}
+        {tab==='krareport'&&<KRAReportTab user={user}/>}
         {tab==='mouldhistory'&&<MouldHistoryTab/>}
         {tab==='bulkproduction'&&<BulkProductionTab user={user}/>}
         {tab==='qcalerts'&&<QCAlertsTab user={user}/>}
@@ -368,7 +370,7 @@ export default function MOS() {
         {tab==='guide'&&<GuideTab/>}
         {tab==='checklist'&&<MyChecklistTab user={user}/>}
         {tab==='grease'&&<GreaseTab user={user}/>}
-        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease','checklist','snapshot','imssmart'].includes(tab)&&(
+        {!['mis','ims','production','breakdown','mouldchange','mouldpm','rejection','reports','dispatch','spares','quality','batch','sales','planning','users','performance','maintenance','bulkproduction','dailyreport','mouldhistory','qcalerts','processcheck','guide','grease','checklist','snapshot','imssmart','krareport'].includes(tab)&&(
           <div style={S.card}><div style={{fontWeight:700,marginBottom:8}}>{ML[tab]||tab}</div><div style={{color:'#666',fontSize:13}}>Yeh module jald aayega! 🔄</div></div>
         )}
       </div>
@@ -9871,6 +9873,7 @@ function HomeGrid({user,modules,setTab,pmAlertCount}:{user:User,modules:string[]
     dailyreport:{icon:'📋',color:'#1F3864',label:'Daily Report'},
     snapshot:{icon:'📸',color:'#C00000',label:'Daily Snapshot'},
     imssmart:{icon:'📊',color:'#0F6E56',label:'IMS Smart'},
+    krareport:{icon:'🎯',color:'#1F3864',label:'KRA Report'},
     performance:{icon:'🎯',color:'#534AB7',label:'Performance'},
     processcheck:{icon:'✅',color:'#0F6E56',label:'Process Checker'},
     checklist:{icon:'✅',color:'#0F6E56',label:'My Checklist'},
@@ -10378,6 +10381,219 @@ function IMSSmartTab({user}:{user:User}) {
           </div>
         </div>
       ))}
+    </div>}
+
+    {toast&&<Toast {...toast}/>}
+  </div>
+}
+
+// ─── KRA/KPI Daily Report — corporate scorecard ───
+function KRAReportTab({user}:{user:User}) {
+  const [date,setDate]=useState(nd())
+  const [plant,setPlant]=useState('All')
+  const [data,setData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [toast,setToast]=useState<{msg:string,ok:boolean}|null>(null)
+
+  const load=async()=>{
+    setLoading(true)
+    const pp=plant==='All'?'':`&plant=${encodeURIComponent(plant)}`
+    const prod=await fetch(`/api/production?date=${date}${pp}`).then(r=>r.json()).catch(()=>({data:[]}))
+    setData({prod:prod.data||[]})
+    setLoading(false)
+  }
+  useEffect(()=>{load()},[date,plant])
+
+  const PLANTS=['All','Plant 477','Plant 488','Plant 433']
+  const SLOTS_DAY=['8am-11am','11am-2pm','2pm-5pm','5pm-8pm']
+  const SLOTS_NIGHT=['8pm-11pm','11pm-2am','2am-5am','5am-8am']
+
+  // ── build machine + operator KRA ──
+  const prod=data?.prod||[]
+  const projOf=(e:any)=>{const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0;return ct>0&&cav>0?Math.round(43200/ct*cav):0}
+
+  // machine-wise
+  const machMap:Record<string,any>={}
+  prod.forEach((e:any)=>{
+    const key=`${e.plant}||${e.machine}`
+    if(!machMap[key])machMap[key]={plant:e.plant,machine:e.machine,good:0,rej:0,proj:0,down:0,product:e.product,ops:new Set(),slotsFilled:new Set(),slotsExpected:new Set()}
+    const m=machMap[key]
+    m.good+=e.good_parts||0;m.rej+=e.rejection||0;m.proj+=projOf(e);m.down+=e.downtime||0
+    if(e.operator)m.ops.add(e.operator);if(e.operator2)m.ops.add(e.operator2)
+    if(e.product)m.product=e.product
+    const isNight=(e.shift||'').toLowerCase().includes('night')
+    const slots=isNight?SLOTS_NIGHT:SLOTS_DAY
+    slots.forEach(s=>m.slotsExpected.add(s))
+    ;(e.production_slots||[]).forEach((s:any)=>{if(s.slot_name)m.slotsFilled.add(s.slot_name)})
+  })
+  const machines=Object.values(machMap).map((m:any)=>{
+    const eff=m.proj>0?Math.round(m.good/m.proj*100):0
+    const rejPct=(m.good+m.rej)>0?+(m.rej/(m.good+m.rej)*100).toFixed(1):0
+    const grade=eff>=90?'A':eff>=75?'B':'C'
+    return {...m,eff,rejPct,grade,ops:Array.from(m.ops),slotDone:m.slotsFilled.size,slotNeed:m.slotsExpected.size}
+  }).sort((a:any,b:any)=>b.eff-a.eff)
+
+  // operator-wise
+  const opMap:Record<string,any>={}
+  prod.forEach((e:any)=>{
+    [e.operator,e.operator2].filter(Boolean).forEach((op:string)=>{
+      if(!opMap[op])opMap[op]={op,good:0,proj:0,rej:0,machines:new Set()}
+      opMap[op].good+=e.good_parts||0;opMap[op].proj+=projOf(e);opMap[op].rej+=e.rejection||0
+      if(e.machine)opMap[op].machines.add(e.machine)
+    })
+  })
+  const operators=Object.values(opMap).map((o:any)=>{
+    const score=o.proj>0?Math.round(o.good/o.proj*100):0
+    return {...o,score,machines:Array.from(o.machines)}
+  }).sort((a:any,b:any)=>b.score-a.score)
+
+  // totals
+  const totGood=prod.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
+  const totProj=prod.reduce((a:number,e:any)=>a+projOf(e),0)
+  const totRej=prod.reduce((a:number,e:any)=>a+(e.rejection||0),0)
+  const totDown=prod.reduce((a:number,e:any)=>a+(e.downtime||0),0)
+  const overallEff=totProj>0?Math.round(totGood/totProj*100):0
+  const lost=Math.max(totProj-totGood,0)
+
+  // efficiency loss breakdown
+  const downLoss=machines.reduce((a:number,m:any)=>a+Math.round(m.down/720*m.proj/ (m.slotNeed||1) *0),0)
+  // simpler: estimate lost from downtime proportion
+  const slowMachines=machines.filter((m:any)=>m.eff<75)
+  const lateSlots=machines.filter((m:any)=>m.slotDone<m.slotNeed)
+
+  const fmt=(n:number)=>n.toLocaleString('en-IN')
+
+  const buildText=()=>{
+    let t=`📊 *DAILY KRA REPORT*\n${plant} · ${date}\n\n`
+    t+=`*Overall Efficiency: ${overallEff}%*\n`
+    t+=`Banaya: ${fmt(totGood)} | Lost: ${fmt(lost)}\n`
+    t+=`Rejection: ${fmt(totRej)} | Downtime: ${totDown}min\n\n`
+    t+=`*🏭 MACHINE EFFICIENCY*\n`
+    machines.forEach((m:any)=>{t+=`${m.grade==='A'?'🟢':m.grade==='B'?'🟡':'🔴'} ${m.machine}: ${m.eff}% (rej ${m.rejPct}%)\n`})
+    t+=`\n*👷 EMPLOYEE SCORE*\n`
+    operators.slice(0,8).forEach((o:any,i:number)=>{t+=`${i===0?'⭐':''}${o.op}: ${o.score}%\n`})
+    t+=`\n*✅ QUALITY SLOT CHECK*\n`
+    machines.forEach((m:any)=>{t+=`${m.machine}: ${m.slotDone}/${m.slotNeed} slot${m.slotDone<m.slotNeed?' ⚠️':' ✓'}\n`})
+    if(slowMachines.length>0){t+=`\n*⚡ ACTION POINTS*\n`;slowMachines.forEach((m:any)=>{t+=`• ${m.machine} (${m.eff}%) — check karo\n`})}
+    t+=`\n_Mayur Operations System_`
+    return t
+  }
+
+  const shareWA=()=>{
+    const t=buildText()
+    try{if(navigator.clipboard)navigator.clipboard.writeText(t);else{const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Report copy! WhatsApp pe paste karo.',ok:true})}catch(e){}
+    const wa=`https://wa.me/?text=${encodeURIComponent(t)}`
+    window.open(wa,'_blank')
+  }
+
+  const makePDF=()=>{
+    const w=window.open('','_blank')
+    if(!w)return
+    const g=(grade:string)=>grade==='A'?'#1D9E75':grade==='B'?'#EF9F27':'#E24B4A'
+    let html=`<html><head><title>Daily KRA Report ${date}</title><style>
+      body{font-family:Arial,sans-serif;padding:20px;color:#222;max-width:800px;margin:0 auto}
+      h1{color:#1F3864;font-size:20px;margin:0} .sub{color:#666;font-size:13px;margin-bottom:16px}
+      .row{display:flex;gap:10px;margin-bottom:16px} .card{flex:1;background:#F4F6F9;border-radius:8px;padding:10px}
+      .card .l{font-size:11px;color:#666} .card .v{font-size:20px;font-weight:bold}
+      h2{font-size:14px;color:#1F3864;margin:16px 0 6px;border-bottom:2px solid #1F3864;padding-bottom:3px}
+      table{width:100%;border-collapse:collapse;font-size:12px} th{background:#1F3864;color:#fff;padding:6px;text-align:left}
+      td{padding:5px 6px;border-bottom:1px solid #eee} .badge{display:inline-block;width:20px;height:20px;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-weight:bold;font-size:11px}
+    </style></head><body>
+    <h1>📊 Daily KRA Report</h1><div class="sub">${plant} · ${date}</div>
+    <div class="row">
+      <div class="card"><div class="l">Overall Efficiency</div><div class="v" style="color:${overallEff>=90?'#1D9E75':overallEff>=75?'#BA7517':'#E24B4A'}">${overallEff}%</div></div>
+      <div class="card"><div class="l">Banaya</div><div class="v">${fmt(totGood)}</div></div>
+      <div class="card"><div class="l">Lost</div><div class="v" style="color:#E24B4A">${fmt(lost)}</div></div>
+    </div>
+    <h2>Machine Efficiency</h2><table><tr><th>Grade</th><th>Machine</th><th>Product</th><th>Eff%</th><th>Rej%</th><th>Slots</th></tr>`
+    machines.forEach((m:any)=>{html+=`<tr><td><span class="badge" style="background:${g(m.grade)}">${m.grade}</span></td><td>${m.machine}</td><td>${m.product||'-'}</td><td><b>${m.eff}%</b></td><td>${m.rejPct}%</td><td>${m.slotDone}/${m.slotNeed}</td></tr>`})
+    html+=`</table><h2>Employee Score</h2><table><tr><th>#</th><th>Operator</th><th>Machines</th><th>Score</th></tr>`
+    operators.forEach((o:any,i:number)=>{html+=`<tr><td>${i===0?'⭐':i+1}</td><td>${o.op}</td><td>${o.machines.join(', ')}</td><td><b>${o.score}%</b></td></tr>`})
+    html+=`</table>`
+    if(slowMachines.length>0){html+=`<h2>Action Points</h2><ul>`;slowMachines.forEach((m:any)=>{html+=`<li>${m.machine} (${m.eff}%) — efficiency kam, check karo</li>`});html+=`</ul>`}
+    html+=`<p style="margin-top:20px;color:#999;font-size:11px">Mayur Operations System · ${new Date().toLocaleString('en-IN')}</p>
+    <script>window.print()</script></body></html>`
+    w.document.write(html);w.document.close()
+  }
+
+  return <div style={{maxWidth:760,margin:'0 auto'}}>
+    <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
+      <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...S.fi,width:'auto',padding:'7px 10px'}}/>
+      <select value={plant} onChange={e=>setPlant(e.target.value)} style={{...S.fi,width:'auto',padding:'7px 10px'}}>
+        {PLANTS.map(p=><option key={p}>{p}</option>)}
+      </select>
+      <button onClick={shareWA} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:8,padding:'8px 12px',fontSize:12,fontWeight:700,cursor:'pointer'}}>📱 WhatsApp</button>
+      <button onClick={makePDF} style={{background:'#C00000',color:'#fff',border:'none',borderRadius:8,padding:'8px 12px',fontSize:12,fontWeight:700,cursor:'pointer'}}>📄 PDF</button>
+    </div>
+
+    {loading&&<div style={{textAlign:'center',padding:32,color:'#666'}}>Loading...</div>}
+
+    {!loading&&prod.length===0&&<div style={{...S.card,textAlign:'center' as const,padding:24,color:'#666'}}>Is din ka koi production data nahi.</div>}
+
+    {!loading&&prod.length>0&&<div>
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,background:'#1F3864',borderRadius:12,padding:'14px 16px',color:'#fff'}}>
+        <div><div style={{fontSize:16,fontWeight:800}}>Daily KRA Report</div><div style={{fontSize:12,opacity:0.85}}>{plant} · {date}</div></div>
+        <div style={{textAlign:'right' as const}}><div style={{fontSize:26,fontWeight:800,color:overallEff>=90?'#5DCAA5':overallEff>=75?'#FAC775':'#F09595'}}>{overallEff}%</div><div style={{fontSize:10,opacity:0.85}}>Overall Eff.</div></div>
+      </div>
+
+      {/* Metrics */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+        <div style={{background:'#F4F6F9',borderRadius:8,padding:'10px 12px'}}><div style={{fontSize:11,color:'#666'}}>Banaya</div><div style={{fontSize:20,fontWeight:800}}>{fmt(totGood)}</div></div>
+        <div style={{background:'#F4F6F9',borderRadius:8,padding:'10px 12px'}}><div style={{fontSize:11,color:'#666'}}>Lost (kam bana)</div><div style={{fontSize:20,fontWeight:800,color:'#C00000'}}>{fmt(lost)}</div></div>
+      </div>
+
+      {/* Machine KRA */}
+      <div style={{fontSize:14,fontWeight:700,marginBottom:8,color:'#1F3864'}}>🏭 Machine Efficiency</div>
+      <div style={{display:'flex',flexDirection:'column' as const,gap:6,marginBottom:14}}>
+        {machines.map((m:any)=>{
+          const gc=m.grade==='A'?{bg:'#E8F5E9',c:'#276221'}:m.grade==='B'?{bg:'#FFF3E0',c:'#854F0B'}:{bg:'#FFEBEE',c:'#C00000'}
+          return <div key={m.machine} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:'1px solid #eee',borderRadius:8,padding:'9px 12px'}}>
+            <div style={{width:26,height:26,borderRadius:'50%',background:gc.bg,color:gc.c,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:12}}>{m.grade}</div>
+            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{m.machine} {m.product&&<span style={{fontWeight:400,color:'#888',fontSize:11}}>· {m.product}</span>}</div><div style={{fontSize:11,color:'#666'}}>rej {m.rejPct}% · {m.down}min down · slot {m.slotDone}/{m.slotNeed}</div></div>
+            <div style={{fontSize:17,fontWeight:800,color:gc.c}}>{m.eff}%</div>
+          </div>
+        })}
+      </div>
+
+      {/* Employee Score */}
+      <div style={{fontSize:14,fontWeight:700,marginBottom:8,color:'#1F3864'}}>👷 Employee Score</div>
+      <div style={{display:'flex',flexDirection:'column' as const,gap:6,marginBottom:14}}>
+        {operators.map((o:any,i:number)=>{
+          const best=i===0&&o.score>=85
+          const low=o.score<75
+          return <div key={o.op} style={{display:'flex',alignItems:'center',gap:10,background:best?'#E8F5E9':'#fff',border:'1px solid #eee',borderRadius:8,padding:'9px 12px'}}>
+            {best?<i className="ti ti-star" style={{color:'#276221',fontSize:18}}/>:<div style={{width:24,height:24,borderRadius:'50%',background:'#F4F6F9',color:'#666',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:11}}>{i+1}</div>}
+            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:best?'#276221':'#222'}}>{o.op}{best?' — Best Performer':''}</div><div style={{fontSize:11,color:'#666'}}>{o.machines.join(', ')}</div></div>
+            <div style={{fontSize:17,fontWeight:800,color:low?'#C00000':best?'#276221':'#222'}}>{o.score}</div>
+          </div>
+        })}
+      </div>
+
+      {/* Quality slot check */}
+      <div style={{fontSize:14,fontWeight:700,marginBottom:8,color:'#1F3864'}}>✅ Quality Slot Check</div>
+      <div style={{display:'flex',flexWrap:'wrap' as const,gap:6,marginBottom:14}}>
+        {machines.map((m:any)=>(
+          <div key={m.machine} style={{background:m.slotDone>=m.slotNeed?'#E8F5E9':'#FFEBEE',color:m.slotDone>=m.slotNeed?'#276221':'#C00000',borderRadius:6,padding:'5px 10px',fontSize:11,fontWeight:700}}>
+            {m.machine}: {m.slotDone}/{m.slotNeed} {m.slotDone>=m.slotNeed?'✓':'⚠️'}
+          </div>
+        ))}
+      </div>
+
+      {/* Action points */}
+      {slowMachines.length>0&&<div>
+        <div style={{fontSize:14,fontWeight:700,marginBottom:8,color:'#1F3864'}}>⚡ Action Points</div>
+        <div style={{display:'flex',flexDirection:'column' as const,gap:6}}>
+          {slowMachines.map((m:any)=>(
+            <div key={m.machine} style={{display:'flex',gap:8,background:'#FFEBEE',borderRadius:8,padding:'10px 12px',fontSize:12,color:'#C00000'}}>
+              <i className="ti ti-alert-triangle"/><span>{m.machine} sirf {m.eff}% — efficiency kam, check karo (rej {m.rejPct}%, {m.down}min down)</span>
+            </div>
+          ))}
+          {lateSlots.length>0&&<div style={{display:'flex',gap:8,background:'#FFF3E0',borderRadius:8,padding:'10px 12px',fontSize:12,color:'#854F0B'}}>
+            <i className="ti ti-clock-exclamation"/><span>{lateSlots.map((m:any)=>m.machine).join(', ')} — saare slot fill nahi hue</span>
+          </div>}
+        </div>
+      </div>}
     </div>}
 
     {toast&&<Toast {...toast}/>}
