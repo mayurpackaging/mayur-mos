@@ -9652,32 +9652,38 @@ function GreaseTab({user}:{user:User}) {
 
     {/* Full history */}
     {view==='chart'&&<div>
-      <div style={{fontSize:11,color:'#888',marginBottom:8}}>Har machine — grease change pe counter aur pichli change se kitne shots (since last). Average bhi.</div>
+      <div style={{fontSize:11,color:'#888',marginBottom:8}}>Har machine — kab grease change hui, us waqt counter, aur pichli change se kitne shots gap.</div>
       {chart.length===0?<div style={{...S.card,textAlign:'center' as const,color:'#666',padding:16,fontSize:12}}>Abhi koi grease change record nahi.</div>:
         ['Plant 477','Plant 488','Plant 433'].map(plant=>{
-          const pm=chart.filter((c:any)=>c.plant===plant)
+          const pm=chart.filter((c:any)=>c.plant===plant).sort((a:any,b:any)=>{
+            const na=parseInt((a.machine.match(/M(\d+)/)||[])[1]||'99')
+            const nb=parseInt((b.machine.match(/M(\d+)/)||[])[1]||'99')
+            return na-nb
+          })
           if(pm.length===0)return null
-          return <div key={plant} style={{marginBottom:12}}>
-            <div style={{fontWeight:800,color:'#1F3864',fontSize:14,marginBottom:6}}>{plant}</div>
+          return <div key={plant} style={{marginBottom:14}}>
+            <div style={{fontWeight:800,color:'#1F3864',fontSize:15,marginBottom:6}}>🏭 {plant}</div>
             {pm.map((c:any)=>(
-              <div key={c.machine} style={{...S.card,marginBottom:6,padding:'10px 12px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                  <div style={{fontWeight:700,fontSize:13}}>{c.machine}</div>
-                  <div style={{fontSize:11,color:'#666'}}>{c.changes} change{c.changes>1?'s':''}</div>
+              <div key={c.machine} style={{...S.card,marginBottom:8,padding:'10px 12px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                  <div style={{fontWeight:700,fontSize:13,color:'#1F3864'}}>{c.machine}</div>
+                  {c.avgShots!=null&&<div style={{background:'#E8F5E9',color:'#276221',borderRadius:6,padding:'3px 8px',fontSize:11,fontWeight:700}}>Avg: {c.avgShots.toLocaleString()} shots</div>}
                 </div>
-                <div style={{display:'flex',gap:8,flexWrap:'wrap' as const,fontSize:11,marginBottom:6}}>
-                  <span style={{background:'#E8EDF5',borderRadius:6,padding:'3px 8px'}}>Last counter: <b>{(c.lastCounter||0).toLocaleString()}</b></span>
-                  {c.lastSinceLast!=null&&<span style={{background:'#FFF3E0',borderRadius:6,padding:'3px 8px'}}>Last change: <b>{c.lastSinceLast.toLocaleString()}</b> shots mein</span>}
-                  {c.avgShots!=null&&<span style={{background:'#E8F5E9',borderRadius:6,padding:'3px 8px',color:'#276221'}}>Avg: <b>{c.avgShots.toLocaleString()}</b> shots</span>}
+                <div style={{overflowX:'auto' as const}}>
+                  <table style={{width:'100%',borderCollapse:'collapse' as const,fontSize:11}}>
+                    <thead><tr>{['Date','Counter','Shots Gap','Grease'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'5px 8px',textAlign:'left' as const,whiteSpace:'nowrap' as const}}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {c.history.map((h:any,i:number)=>(
+                        <tr key={i} style={{background:i%2===0?'#fff':'#F7F9FC'}}>
+                          <td style={{padding:'5px 8px',fontWeight:600}}>{h.date}</td>
+                          <td style={{padding:'5px 8px'}}>{(h.counter||0).toLocaleString()}</td>
+                          <td style={{padding:'5px 8px',fontWeight:700,color:h.sinceLast!=null?'#854F0B':'#999'}}>{h.sinceLast!=null?'+'+h.sinceLast.toLocaleString():'— (pehli)'}</td>
+                          <td style={{padding:'5px 8px',fontSize:10,color:'#666'}}>{h.grease}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                {c.history.length>1&&<div style={{borderTop:'1px solid #f0f0f0',paddingTop:6}}>
-                  {c.history.map((h:any,i:number)=>(
-                    <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:10,padding:'2px 0',color:'#555'}}>
-                      <span>{h.date} · {h.grease}</span>
-                      <span>Counter {(h.counter||0).toLocaleString()}{h.sinceLast!=null?` · +${h.sinceLast.toLocaleString()}`:''}</span>
-                    </div>
-                  ))}
-                </div>}
               </div>
             ))}
           </div>
