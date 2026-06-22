@@ -47,6 +47,7 @@ export async function POST(req: Request) {
         cycle_time: parseFloat(String(m.cycleTime)) || 0,
         operator: m.operator || '',
         operator2: m.operator2 || '',
+        status: m.status || 'running',
         valid_from_slot: m.validFromSlot || '8am-11am',
         created_by: d.createdBy || ''
       })
