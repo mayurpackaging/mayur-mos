@@ -9839,7 +9839,7 @@ function HomeGrid({user,modules,setTab,pmAlertCount}:{user:User,modules:string[]
     guide:{icon:'📖',color:'#534AB7',label:'Help / Guide'},
   }
   // dedupe modules (some users have spares_edit etc — skip non-module ones)
-  const skip=['spares_edit']
+  const skip=['spares_edit','ims']
   const seen=new Set<string>()
   const tiles=modules.filter(m=>!skip.includes(m)&&META[m]&&!seen.has(m)&&seen.add(m))
 
