@@ -10411,14 +10411,21 @@ function KRAReportTab({user}:{user:User}) {
   // ── build machine + operator KRA ──
   const prod=data?.prod||[]
   const projOf=(e:any)=>{const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0;return ct>0&&cav>0?Math.round(43200/ct*cav):0}
+  // machine-related status = machine ki galti nahi → projected se hatao (efficiency penalty nahi)
+  // mould/operational = penalty lage
+  const NO_PENALTY=['breakdown','maintenance','powercut','noplan','no plan','power cut']
+  const isMachineIssue=(e:any)=>NO_PENALTY.includes((e.machine_status||'').toLowerCase().trim())
+  // projected for efficiency: skip machine-issue entries
+  const effProjOf=(e:any)=>isMachineIssue(e)?0:projOf(e)
 
   // machine-wise
   const machMap:Record<string,any>={}
   prod.forEach((e:any)=>{
     const key=`${e.plant}||${e.machine}`
-    if(!machMap[key])machMap[key]={plant:e.plant,machine:e.machine,good:0,rej:0,proj:0,down:0,product:e.product,ops:new Set(),slotsFilled:new Set(),slotsExpected:new Set()}
+    if(!machMap[key])machMap[key]={plant:e.plant,machine:e.machine,good:0,rej:0,proj:0,down:0,product:e.product,ops:new Set(),slotsFilled:new Set(),slotsExpected:new Set(),statuses:new Set()}
     const m=machMap[key]
-    m.good+=e.good_parts||0;m.rej+=e.rejection||0;m.proj+=projOf(e);m.down+=e.downtime||0
+    m.good+=e.good_parts||0;m.rej+=e.rejection||0;m.proj+=effProjOf(e);m.down+=e.downtime||0
+    if(e.machine_status)m.statuses.add((e.machine_status||'').toLowerCase().trim())
     if(e.operator)m.ops.add(e.operator);if(e.operator2)m.ops.add(e.operator2)
     if(e.product)m.product=e.product
     const isNight=(e.shift||'').toLowerCase().includes('night')
@@ -10427,18 +10434,22 @@ function KRAReportTab({user}:{user:User}) {
     ;(e.production_slots||[]).forEach((s:any)=>{if(s.slot_name)m.slotsFilled.add(s.slot_name)})
   })
   const machines=Object.values(machMap).map((m:any)=>{
+    const statuses=Array.from(m.statuses) as string[]
+    // machine band thi (koi running proj nahi, sirf machine-issue) → "Band" mark
+    const allMachineIssue=m.proj===0&&statuses.some((s:string)=>NO_PENALTY.includes(s))
     const eff=m.proj>0?Math.round(m.good/m.proj*100):0
     const rejPct=(m.good+m.rej)>0?+(m.rej/(m.good+m.rej)*100).toFixed(1):0
-    const grade=eff>=90?'A':eff>=75?'B':'C'
-    return {...m,eff,rejPct,grade,ops:Array.from(m.ops),slotDone:m.slotsFilled.size,slotNeed:m.slotsExpected.size}
-  }).sort((a:any,b:any)=>b.eff-a.eff)
+    const grade=allMachineIssue?'-':eff>=90?'A':eff>=75?'B':'C'
+    const issueLabel=statuses.find((s:string)=>NO_PENALTY.includes(s))||''
+    return {...m,eff,rejPct,grade,allMachineIssue,issueLabel,ops:Array.from(m.ops),slotDone:m.slotsFilled.size,slotNeed:m.slotsExpected.size}
+  }).sort((a:any,b:any)=>{if(a.allMachineIssue&&!b.allMachineIssue)return 1;if(!a.allMachineIssue&&b.allMachineIssue)return -1;return b.eff-a.eff})
 
   // operator-wise
   const opMap:Record<string,any>={}
   prod.forEach((e:any)=>{
     [e.operator,e.operator2].filter(Boolean).forEach((op:string)=>{
       if(!opMap[op])opMap[op]={op,good:0,proj:0,rej:0,machines:new Set()}
-      opMap[op].good+=e.good_parts||0;opMap[op].proj+=projOf(e);opMap[op].rej+=e.rejection||0
+      opMap[op].good+=e.good_parts||0;opMap[op].proj+=effProjOf(e);opMap[op].rej+=e.rejection||0
       if(e.machine)opMap[op].machines.add(e.machine)
     })
   })
@@ -10449,7 +10460,7 @@ function KRAReportTab({user}:{user:User}) {
 
   // totals
   const totGood=prod.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
-  const totProj=prod.reduce((a:number,e:any)=>a+projOf(e),0)
+  const totProj=prod.reduce((a:number,e:any)=>a+effProjOf(e),0)
   const totRej=prod.reduce((a:number,e:any)=>a+(e.rejection||0),0)
   const totDown=prod.reduce((a:number,e:any)=>a+(e.downtime||0),0)
   const overallEff=totProj>0?Math.round(totGood/totProj*100):0
@@ -10547,6 +10558,14 @@ function KRAReportTab({user}:{user:User}) {
       <div style={{fontSize:14,fontWeight:700,marginBottom:8,color:'#1F3864'}}>🏭 Machine Efficiency</div>
       <div style={{display:'flex',flexDirection:'column' as const,gap:6,marginBottom:14}}>
         {machines.map((m:any)=>{
+          const labelMap:Record<string,string>={breakdown:'🔧 Breakdown',maintenance:'🔧 Maintenance',powercut:'⚡ Power Cut',noplan:'No Plan','no plan':'No Plan','power cut':'⚡ Power Cut'}
+          if(m.allMachineIssue){
+            return <div key={m.machine} style={{display:'flex',alignItems:'center',gap:10,background:'#F5F5F5',border:'1px solid #e0e0e0',borderRadius:8,padding:'9px 12px'}}>
+              <div style={{width:26,height:26,borderRadius:'50%',background:'#E0E0E0',color:'#777',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:13}}>—</div>
+              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:'#555'}}>{m.machine}</div><div style={{fontSize:11,color:'#999'}}>Efficiency count nahi (machine ki galti nahi)</div></div>
+              <div style={{fontSize:12,fontWeight:700,color:'#777',background:'#EEE',borderRadius:6,padding:'4px 8px'}}>{labelMap[m.issueLabel]||'Band'}</div>
+            </div>
+          }
           const gc=m.grade==='A'?{bg:'#E8F5E9',c:'#276221'}:m.grade==='B'?{bg:'#FFF3E0',c:'#854F0B'}:{bg:'#FFEBEE',c:'#C00000'}
           return <div key={m.machine} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:'1px solid #eee',borderRadius:8,padding:'9px 12px'}}>
             <div style={{width:26,height:26,borderRadius:'50%',background:gc.bg,color:gc.c,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:12}}>{m.grade}</div>
