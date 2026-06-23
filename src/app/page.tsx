@@ -6642,6 +6642,18 @@ function BulkProductionTab({user}:{user:User}) {
     }])
   }
   
+  // Stop row — power cut / breakdown / maintenance (sirf time, kuch banaya nahi)
+  const addStopRow=(machine:string)=>{
+    const existing=entries.find(e=>e.machine===machine)
+    setEntries(prev=>[...prev,{
+      machine,product:existing?.product||'',mould:existing?.mould||'',cavities:existing?.cavities||'',
+      cycleTime:existing?.cycleTime||'',operator:existing?.operator||'',
+      operator2:existing?.operator2||'',good:'',rejection:'',down:'',
+      remarks:'',status:'powercut',stopReason:'',editId:null,isMC:true,isStop:true,
+      oldMould:existing?.mould||''
+    }])
+  }
+
   const removeMCRow=(machine:string,idx:number)=>{
     const machineRows=entries.filter(e=>e.machine===machine)
     if(machineRows.length<=1) return
@@ -7087,6 +7099,7 @@ function BulkProductionTab({user}:{user:User}) {
                     </select>
                     {isFirstRow&&<button onClick={()=>addMouldChange(e.machine)} style={{background:'#854F0B',color:'#fff',border:'none',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer',fontWeight:700}}>+ MC</button>}
                     {isFirstRow&&<button onClick={()=>addColourChange(e.machine)} style={{background:'#7B1FA2',color:'#fff',border:'none',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer',fontWeight:700}}>+ Colour</button>}
+                    {isFirstRow&&<button onClick={()=>addStopRow(e.machine)} style={{background:'#C00000',color:'#fff',border:'none',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer',fontWeight:700}}>+ Stop</button>}
               {isFirstRow&&history.some((h:any)=>h.machine===e.machine&&(h.production_slots||[]).some((s:any)=>s.slot_name===slot))&&<div style={{fontSize:8,color:'#854F0B',marginTop:2}}>Slot saved — MC se new entry</div>}
                     {e.isMC&&<button onClick={()=>removeMCRow(e.machine,machineRowIdx)} style={{background:'#FFEBEE',color:'#C00000',border:'1px solid #C00000',borderRadius:4,padding:'3px 4px',fontSize:9,cursor:'pointer'}}>✕ Remove</button>}
                   </div>
