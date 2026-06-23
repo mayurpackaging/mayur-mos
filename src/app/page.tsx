@@ -1999,6 +1999,7 @@ function ProductionTab({user}:{user:User}) {
           <option value="noplan">No Plan</option>
           <option value="breakdown">Breakdown</option>
           <option value="mouldchange">Mould Change</option>
+          <option value="colourchange">Colour Change</option>
           <option value="maintenance">Maintenance</option>
           <option value="powercut">Power Cut</option>
         </select>
@@ -6979,6 +6980,7 @@ function BulkProductionTab({user}:{user:User}) {
                   <option value="breakdown">Breakdown</option>
                   <option value="maintenance">Maintenance</option>
                   <option value="mouldchange">Mould Change</option>
+                  <option value="colourchange">Colour Change</option>
                   <option value="powercut">Power Cut</option>
                   <option value="noplan">No Plan</option>
                 </select>
@@ -10423,11 +10425,30 @@ function KRAReportTab({user}:{user:User}) {
   const prod=data?.prod||[]
   const projOf=(e:any)=>{const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0;return ct>0&&cav>0?Math.round(43200/ct*cav):0}
   // machine-related status = machine ki galti nahi → projected se hatao (efficiency penalty nahi)
-  // mould/operational = penalty lage
   const NO_PENALTY=['breakdown','maintenance','powercut','noplan','no plan','power cut']
   const isMachineIssue=(e:any)=>NO_PENALTY.includes((e.machine_status||'').toLowerCase().trim())
-  // projected for efficiency: skip machine-issue entries
-  const effProjOf=(e:any)=>isMachineIssue(e)?0:projOf(e)
+  const st=(e:any)=>(e.machine_status||'').toLowerCase().trim()
+  const isColourChange=(e:any)=>st(e)==='colourchange'
+  const isMouldChange=(e:any)=>st(e)==='mouldchange'
+  const MOULD_TARGET=60 // min — itne tak mould change OK, late hua toh penalty
+  // mould change: target time tak ka downtime maaf, late ka time projected se ghatao
+  // proj = full proj minus (allowed downtime ka proj). Late time penalty banega (proj nahi ghatega)
+  const projForEff=(e:any)=>{
+    if(isMachineIssue(e))return 0
+    const full=projOf(e)
+    if(isMouldChange(e)){
+      const down=parseFloat(e.downtime)||0
+      const allowed=Math.min(down,MOULD_TARGET) // target tak maaf
+      // allowed time ka proj ghatao (us time machine band thi, penalty nahi)
+      const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0
+      const allowedProj=ct>0&&cav>0?Math.round(allowed*60/ct*cav):0
+      return Math.max(full-allowedProj,0)
+    }
+    return full
+  }
+  // rejection: colour change ka rejection na gino
+  const rejForEff=(e:any)=>isColourChange(e)?0:(e.rejection||0)
+  const effProjOf=projForEff
 
   // machine-wise
   const machMap:Record<string,any>={}
@@ -10436,9 +10457,9 @@ function KRAReportTab({user}:{user:User}) {
     if(!machMap[key])machMap[key]={plant:e.plant,machine:e.machine,good:0,rej:0,proj:0,down:0,product:e.product,ops:new Set(),slotsFilled:new Set(),slotsExpected:new Set(),statuses:new Set()}
     const m=machMap[key]
     const machIssue=isMachineIssue(e)
-    // machine-issue (breakdown/maintenance/powercut) — good aur proj DONO skip (efficiency se bahar)
-    if(!machIssue){ m.good+=e.good_parts||0; m.proj+=projOf(e) }
-    m.rej+=e.rejection||0;m.down+=e.downtime||0
+    // machine-issue — good aur proj DONO skip (efficiency se bahar)
+    if(!machIssue){ m.good+=e.good_parts||0; m.proj+=projForEff(e) }
+    m.rej+=rejForEff(e);m.down+=e.downtime||0
     if(e.machine_status)m.statuses.add((e.machine_status||'').toLowerCase().trim())
     if(e.operator)m.ops.add(e.operator);if(e.operator2)m.ops.add(e.operator2)
     if(e.product)m.product=e.product
@@ -10463,8 +10484,8 @@ function KRAReportTab({user}:{user:User}) {
   prod.forEach((e:any)=>{
     [e.operator,e.operator2].filter(Boolean).forEach((op:string)=>{
       if(!opMap[op])opMap[op]={op,good:0,proj:0,rej:0,machines:new Set()}
-      if(!isMachineIssue(e)){ opMap[op].good+=e.good_parts||0; opMap[op].proj+=projOf(e) }
-      opMap[op].rej+=e.rejection||0
+      if(!isMachineIssue(e)){ opMap[op].good+=e.good_parts||0; opMap[op].proj+=projForEff(e) }
+      opMap[op].rej+=rejForEff(e)
       if(e.machine)opMap[op].machines.add(e.machine)
     })
   })
