@@ -7068,7 +7068,7 @@ function BulkProductionTab({user}:{user:User}) {
                 </td>
                 <td style={{padding:2}}>
                   <input type="number" min="0" value={e.down||''} onChange={ev=>updateEntry(e.machine,'down',ev.target.value)}
-                    style={{width:55,padding:'5px 3px',border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12}} placeholder="0"/>
+                    style={{width:55,padding:'5px 3px',border:!isRunning?'2px solid #C00000':'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,background:!isRunning&&!e.down?'#FFF3E0':'#fff'}} placeholder={!isRunning?'min!':'0'}/>
                 </td>
                 <td style={{padding:'5px',textAlign:'center',fontWeight:700,color:eff>0?effCol:'#ccc',background:eff>=90?'#E8F5E9':eff>=75?'#FFF3E0':eff>0?'#FFEBEE':'transparent'}}>
                   {eff>0?eff+'%':'--'}
@@ -7081,6 +7081,7 @@ function BulkProductionTab({user}:{user:User}) {
                       <option value="noplan">No Plan</option>
                       <option value="breakdown">Breakdown</option>
                       <option value="mouldchange">Mould Change</option>
+                      <option value="colourchange">Colour Change</option>
                       <option value="maintenance">Maintenance</option>
                       <option value="powercut">Power Cut</option>
                     </select>
@@ -10423,28 +10424,30 @@ function KRAReportTab({user}:{user:User}) {
 
   // ── build machine + operator KRA ──
   const prod=data?.prod||[]
+  // shift ka total time = 720 min (12hr). Running time = 720 - downtime.
+  // Projected = running_time ke hisaab se (downtime ka time ghata diya)
+  const SHIFT_MIN=720
   const projOf=(e:any)=>{const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0;return ct>0&&cav>0?Math.round(43200/ct*cav):0}
-  // machine-related status = machine ki galti nahi → projected se hatao (efficiency penalty nahi)
-  const NO_PENALTY=['breakdown','maintenance','powercut','noplan','no plan','power cut']
-  const isMachineIssue=(e:any)=>NO_PENALTY.includes((e.machine_status||'').toLowerCase().trim())
   const st=(e:any)=>(e.machine_status||'').toLowerCase().trim()
+  const NO_PENALTY=['breakdown','maintenance','powercut','noplan','no plan','power cut']
+  const isMachineIssue=(e:any)=>NO_PENALTY.includes(st(e))
   const isColourChange=(e:any)=>st(e)==='colourchange'
   const isMouldChange=(e:any)=>st(e)==='mouldchange'
   const MOULD_TARGET=60 // min — itne tak mould change OK, late hua toh penalty
-  // mould change: target time tak ka downtime maaf, late ka time projected se ghatao
-  // proj = full proj minus (allowed downtime ka proj). Late time penalty banega (proj nahi ghatega)
+
+  // RUNNING-TIME-BASED projected:
+  // - machine fully band (breakdown/powercut/maintenance/noplan) → 0 (efficiency se bahar)
+  // - mould change → target(60) tak ka time maaf, late ka time penalty (proj rahega)
+  // - normal → downtime jitna time ghatao, baaki ka projected
   const projForEff=(e:any)=>{
+    const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0
+    if(ct<=0||cav<=0)return 0
     if(isMachineIssue(e))return 0
-    const full=projOf(e)
-    if(isMouldChange(e)){
-      const down=parseFloat(e.downtime)||0
-      const allowed=Math.min(down,MOULD_TARGET) // target tak maaf
-      // allowed time ka proj ghatao (us time machine band thi, penalty nahi)
-      const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0
-      const allowedProj=ct>0&&cav>0?Math.round(allowed*60/ct*cav):0
-      return Math.max(full-allowedProj,0)
-    }
-    return full
+    const down=parseFloat(e.downtime)||0
+    let forgiven=down // itna time maaf (proj se ghatega, penalty nahi)
+    if(isMouldChange(e))forgiven=Math.min(down,MOULD_TARGET) // mould change: sirf target tak maaf, late penalty
+    const runMin=Math.max(SHIFT_MIN-forgiven,0)
+    return Math.round(runMin*60/ct*cav) // running time ka projected
   }
   // rejection: colour change ka rejection na gino
   const rejForEff=(e:any)=>isColourChange(e)?0:(e.rejection||0)
