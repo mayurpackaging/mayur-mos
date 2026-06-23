@@ -6711,6 +6711,7 @@ function BulkProductionTab({user}:{user:User}) {
   useEffect(()=>{
     if(setupLoaded&&plant){
       setEntries(prev=>prev.map(e=>{
+        if(e.isMC) return e // MC/Colour/Stop rows ko mat chhedo (apna product/data rakhein)
         const s=machineSetup.find((x:any)=>x.machine===e.machine&&x.valid_from_slot===slot)||machineSetup.find((x:any)=>x.machine===e.machine)
         return {...e,product:s?.product||e.product,mould:s?.mould||e.mould,cavities:s?.cavities||e.cavities,cycleTime:s?.cycle_time||e.cycleTime,status:s?.status||e.status||'running',good:'',rejection:'',down:'',remarks:'',editId:null}
       }))
