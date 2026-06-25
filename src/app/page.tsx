@@ -10449,17 +10449,17 @@ function KRAReportTab({user}:{user:User}) {
   const isMouldChange=(e:any)=>st(e)==='mouldchange'
   const MOULD_TARGET=60 // min — itne tak mould change OK, late hua toh penalty
 
-  // RUNNING-TIME-BASED projected:
-  // - machine fully band (breakdown/powercut/maintenance/noplan) → 0 (efficiency se bahar)
-  // - mould change → target(60) tak ka time maaf, late ka time penalty (proj rahega)
-  // - normal → downtime jitna time ghatao, baaki ka projected
+  // PROJECTED (downtime-based) — good HAMESHA count hota hai (jo bana woh bana)
+  // Sirf downtime ka time projected se adjust:
+  // - breakdown/powercut/maintenance/noplan ka downtime → poora maaf (proj se ghatao)
+  // - mould change ka downtime → target(60) tak maaf, late ka penalty (proj rahega)
+  // - normal downtime → poora maaf (sirf chalne ke time ka projected)
   const projForEff=(e:any)=>{
     const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0
     if(ct<=0||cav<=0)return 0
-    if(isMachineIssue(e))return 0
     const down=parseFloat(e.downtime)||0
-    let forgiven=down // itna time maaf (proj se ghatega, penalty nahi)
-    if(isMouldChange(e))forgiven=Math.min(down,MOULD_TARGET) // mould change: sirf target tak maaf, late penalty
+    let forgiven=down // itna downtime maaf (proj se ghatega, penalty nahi)
+    if(isMouldChange(e))forgiven=Math.min(down,MOULD_TARGET) // mould change: target tak maaf, late penalty
     const runMin=Math.max(SHIFT_MIN-forgiven,0)
     return Math.round(runMin*60/ct*cav) // running time ka projected
   }
@@ -10467,15 +10467,14 @@ function KRAReportTab({user}:{user:User}) {
   const rejForEff=(e:any)=>isColourChange(e)?0:(e.rejection||0)
   const effProjOf=projForEff
 
-  // machine-wise
+  // machine + product wise (taaki mould change pe dono product alag dikhe)
   const machMap:Record<string,any>={}
   prod.forEach((e:any)=>{
-    const key=`${e.plant}||${e.machine}`
+    const key=`${e.plant}||${e.machine}||${e.product||''}`
     if(!machMap[key])machMap[key]={plant:e.plant,machine:e.machine,good:0,rej:0,proj:0,down:0,product:e.product,ops:new Set(),slotsFilled:new Set(),slotsExpected:new Set(),statuses:new Set()}
     const m=machMap[key]
-    const machIssue=isMachineIssue(e)
-    // machine-issue — good aur proj DONO skip (efficiency se bahar)
-    if(!machIssue){ m.good+=e.good_parts||0; m.proj+=projForEff(e) }
+    // good HAMESHA count (jo bana woh bana), proj downtime-adjust
+    m.good+=e.good_parts||0; m.proj+=projForEff(e)
     m.rej+=rejForEff(e);m.down+=e.downtime||0
     if(e.machine_status)m.statuses.add((e.machine_status||'').toLowerCase().trim())
     if(e.operator)m.ops.add(e.operator);if(e.operator2)m.ops.add(e.operator2)
@@ -10487,8 +10486,8 @@ function KRAReportTab({user}:{user:User}) {
   })
   const machines=Object.values(machMap).map((m:any)=>{
     const statuses=Array.from(m.statuses) as string[]
-    // machine band thi (koi running proj nahi, sirf machine-issue) → "Band" mark
-    const allMachineIssue=m.proj===0&&statuses.some((s:string)=>NO_PENALTY.includes(s))
+    // machine band thi (good 0 aur sirf machine-issue) → "Band" mark
+    const allMachineIssue=m.good===0&&m.proj===0&&statuses.some((s:string)=>NO_PENALTY.includes(s))
     const eff=m.proj>0?Math.round(m.good/m.proj*100):0
     const rejPct=(m.good+m.rej)>0?+(m.rej/(m.good+m.rej)*100).toFixed(1):0
     const grade=allMachineIssue?'-':eff>=90?'A':eff>=75?'B':'C'
@@ -10501,7 +10500,7 @@ function KRAReportTab({user}:{user:User}) {
   prod.forEach((e:any)=>{
     [e.operator,e.operator2].filter(Boolean).forEach((op:string)=>{
       if(!opMap[op])opMap[op]={op,good:0,proj:0,rej:0,machines:new Set()}
-      if(!isMachineIssue(e)){ opMap[op].good+=e.good_parts||0; opMap[op].proj+=projForEff(e) }
+      opMap[op].good+=e.good_parts||0; opMap[op].proj+=projForEff(e)
       opMap[op].rej+=rejForEff(e)
       if(e.machine)opMap[op].machines.add(e.machine)
     })
@@ -10512,9 +10511,9 @@ function KRAReportTab({user}:{user:User}) {
   }).sort((a:any,b:any)=>b.score-a.score)
 
   // totals
-  const totGood=prod.reduce((a:number,e:any)=>a+(e.good_parts||0),0) // actual total (sab milake)
-  const effGood=prod.reduce((a:number,e:any)=>a+(isMachineIssue(e)?0:(e.good_parts||0)),0) // efficiency ke liye
-  const totProj=prod.reduce((a:number,e:any)=>a+effProjOf(e),0)
+  const totGood=prod.reduce((a:number,e:any)=>a+(e.good_parts||0),0) // actual total
+  const effGood=totGood // good hamesha count hota hai ab
+  const totProj=prod.reduce((a:number,e:any)=>a+projForEff(e),0)
   const totRej=prod.reduce((a:number,e:any)=>a+(e.rejection||0),0)
   const totDown=prod.reduce((a:number,e:any)=>a+(e.downtime||0),0)
   const overallEff=totProj>0?Math.round(effGood/totProj*100):0
