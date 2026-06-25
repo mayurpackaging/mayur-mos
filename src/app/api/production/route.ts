@@ -12,6 +12,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
   const machine = searchParams.get('machine') || ''
+  const plant = searchParams.get('plant') || ''
   const from = searchParams.get('from') || ''
   const to = searchParams.get('to') || ''
 
@@ -28,6 +29,7 @@ export async function GET(req: Request) {
     .order('created_at', { ascending: false })
 
   if (machine) query = query.eq('machine', machine)
+  if (plant) query = query.eq('plant', plant)
 
   const { data } = await query
   return NextResponse.json({ success: true, data: data || [] })
