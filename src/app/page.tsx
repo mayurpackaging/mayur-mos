@@ -7956,18 +7956,26 @@ function DailyReportTab({user}:{user:User}) {
   const sparesIn=data?.spares?.filter((s:any)=>s.action==='Stock In')||[]
   const sparesOut=data?.spares?.filter((s:any)=>s.action!=='Stock In')||[]
 
-  // Machine wise production
+  // Machine + Product wise (mould/colour change pe dono product alag dikhe)
   const machines=(data?.prod||[]).map(e=>e.machine).filter(Boolean).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i)
-  const machineStats=machines.map((m:string)=>{
-    const mp=(data?.prod||[]).filter(e=>e.machine===m)
-    const good=mp.reduce((a:number,e:any)=>a+(e.good_parts||0),0)
-    const rej=mp.reduce((a:number,e:any)=>a+(e.rejection||0),0)
-    const down=mp.reduce((a:number,e:any)=>a+(e.downtime||0),0)
-    const proj=mp.reduce((a:number,e:any)=>{const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)
-    const eff=proj>0?Math.round(good/proj*100):0
-    const remarks=mp.map(e=>e.remarks).filter(Boolean).join(' | ')
-    return {machine:m,good,rej,down,eff,product:mp[mp.length-1]?.product||'',shift:mp[0]?.shift||'',remarks}
-  }).sort((a,b)=>b.good-a.good)
+  const machineStats=(()=>{
+    const map:Record<string,any>={}
+    ;(data?.prod||[]).forEach((e:any)=>{
+      if(!e.machine)return
+      const key=`${e.machine}||${e.product||''}`
+      if(!map[key])map[key]={machine:e.machine,product:e.product||'',good:0,rej:0,down:0,proj:0,remarks:'',shift:e.shift||''}
+      const m=map[key]
+      m.good+=e.good_parts||0;m.rej+=e.rejection||0;m.down+=e.downtime||0
+      const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0
+      const dn=parseFloat(e.downtime)||0
+      const status=(e.machine_status||'').toLowerCase().trim()
+      const forgiven=status==='mouldchange'?Math.min(dn,60):dn
+      const runMin=Math.max(720-forgiven,0)
+      if(ct>0&&cav>0)m.proj+=Math.round(runMin*60/ct*cav)
+      if(e.remarks)m.remarks=m.remarks?m.remarks+' | '+e.remarks:e.remarks
+    })
+    return Object.values(map).map((m:any)=>({...m,eff:m.proj>0?Math.round(m.good/m.proj*100):0})).sort((a:any,b:any)=>b.good-a.good)
+  })()
 
   // Simple SVG pie chart
   const PieChart=({good,rej}:{good:number,rej:number})=>{
