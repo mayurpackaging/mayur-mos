@@ -58,7 +58,21 @@ export async function GET(req: Request) {
       grid[l.item_name][day] = cartons
     }
 
-    return NextResponse.json({ success: true, season, month, year, daysInMonth: lastDay, items: out, grid })
+    // ── Today (selected date) ka pack/unpack/total detail ──
+    const todayDate = searchParams.get('date') || new Date().toISOString().slice(0,10)
+    const { data: todayLogs } = await supabase.from('ims_smart_log')
+      .select('item_name,physical_ctn,unpack_packets,total_pcs')
+      .eq('category', category).eq('date', todayDate)
+    const todayMap: Record<string, any> = {}
+    for (const l of (todayLogs || [])) {
+      todayMap[l.item_name] = {
+        pack: l.physical_ctn || 0,        // poore carton
+        unpack: l.unpack_packets || 0,    // loose packets/cartons
+        total: l.total_pcs || 0,          // total pcs
+      }
+    }
+
+    return NextResponse.json({ success: true, season, month, year, daysInMonth: lastDay, items: out, grid, today: todayMap, todayDate })
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 })
   }
