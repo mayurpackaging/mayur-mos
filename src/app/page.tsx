@@ -7970,7 +7970,9 @@ function DailyReportTab({user}:{user:User}) {
       const dn=parseFloat(e.downtime)||0
       const status=(e.machine_status||'').toLowerCase().trim()
       const forgiven=status==='mouldchange'?Math.min(dn,60):dn
-      const runMin=Math.max(720-forgiven,0)
+      const slotCount=(e.production_slots||[]).length||0
+      const availMin=slotCount>0?slotCount*180:720
+      const runMin=Math.max(availMin-forgiven,0)
       if(ct>0&&cav>0)m.proj+=Math.round(runMin*60/ct*cav)
       if(e.remarks)m.remarks=m.remarks?m.remarks+' | '+e.remarks:e.remarks
     })
@@ -10106,7 +10108,7 @@ function IMSSmartTab({user}:{user:User}) {
   const [month,setMonth]=useState(new Date().getMonth())
   const [data,setData]=useState<any>(null)
   const [loading,setLoading]=useState(false)
-  const [view,setView]=useState<'stock'|'order'|'settings'|'grid'>('order')
+  const [view,setView]=useState<'stock'|'order'|'settings'|'grid'|'detail'>('order')
   const [date,setDate]=useState(nd())
   const [entries,setEntries]=useState<Record<string,{ctn:string,pkt:string}>>({})
   const [saving,setSaving]=useState(false)
@@ -10203,7 +10205,7 @@ function IMSSmartTab({user}:{user:User}) {
 
   const load=()=>{
     setLoading(true)
-    fetch(`/api/ims-smart?category=${category}&month=${month}&year=${new Date().getFullYear()}`).then(r=>r.json()).then(d=>{
+    fetch(`/api/ims-smart?category=${category}&month=${month}&year=${new Date().getFullYear()}&date=${date}`).then(r=>r.json()).then(d=>{
       setData(d);setLoading(false)
       // init settings form
       const sf:Record<string,any>={}
@@ -10211,7 +10213,7 @@ function IMSSmartTab({user}:{user:User}) {
       setSetForm(sf)
     }).catch(()=>setLoading(false))
   }
-  useEffect(()=>{load()},[category,month])
+  useEffect(()=>{load()},[category,month,date])
 
   const saveStock=async()=>{
     setSaving(true)
@@ -10311,7 +10313,7 @@ function IMSSmartTab({user}:{user:User}) {
 
     {/* View tabs */}
     <div style={{display:'flex',gap:6,marginBottom:12}}>
-      {([['order','🛒 Order'],['grid','📅 Movement'],['stock','📝 Entry'],['settings','⚙️ Set']] as const).map(([v,l])=>(
+      {([['order','🛒 Order'],['detail','📦 Pack/Unpack'],['grid','📅 Movement'],['stock','📝 Entry'],['settings','⚙️ Set']] as const).map(([v,l])=>(
         <button key={v} onClick={()=>setView(v as any)} style={{flex:1,padding:'7px',border:'none',borderBottom:`2px solid ${view===v?'#1F3864':'transparent'}`,background:'transparent',color:view===v?'#1F3864':'#999',fontWeight:700,fontSize:12,cursor:'pointer'}}>{l}</button>
       ))}
     </div>
@@ -10335,6 +10337,45 @@ function IMSSmartTab({user}:{user:User}) {
         </div>
       ))}
     </div>}
+
+    {/* PACK/UNPACK/TOTAL DETAIL VIEW (aaj ka) */}
+    {!loading&&view==='detail'&&(()=>{
+      const today=data?.today||{}
+      const waDetail=()=>{
+        let msg=`📦 *Stock Detail — ${category}*\n${date}\n\n`
+        items.forEach((it:any)=>{
+          const t=today[it.item_name]
+          if(t&&(t.pack>0||t.unpack>0))msg+=`${it.item_name}: Pack ${t.pack} + Unpack ${t.unpack} = ${Math.round(t.total)} pcs\n`
+        })
+        try{if(navigator.clipboard)navigator.clipboard.writeText(msg);else{const ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}setToast({msg:'Detail copy ho gaya!',ok:true})}catch(e){}
+      }
+      return <div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...S.fi,width:'auto',padding:'6px 10px'}}/>
+          <button onClick={waDetail} style={{background:'#25D366',color:'#fff',border:'none',borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 WhatsApp</button>
+        </div>
+        <div style={{overflowX:'auto' as const,border:'1px solid #E0E0E0',borderRadius:8}}>
+          <table style={{width:'100%',borderCollapse:'collapse' as const,fontSize:11}}>
+            <thead><tr>{['Item','Pack (ctn)','Unpack','Total (pcs)','Total (ctn)'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'7px 8px',textAlign:h==='Item'?'left' as const:'center' as const,whiteSpace:'nowrap' as const}}>{h}</th>)}</tr></thead>
+            <tbody>
+              {items.map((it:any,i:number)=>{
+                const t=today[it.item_name]||{pack:0,unpack:0,total:0}
+                const totalCtn=it.pcs_per_ctn>0?+(t.total/it.pcs_per_ctn).toFixed(1):0
+                const has=t.pack>0||t.unpack>0||t.total>0
+                return <tr key={it.item_name} style={{background:i%2===0?'#fff':'#F7F9FC',opacity:has?1:0.5}}>
+                  <td style={{padding:'6px 8px',fontWeight:600}}>{it.item_name}</td>
+                  <td style={{padding:'6px 8px',textAlign:'center' as const,color:'#1F3864',fontWeight:700}}>{t.pack||'-'}</td>
+                  <td style={{padding:'6px 8px',textAlign:'center' as const,color:'#854F0B'}}>{t.unpack||'-'}</td>
+                  <td style={{padding:'6px 8px',textAlign:'center' as const,color:'#0F6E56',fontWeight:700}}>{t.total?Math.round(t.total).toLocaleString():'-'}</td>
+                  <td style={{padding:'6px 8px',textAlign:'center' as const,color:'#666'}}>{totalCtn||'-'}</td>
+                </tr>
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{fontSize:11,color:'#888',marginTop:8}}>Pack = poore carton · Unpack = loose · Total = total pcs (aur cartons mein)</div>
+      </div>
+    })()}
 
     {/* MOVEMENT GRID VIEW (Excel jaisa) */}
     {!loading&&view==='grid'&&(()=>{
@@ -10462,13 +10503,17 @@ function KRAReportTab({user}:{user:User}) {
   // - breakdown/powercut/maintenance/noplan ka downtime → poora maaf (proj se ghatao)
   // - mould change ka downtime → target(60) tak maaf, late ka penalty (proj rahega)
   // - normal downtime → poora maaf (sirf chalne ke time ka projected)
+  const SLOT_MIN=180 // 1 slot = 3 ghante
   const projForEff=(e:any)=>{
     const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0
     if(ct<=0||cav<=0)return 0
+    // available time = kitne slot bhare × 180 min (poore din 720 nahi)
+    const slotCount=(e.production_slots||[]).length||0
+    const availMin=slotCount>0?slotCount*SLOT_MIN:SHIFT_MIN // agar slot nahi toh full shift
     const down=parseFloat(e.downtime)||0
     let forgiven=down // itna downtime maaf (proj se ghatega, penalty nahi)
     if(isMouldChange(e))forgiven=Math.min(down,MOULD_TARGET) // mould change: target tak maaf, late penalty
-    const runMin=Math.max(SHIFT_MIN-forgiven,0)
+    const runMin=Math.max(availMin-forgiven,0)
     return Math.round(runMin*60/ct*cav) // running time ka projected
   }
   // rejection: colour change ka rejection na gino
