@@ -117,12 +117,27 @@ export async function POST(req: Request) {
   const d = await req.json()
   const today = d.date || istToday()
 
-  // ── Stock In (grease aayi) — writes to SPARES ──
+  // ── Stock In (grease aayi) — plant-wise SPARES row ──
   if (d.type === 'stock_in') {
     const qty = parseFloat(d.qty) || 0
     if (!d.greaseName || qty <= 0) return NextResponse.json({ success: false, msg: 'Grease aur qty daalo!' })
-    const { data: sp } = await supabase.from('spares_master').select('*').ilike('part_name', d.greaseName).maybeSingle()
-    if (!sp) return NextResponse.json({ success: false, msg: 'Yeh grease spares mein nahi hai!' })
+    const plant = d.plant || 'Plant 477'
+    // us plant ka grease row dhoondo (part_name + plant)
+    let { data: sp } = await supabase.from('spares_master').select('*')
+      .ilike('part_name', d.greaseName).eq('plant', plant).maybeSingle()
+    // agar us plant mein nahi hai, kisi bhi plant ka row le ke uska template banao
+    if (!sp) {
+      const { data: any1 } = await supabase.from('spares_master').select('*').ilike('part_name', d.greaseName).limit(1).maybeSingle()
+      if (!any1) return NextResponse.json({ success: false, msg: 'Yeh grease spares mein nahi hai!' })
+      // naya plant-wise row banao
+      const { data: created } = await supabase.from('spares_master').insert({
+        part_name: any1.part_name, category: any1.category || '', unit: any1.unit || 'Pcs',
+        min_qty: any1.min_qty || 0, current_stock: 0, status: 'Active',
+        plant, storage_type: any1.storage_type || '',
+      }).select().maybeSingle()
+      sp = created
+    }
+    if (!sp) return NextResponse.json({ success: false, msg: 'Row banane mein dikkat' })
 
     await supabase.from('spare_movements').insert({
       date: today, slip_no: '', vendor: d.vendor || '',
@@ -130,17 +145,24 @@ export async function POST(req: Request) {
       action: 'Stock In', qty, price_per_pc: parseFloat(d.price) || 0,
       total_price: qty * (parseFloat(d.price) || 0),
       done_by: d.doneBy || '', new_stock: 0,
-      plant: d.plant || '', machine: '', used_for: '',
+      plant, machine: '', used_for: '',
     })
-    const ns = await recalcSpareStock(sp.part_name)
-    return NextResponse.json({ success: true, msg: `Stock In ho gaya! Naya stock: ${ns}` })
+    // us plant ke row ka stock badhao
+    const newStock = (parseFloat(sp.current_stock) || 0) + qty
+    await supabase.from('spares_master').update({ current_stock: newStock, last_updated: today, last_vendor: d.vendor || sp.last_vendor })
+      .eq('id', sp.id)
+    return NextResponse.json({ success: true, msg: `${plant} mein Stock In! Naya stock: ${newStock}` })
   }
 
   // ── Used in Machine (grease change) — SPARES stock minus + grease_log counter ──
   if (d.type === 'used') {
     const qty = parseFloat(d.qty) || 0
     if (!d.greaseName || !d.machine || qty <= 0) return NextResponse.json({ success: false, msg: 'Grease, machine aur qty daalo!' })
-    const { data: sp } = await supabase.from('spares_master').select('*').ilike('part_name', d.greaseName).maybeSingle()
+    const plant = d.plant || 'Plant 477'
+    // us plant ka grease row (na mile toh koi bhi)
+    let { data: sp } = await supabase.from('spares_master').select('*')
+      .ilike('part_name', d.greaseName).eq('plant', plant).maybeSingle()
+    if (!sp) { const { data: any1 } = await supabase.from('spares_master').select('*').ilike('part_name', d.greaseName).limit(1).maybeSingle(); sp = any1 }
     if (!sp) return NextResponse.json({ success: false, msg: 'Yeh grease spares mein nahi hai!' })
 
     const counter = d.machineCounter != null && d.machineCounter !== '' ? parseFloat(d.machineCounter) : null
@@ -160,9 +182,11 @@ export async function POST(req: Request) {
       part_name: sp.part_name, category: sp.category || '',
       action: 'Used in Machine', qty, price_per_pc: 0, total_price: 0,
       done_by: d.doneBy || '', new_stock: 0,
-      plant: d.plant || '', machine: d.machine, used_for: 'Machine',
+      plant, machine: d.machine, used_for: 'Machine',
     })
-    const ns = await recalcSpareStock(sp.part_name)
+    // us plant ke row ka stock ghatao
+    const ns = Math.max((parseFloat(sp.current_stock) || 0) - qty, 0)
+    await supabase.from('spares_master').update({ current_stock: ns, last_updated: today }).eq('id', sp.id)
 
     // 2. counter record in grease_log
     await supabase.from('grease_log').insert({
