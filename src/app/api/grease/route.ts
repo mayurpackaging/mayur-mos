@@ -60,20 +60,13 @@ export async function GET(req: Request) {
     if (r.machine && !lastByMachine[r.machine]) lastByMachine[r.machine] = r
   }
 
-  // plant-wise stock from spare_movements (In - Used per plant per grease)
-  const greaseNames = (allSpares || []).map((s: any) => s.part_name)
+  // plant-wise stock — spares_master ke ACTUAL stock se (movements se nahi, woh galat ho sakta hai)
   const plantWise: Record<string, Record<string, number>> = {}
-  for (const gn of greaseNames) {
-    const { data: mv } = await supabase.from('spare_movements')
-      .select('plant,action,qty').ilike('part_name', gn)
-    const byPlant: Record<string, number> = {}
-    for (const m of (mv || [])) {
-      const p = m.plant || 'No Plant'
-      const q = parseFloat(m.qty) || 0
-      if (!byPlant[p]) byPlant[p] = 0
-      byPlant[p] += (m.action === 'Stock In' ? q : -q)
-    }
-    plantWise[gn] = byPlant
+  for (const s of (allSpares || [])) {
+    const gn = s.part_name
+    const p = s.plant || 'No Plant'
+    if (!plantWise[gn]) plantWise[gn] = {}
+    plantWise[gn][p] = (plantWise[gn][p] || 0) + (parseFloat(s.current_stock) || 0)
   }
 
   // ── Machine-wise grease change chart (history + since_last + average) ──
