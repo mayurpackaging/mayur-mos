@@ -85,12 +85,13 @@ export async function GET(req: Request) {
   const byMachine: Record<string, any[]> = {}
   for (const r of (allChanges || [])) {
     if (!r.machine) continue
-    if (!byMachine[r.machine]) byMachine[r.machine] = []
-    byMachine[r.machine].push(r)
+    const key = `${r.plant}||${r.machine}` // plant + machine (same naam do plant mein ho sakta hai)
+    if (!byMachine[key]) byMachine[key] = []
+    byMachine[key].push(r)
   }
   const chart: any[] = []
-  for (const m of Object.keys(byMachine)) {
-    const recs = byMachine[m]
+  for (const key of Object.keys(byMachine)) {
+    const recs = byMachine[key]
     const history = recs.map((r, i) => {
       const prev = i > 0 ? recs[i - 1].machine_counter : null
       const sinceLast = (prev != null && r.machine_counter != null) ? (r.machine_counter - prev) : null
@@ -100,7 +101,7 @@ export async function GET(req: Request) {
     const avg = gaps.length > 0 ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length) : null
     const last = history[history.length - 1]
     chart.push({
-      machine: m, plant: recs[0].plant,
+      machine: recs[0].machine, plant: recs[0].plant,
       changes: history.length,
       lastCounter: last?.counter, lastDate: last?.date,
       lastSinceLast: last?.sinceLast,
