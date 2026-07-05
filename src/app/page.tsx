@@ -7943,7 +7943,17 @@ function DailyReportTab({user}:{user:User}) {
   const totalGood=data?.prod?.reduce((a:number,e:any)=>a+(e.good_parts||0),0)||0
   const totalRej=data?.prod?.reduce((a:number,e:any)=>a+(e.rejection||0),0)||0
   const totalDown=data?.prod?.reduce((a:number,e:any)=>a+(e.downtime||0),0)||0
-  const totalProj=data?.prod?.reduce((a:number,e:any)=>{const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0;return ct>0&&cav>0?a+Math.round(43200/ct*cav):a},0)||0
+  const totalProj=data?.prod?.reduce((a:number,e:any)=>{
+    const ct=parseFloat(e.cycle_time)||0,cav=parseInt(e.cavities)||0
+    if(ct<=0||cav<=0)return a
+    const slotCount=(e.production_slots||[]).length||0
+    const availMin=slotCount>0?slotCount*180:720
+    const dn=parseFloat(e.downtime)||0
+    const status=(e.machine_status||'').toLowerCase().trim()
+    const forgiven=status==='mouldchange'?Math.min(dn,60):dn
+    const runMin=Math.max(availMin-forgiven,0)
+    return a+Math.round(runMin*60/ct*cav)
+  },0)||0
   const eff=totalProj>0?Math.round(totalGood/totalProj*100):0
   const dayProd=data?.prod?.filter(e=>e.shift?.toLowerCase().includes('day'))||[]
   const nightProd=data?.prod?.filter(e=>e.shift?.toLowerCase().includes('night'))||[]
@@ -9661,6 +9671,10 @@ function GreaseTab({user}:{user:User}) {
     {view==='in'&&<div style={S.card}>
       <div style={{fontWeight:700,color:'#1F3864',marginBottom:10}}>📥 Grease Stock In (nayi grease aayi)</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div><label style={S.lbl}>Plant</label>
+          <select style={S.fi} value={inForm.plant} onChange={e=>setInForm(p=>({...p,plant:e.target.value}))}>
+            {PLANTS.map(p=><option key={p}>{p}</option>)}
+          </select></div>
         <div><label style={S.lbl}>Grease</label>
           <select style={S.fi} value={inForm.greaseName} onChange={e=>setInForm(p=>({...p,greaseName:e.target.value}))}>
             <option value="">-- Select --</option>{stock.map((s:any)=><option key={s.id} value={s.part_name}>{s.part_name}</option>)}
