@@ -21,15 +21,35 @@ export async function GET(req: Request) {
   }
 
   const { data: moulds } = await supabase.from('mould_master').select('*').order('mould_name')
-  const result = (moulds || []).map((m:any) => {
+  const { data: lastPMs } = await supabase.from('pm_logs').select('mould_name,date').order('date', { ascending: false })
+  const lastPMDate: Record<string, string> = {}
+  for (const p of (lastPMs || [])) {
+    if (!lastPMDate[p.mould_name]) lastPMDate[p.mould_name] = p.date
+  }
+
+  const result = await Promise.all((moulds || []).map(async (m: any) => {
     const curr = m.current_shots || 0
     const pmAt = m.next_pm_at_shots || 0
     const freq = m.pm_frequency_shots || 0
     const remaining = pmAt - curr
     const pct = pmAt > 0 ? Math.round(curr / pmAt * 100) : 0
     const status = remaining <= 0 ? 'OVERDUE' : remaining < freq * 0.1 ? 'DUE SOON' : 'Active'
-    return { ...m, remaining, pct, status }
-  })
+
+    // ── Auto-calculate shots from BULK PRODUCTION since last PM ──
+    // mould_master name format "Name (code)"; production mould format "code - Name"
+    const codeMatch = String(m.mould_name || '').match(/\((\d+)\)/)
+    const code = codeMatch ? codeMatch[1] : null
+    let productionShots = null
+    if (code) {
+      const sinceDate = lastPMDate[m.mould_name] || '2000-01-01'
+      const { data: prodRows } = await supabase.from('production')
+        .select('good_parts,rejection')
+        .ilike('mould', `${code}%`)
+        .gte('date', sinceDate)
+      productionShots = (prodRows || []).reduce((a: number, r: any) => a + (r.good_parts || 0) + (r.rejection || 0), 0)
+    }
+    return { ...m, remaining, pct, status, productionShots, mismatch: productionShots != null ? Math.abs(productionShots - curr) : null }
+  }))
   return NextResponse.json({ success: true, moulds: result })
 }
 
