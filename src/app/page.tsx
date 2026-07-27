@@ -2639,13 +2639,13 @@ function MouldPMTab({user}:{user:User}) {
       <div style={{fontWeight:700,marginBottom:8}}>Mould PM Status {pmFilter&&<span style={{fontSize:11,color:'#1F3864',fontWeight:600}}>— {pmFilter} only <span style={{color:'#C00000',cursor:'pointer'}} onClick={()=>setPmFilter('')}>✕ clear</span></span>}</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Mould','Code','Total Shots','PM Baad Shots','PM At','Progress','Remaining','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <thead><tr>{['Mould','Code','Total Shots','Bulk Production Shots','PM Baad Shots','PM At','Progress','Remaining','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
           <tbody>{(()=>{
             const rank=(s:string)=>s==='OVERDUE'?0:s==='DUE SOON'?1:2
             const shown=moulds
               .filter((m:any)=>pmFilter?m.status===pmFilter:true)
               .sort((a:any,b:any)=>rank(a.status)-rank(b.status))
-            if(shown.length===0) return <tr><td colSpan={8} style={{textAlign:'center',color:'#666',padding:16}}>{pmFilter?`Koi ${pmFilter} mould nahi!`:'Koi mould setup nahi!'}</td></tr>
+            if(shown.length===0) return <tr><td colSpan={9} style={{textAlign:'center',color:'#666',padding:16}}>{pmFilter?`Koi ${pmFilter} mould nahi!`:'Koi mould setup nahi!'}</td></tr>
             return shown.map((m:any,i:number)=>{
             const col=m.status==='OVERDUE'?'#C00000':m.status==='DUE SOON'?'#854F0B':'#276221'
             const bg=m.status==='OVERDUE'?'#FFEBEE':m.status==='DUE SOON'?'#FFF3E0':'#E8F5E9'
@@ -2653,6 +2653,12 @@ function MouldPMTab({user}:{user:User}) {
               <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{m.mould_name}</td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{m.mould_code||'--'}</td>
               <td style={{padding:'6px 8px',textAlign:'center',color:'#666'}}>{(m.current_shots||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center'}}>
+                {m.productionShots!=null?<>
+                  <div style={{fontWeight:700,color:m.mismatch>500?'#C00000':'#0F6E56'}}>{m.productionShots.toLocaleString()}</div>
+                  {m.mismatch>500&&<div style={{fontSize:9,color:'#C00000'}}>⚠️ mismatch {m.mismatch.toLocaleString()}</div>}
+                </>:<span style={{color:'#ccc',fontSize:10}}>code missing</span>}
+              </td>
               <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#1F3864'}}>{(m.sinceLastPM||0).toLocaleString()}</td>
               <td style={{padding:'6px 8px',textAlign:'center'}}>{(m.next_pm_at_shots||0).toLocaleString()}</td>
               <td style={{padding:'6px 8px'}}>
