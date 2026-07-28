@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   // Use combined view (box + lid machine hours)
   const { data, error } = await supabase
     .from('daily_throughput_combined')
-    .select('date,plant,product,good_parts,box_mh,lid_mh,total_mh,throughput_per_carton,cartons,t_per_hour,actual_zone,floor_price,happy_price,tonnage')
+    .select('date,plant,machine,product,good_parts,box_mh,lid_mh,total_mh,throughput_per_carton,cartons,t_per_hour,actual_zone,floor_price,happy_price,tonnage')
     .gte('date', since)
     .not('t_per_hour', 'is', null)
     .gt('total_mh', 0)
