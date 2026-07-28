@@ -21,6 +21,20 @@ export async function GET(request: NextRequest) {
   const days = parseInt(searchParams.get('days') || '7');
   const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
+  // Total machines per day (box + lid both)
+  const { data: machineData } = await supabase
+    .from('production')
+    .select('date, machine, machine_status')
+    .gte('date', since)
+    .not('machine_status', 'in', '("Breakdown","Maintenance","No Plan","Power Cut")');
+
+  // Build machine count per date
+  const machineCounts: Record<string, Set<string>> = {};
+  for (const row of machineData || []) {
+    if (!machineCounts[row.date]) machineCounts[row.date] = new Set();
+    if (row.machine) machineCounts[row.date].add(row.machine);
+  }
+
   // Use combined view (box + lid machine hours)
   const { data, error } = await supabase
     .from('daily_throughput_combined')
@@ -49,9 +63,7 @@ export async function GET(request: NextRequest) {
     byDate[row.date].box_mh     += row.box_mh || 0;
     byDate[row.date].lid_mh     += row.lid_mh || 0;
     byDate[row.date].total_throughput += (row.throughput_per_carton || 0) * (row.cartons || 0);
-    byDate[row.date].machines = byDate[row.date].machines || new Set();
-      if(row.machine) byDate[row.date].machines.add(row.plant+"_"+row.machine);
-      byDate[row.date].items.push({
+    byDate[row.date].items.push({
       product:    row.product,
       plant:      row.plant,
       good_parts: row.good_parts,
@@ -78,7 +90,7 @@ export async function GET(request: NextRequest) {
       box_mh:          Math.round(d.box_mh * 10) / 10,
       lid_mh:          Math.round(d.lid_mh * 10) / 10,
       total_throughput: Math.round(d.total_throughput),
-      machine_count: d.machines ? d.machines.size : 0,
+      machine_count: machineCounts[d.date] ? machineCounts[d.date].size : 0,
     };
   }).sort((a, b) => b.date.localeCompare(a.date));
 
