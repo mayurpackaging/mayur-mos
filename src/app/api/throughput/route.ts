@@ -49,7 +49,9 @@ export async function GET(request: NextRequest) {
     byDate[row.date].box_mh     += row.box_mh || 0;
     byDate[row.date].lid_mh     += row.lid_mh || 0;
     byDate[row.date].total_throughput += (row.throughput_per_carton || 0) * (row.cartons || 0);
-    byDate[row.date].items.push({
+    byDate[row.date].machines = byDate[row.date].machines || new Set();
+      if(row.machine) byDate[row.date].machines.add(row.plant+"_"+row.machine);
+      byDate[row.date].items.push({
       product:    row.product,
       plant:      row.plant,
       good_parts: row.good_parts,
@@ -76,6 +78,7 @@ export async function GET(request: NextRequest) {
       box_mh:          Math.round(d.box_mh * 10) / 10,
       lid_mh:          Math.round(d.lid_mh * 10) / 10,
       total_throughput: Math.round(d.total_throughput),
+      machine_count: d.machines ? d.machines.size : 0,
     };
   }).sort((a, b) => b.date.localeCompare(a.date));
 
