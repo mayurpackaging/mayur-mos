@@ -21,12 +21,11 @@ export async function GET(request: NextRequest) {
   const days = parseInt(searchParams.get('days') || '7');
   const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
-  // Total machines per day (box + lid both)
+  // Total machines per day (all machines including breakdown)
   const { data: machineData } = await supabase
     .from('production')
-    .select('date, machine, machine_status')
-    .gte('date', since)
-    .not('machine_status', 'in', '("Breakdown","Maintenance","No Plan","Power Cut")');
+    .select('date, machine')
+    .gte('date', since);
 
   // Build machine count per date
   const machineCounts: Record<string, Set<string>> = {};
