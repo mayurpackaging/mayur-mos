@@ -24,14 +24,14 @@ export async function GET(request: NextRequest) {
   // Total machines per day (all machines including breakdown)
   const { data: machineData } = await supabase
     .from('production')
-    .select('date, machine')
+    .select('date, plant, machine')
     .gte('date', since);
 
   // Build machine count per date
   const machineCounts: Record<string, Set<string>> = {};
   for (const row of machineData || []) {
     if (!machineCounts[row.date]) machineCounts[row.date] = new Set();
-    if (row.machine) machineCounts[row.date].add(row.machine);
+    if (row.machine && row.plant) machineCounts[row.date].add(row.plant+"_"+row.machine);
   }
 
   // Use combined view (box + lid machine hours)
