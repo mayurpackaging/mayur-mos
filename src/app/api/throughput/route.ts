@@ -6,7 +6,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// CORS headers — allow CRM to fetch
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -20,34 +19,48 @@ export async function OPTIONS() {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const days = parseInt(searchParams.get('days') || '7');
+  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
-  const { data: summary, error } = await supabase
-    .from('daily_throughput')
-    .select('date, plant, product, good_parts, machine_hours_used, throughput_per_carton, cartons, t_per_hour, actual_zone, floor_price, happy_price')
-    .gte('date', new Date(Date.now() - days * 86400000).toISOString().slice(0, 10))
+  // Use combined view (box + lid machine hours)
+  const { data, error } = await supabase
+    .from('daily_throughput_combined')
+    .select('date,plant,product,good_parts,box_mh,lid_mh,total_mh,throughput_per_carton,cartons,t_per_hour,actual_zone,floor_price,happy_price,tonnage')
+    .gte('date', since)
     .not('t_per_hour', 'is', null)
-    .gt('machine_hours_used', 0)
+    .gt('total_mh', 0)
     .order('date', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
 
   // Aggregate by date
   const byDate: Record<string, any> = {};
-  for (const row of summary || []) {
+  for (const row of data || []) {
     if (!byDate[row.date]) {
-      byDate[row.date] = { date: row.date, total_mh: 0, total_throughput: 0, items: [] };
+      byDate[row.date] = {
+        date: row.date,
+        total_mh: 0,
+        box_mh: 0,
+        lid_mh: 0,
+        total_throughput: 0,
+        items: [],
+      };
     }
-    byDate[row.date].total_mh += row.machine_hours_used || 0;
+    byDate[row.date].total_mh   += row.total_mh || 0;
+    byDate[row.date].box_mh     += row.box_mh || 0;
+    byDate[row.date].lid_mh     += row.lid_mh || 0;
     byDate[row.date].total_throughput += (row.throughput_per_carton || 0) * (row.cartons || 0);
     byDate[row.date].items.push({
-      product: row.product,
-      plant: row.plant,
+      product:    row.product,
+      plant:      row.plant,
       good_parts: row.good_parts,
-      mh: row.machine_hours_used,
-      t_hr: row.t_per_hour,
-      zone: row.actual_zone,
-      floor: row.floor_price,
-      happy: row.happy_price,
+      box_mh:     row.box_mh,
+      lid_mh:     row.lid_mh,
+      total_mh:   row.total_mh,
+      t_hr:       row.t_per_hour,
+      zone:       row.actual_zone,
+      floor:      row.floor_price,
+      happy:      row.happy_price,
+      tonnage:    row.tonnage,
     });
   }
 
@@ -59,8 +72,10 @@ export async function GET(request: NextRequest) {
       ...d,
       avg_t_hr,
       zone,
-      total_mh: Math.round(d.total_mh * 10) / 10,
-      total_throughput: Math.round(d.total_throughput)
+      total_mh:        Math.round(d.total_mh * 10) / 10,
+      box_mh:          Math.round(d.box_mh * 10) / 10,
+      lid_mh:          Math.round(d.lid_mh * 10) / 10,
+      total_throughput: Math.round(d.total_throughput),
     };
   }).sort((a, b) => b.date.localeCompare(a.date));
 
