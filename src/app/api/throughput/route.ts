@@ -19,7 +19,15 @@ export async function OPTIONS() {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const days = parseInt(searchParams.get('days') || '7');
-  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  
+  // Support specific date OR days range
+  // Default: yesterday's complete data (for daily floor price)
+  const targetDate = searchParams.get('date'); // e.g. ?date=2026-07-27
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const since = targetDate 
+    ? targetDate  // specific date
+    : new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const until = targetDate ? targetDate : undefined; // if specific date, only that day
 
   // Total machines per day (all machines including breakdown)
   const { data: machineData } = await supabase
@@ -35,13 +43,18 @@ export async function GET(request: NextRequest) {
   }
 
   // Use combined view (box + lid machine hours)
-  const { data, error } = await supabase
+  let query = supabase
     .from('daily_throughput_combined')
     .select('date,plant,machine,product,good_parts,box_mh,lid_mh,total_mh,throughput_per_carton,cartons,t_per_hour,actual_zone,floor_price,happy_price,tonnage')
     .gte('date', since)
     .not('t_per_hour', 'is', null)
     .gt('total_mh', 0)
     .order('date', { ascending: false });
+  
+  // If specific date, filter to only that date
+  if (until) query = query.lte('date', until);
+  
+  const { data, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
 
