@@ -12,7 +12,9 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const days = parseInt(searchParams.get("days") || "30");
-  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const fromDate = searchParams.get("from");
+  const since = fromDate ? fromDate 
+    : new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
   // Raw MH per day — directly from production table (no view, no cap)
   const { data: daily, error: e1 } = await supabase.rpc("get_daily_utilization", {
