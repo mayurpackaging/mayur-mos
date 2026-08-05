@@ -19,15 +19,14 @@ export async function OPTIONS() {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const days = parseInt(searchParams.get('days') || '7');
-  
-  // Support specific date OR days range
-  // Default: yesterday's complete data (for daily floor price)
-  const targetDate = searchParams.get('date'); // e.g. ?date=2026-07-27
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  const since = targetDate 
-    ? targetDate  // specific date
+  const targetDate = searchParams.get('date');
+  const fromDate = searchParams.get('from'); // calendar month start e.g. 2026-08-01
+  const toDate = searchParams.get('to');     // calendar month end e.g. 2026-07-31
+
+  const since = targetDate ? targetDate
+    : fromDate ? fromDate
     : new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-  const until = targetDate ? targetDate : undefined; // if specific date, only that day
+  const until = targetDate ? targetDate : toDate ? toDate : undefined;
 
   // Total machines per day (all machines including breakdown)
   const { data: machineData } = await supabase
