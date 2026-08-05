@@ -1,11 +1,20 @@
-// src/app/api/utilization/route.ts
-import { NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: CORS });
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -23,7 +32,7 @@ export async function GET(request: NextRequest) {
     .gt("cavities", 0)
     .order("date", { ascending: false });
 
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
 
   const TARGET = 345;
   const byDate: Record<string, { raw_mh: number; machines: string[] }> = {};
@@ -69,7 +78,7 @@ export async function GET(request: NextRequest) {
     ? Math.round((total_mh / (TARGET * result.length)) * 1000) / 10
     : 0;
 
-  return Response.json({
+  return NextResponse.json({
     daily: result,
     weekly,
     summary: {
@@ -80,5 +89,5 @@ export async function GET(request: NextRequest) {
       target_mh_per_day: TARGET,
     },
     updated_at: new Date().toISOString(),
-  });
+  }, { headers: CORS });
 }
