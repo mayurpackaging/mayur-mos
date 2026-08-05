@@ -85,6 +85,8 @@ export async function GET(request: NextRequest) {
       zone:       row.actual_zone,
       floor:      row.floor_price,
       happy:      row.happy_price,
+      list_price: row.list_price,
+      daana_cost: row.daana_cost,
       tonnage:    row.tonnage,
     });
   }
