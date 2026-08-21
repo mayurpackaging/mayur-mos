@@ -2667,7 +2667,7 @@ function MouldPMTab({user}:{user:User}) {
       <div style={{fontWeight:700,marginBottom:8}}>Mould PM Status {pmFilter&&<span style={{fontSize:11,color:'#1F3864',fontWeight:600}}>— {pmFilter} only <span style={{color:'#C00000',cursor:'pointer'}} onClick={()=>setPmFilter('')}>✕ clear</span></span>}</div>
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Mould','Code','Total Shots (DB)','Production Total','Since Last PM','PM At','Progress','Remaining','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
+          <thead><tr>{['Mould','Code','Total Shots','Last PM Par','Next PM Due','PM Ke Baad Shots','Remaining','Status'].map(h=><th key={h} style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'left'}}>{h}</th>)}</tr></thead>
           <tbody>{(()=>{
             const rank=(s:string)=>s==='OVERDUE'?0:s==='DUE SOON'?1:2
             const shown=moulds
@@ -2677,26 +2677,27 @@ function MouldPMTab({user}:{user:User}) {
             return shown.map((m:any,i:number)=>{
             const col=m.status==='OVERDUE'?'#C00000':m.status==='DUE SOON'?'#854F0B':'#276221'
             const bg=m.status==='OVERDUE'?'#FFEBEE':m.status==='DUE SOON'?'#FFF3E0':'#E8F5E9'
+            const lastPMShots = (m.current_shots||0) - (m.sinceLastPM||0)
+            const nextPMDue = m.next_pm_at_shots || 0
+            const sinceLastPM = m.sinceLastPM || 0
+            const remaining = nextPMDue - (m.current_shots||0)
             return <tr key={i}>
               <td style={{padding:'6px 8px',fontWeight:600,fontSize:11}}>{m.mould_name}</td>
               <td style={{padding:'6px 8px',fontSize:10,color:'#666'}}>{m.mould_code||'--'}</td>
-              <td style={{padding:'6px 8px',textAlign:'center',color:'#666'}}>{(m.current_shots||0).toLocaleString()}</td>
-              <td style={{padding:'6px 8px',textAlign:'center'}}>
-                {m.productionShots!=null
-                  ?<div style={{fontWeight:700,color:'#0F6E56'}}>{m.productionShots.toLocaleString()}</div>
-                  :<span style={{color:'#ccc',fontSize:10}}>code missing</span>}
+              <td style={{padding:'6px 8px',textAlign:'center',color:'#333',fontWeight:600}}>{(m.current_shots||0).toLocaleString()}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',color:'#555'}}>
+                {lastPMShots>0?lastPMShots.toLocaleString():'—'}
               </td>
-              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#1F3864'}}>
-                {m.sinceLastPM!=null?m.sinceLastPM.toLocaleString():'—'}
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,
+                color:remaining<=0?'#C00000':'#1F3864'}}>
+                {nextPMDue>0?nextPMDue.toLocaleString():'—'}
               </td>
-              <td style={{padding:'6px 8px',textAlign:'center'}}>{(m.next_pm_at_shots||0).toLocaleString()}</td>
-              <td style={{padding:'6px 8px'}}>
-                <div style={{display:'flex',alignItems:'center',gap:4}}>
-                  <div style={{flex:1,height:6,background:'#F0F0F0',borderRadius:999,overflow:'hidden'}}><div style={{width:`${Math.min(m.pct,100)}%`,height:'100%',background:col,borderRadius:999}}/></div>
-                  <span style={{fontSize:10,fontWeight:700,color:col}}>{m.pct}%</span>
-                </div>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:'#854F0B'}}>
+                {sinceLastPM>0?sinceLastPM.toLocaleString():'—'}
               </td>
-              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>{m.remaining>0?m.remaining.toLocaleString()+' shots':'OVERDUE'}</td>
+              <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:col}}>
+                {remaining>0?remaining.toLocaleString()+' shots':'⚠️ '+Math.abs(remaining).toLocaleString()+' overdue'}
+              </td>
               <td style={{padding:'6px 8px'}}><span style={{background:bg,color:col,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{m.status}</span></td>
             </tr>
           })})()}</tbody>
