@@ -139,16 +139,24 @@ export async function POST(req: Request) {
   }).eq('id', prodId)
 
 
-  // Update mould shot counter — ONLY on new insert (not on update, warna double count hoga)
-  if (!wasUpdate && d.mould && shotsThisShift > 0) {
+  // Update mould shot counter — recalculate from production table (accurate, handles edits/deletes)
+  if (d.mould) {
     const mouldCode = d.mould.split(' - ')[0]
+    // Sum all shots from production for this mould
+    const { data: prodRows } = await supabase
+      .from('production')
+      .select('good_parts, rejection')
+      .ilike('mould', `${mouldCode}%`)
+    const totalShots = (prodRows || []).reduce((sum: number, r: any) => sum + (r.good_parts || 0) + (r.rejection || 0), 0)
     const { data: mould } = await supabase.from('mould_master').select('*').eq('mould_code', mouldCode).maybeSingle()
-    if (mould) {
-      const newShots = (mould.current_shots || 0) + shotsThisShift
-      const remaining = (mould.next_pm_at_shots || 0) - newShots
-      const pct10 = mould.pm_frequency_shots * 0.1
+    if (mould && totalShots > 0) {
+      const remaining = (mould.next_pm_at_shots || 0) - totalShots
+      const pct10 = (mould.pm_frequency_shots || 500000) * 0.1
       const newStatus = remaining <= 0 ? 'OVERDUE' : remaining < pct10 ? 'DUE SOON' : 'Active'
-      await supabase.from('mould_master').update({ current_shots: newShots, status: newStatus }).eq('id', mould.id)
+      await supabase.from('mould_master').update({ 
+        current_shots: totalShots, 
+        status: newStatus 
+      }).eq('id', mould.id)
     }
   }
 
