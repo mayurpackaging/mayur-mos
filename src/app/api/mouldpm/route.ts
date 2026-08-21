@@ -35,20 +35,28 @@ export async function GET(req: Request) {
     const pct = pmAt > 0 ? Math.round(curr / pmAt * 100) : 0
     const status = remaining <= 0 ? 'OVERDUE' : remaining < freq * 0.1 ? 'DUE SOON' : 'Active'
 
-    // ── Auto-calculate shots from BULK PRODUCTION since last PM ──
+    // ── Auto-calculate TOTAL shots from production table ──
     // mould_master name format "Name (code)"; production mould format "code - Name"
     const codeMatch = String(m.mould_name || '').match(/\((\d+)\)/)
     const code = codeMatch ? codeMatch[1] : null
     let productionShots = null
+    let sinceLastPM = null
     if (code) {
+      // Total shots (all time)
+      const { data: prodRowsAll } = await supabase.from('production')
+        .select('good_parts,rejection')
+        .ilike('mould', `${code}%`)
+      productionShots = (prodRowsAll || []).reduce((a: number, r: any) => a + (r.good_parts || 0) + (r.rejection || 0), 0)
+      // Shots since last PM
       const sinceDate = lastPMDate[m.mould_name] || '2000-01-01'
-      const { data: prodRows } = await supabase.from('production')
+      const { data: prodRowsSince } = await supabase.from('production')
         .select('good_parts,rejection')
         .ilike('mould', `${code}%`)
         .gte('date', sinceDate)
-      productionShots = (prodRows || []).reduce((a: number, r: any) => a + (r.good_parts || 0) + (r.rejection || 0), 0)
+      sinceLastPM = (prodRowsSince || []).reduce((a: number, r: any) => a + (r.good_parts || 0) + (r.rejection || 0), 0)
     }
-    return { ...m, remaining, pct, status, productionShots, mismatch: productionShots != null ? Math.abs(productionShots - curr) : null }
+    const mismatch = productionShots != null ? Math.abs(productionShots - curr) : null
+    return { ...m, remaining, pct, status, productionShots, sinceLastPM, mismatch }
   }))
   return NextResponse.json({ success: true, moulds: result })
 }
