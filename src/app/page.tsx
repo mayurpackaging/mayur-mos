@@ -1708,21 +1708,49 @@ function IMSTab({user}:{user:User}) {
             <th style={{background:'#880E4F',color:'#fff',padding:'6px 8px',textAlign:'center'}}>Lid🔖</th>
             <th style={{background:'#1F3864',color:'#fff',padding:'6px 8px',textAlign:'center'}}>Status</th>
           </tr></thead>
-          <tbody>{items.map((it,i)=>{
-            const v=vals[it.name]||{pk:'',uc:'',ul:''}
-            const pct=it.pct||0,col=pct>100?'#276221':pct>=75?'#C2185B':pct>=50?'#7B1FA2':pct>=25?'#E65100':'#C00000'
-            const bg=pct>100?'#F1FFF4':pct>=75?'#FFF0F5':pct>=50?'#F8F0FF':pct>=25?'#FFF8F0':'#FFF0F0'
-            const stC=it.status==='SAFE'?'#276221':it.status==='CRITICAL'?'#C00000':it.status==='Not Updated'?'#616161':'#854F0B'
-            const stB=it.status==='SAFE'?'#E8F5E9':it.status==='CRITICAL'?'#FFEBEE':it.status==='Not Updated'?'#F5F5F5':'#FFF3E0'
-            return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
-              <td style={{padding:'5px 8px',fontSize:11,fontWeight:600}}>{it.name}</td>
-              <td style={{padding:2,textAlign:'center'}}>{editMin?(<input type='number' min='0' value={minVals[it.name]!==undefined?minVals[it.name]:String(it.minC||0)} onChange={e=>setMinVals(p=>({...p,[it.name]:e.target.value}))} style={{width:55,padding:4,border:'2px solid #854F0B',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,background:'#FFF9E6'}}/>):<span style={{color:'#666'}}>{it.minC}</span>}</td>
-              <td style={{padding:3}}><input type="number" min="0" value={v.pk} onChange={e=>setVals(p=>({...p,[it.name]:{...v,pk:e.target.value}}))} style={{width:60,padding:4,border:`1px solid ${col}`,borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600,background:bg}}/></td>
-              <td style={{padding:3}}><input type="number" min="0" value={v.uc} onChange={e=>setVals(p=>({...p,[it.name]:{...v,uc:e.target.value}}))} style={{width:55,padding:4,border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,background:'#F5F9FF'}}/></td>
-              <td style={{padding:3}}><input type="number" min="0" value={v.ul} onChange={e=>setVals(p=>({...p,[it.name]:{...v,ul:e.target.value}}))} style={{width:55,padding:4,border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,background:'#FFF5F9'}}/></td>
-              <td style={{textAlign:'center'}}><span style={{background:stB,color:stC,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{it.status}</span></td>
+          <tbody>
+            {/* ── FINISHED GOODS ── */}
+            <tr><td colSpan={6} style={{background:'#1F3864',color:'#fff',padding:'6px 10px',fontSize:11,fontWeight:700}}>📦 FINISHED GOODS</td></tr>
+            {items.filter(it=>it.category!=='Corrugated Box').map((it,i)=>{
+              const v=vals[it.name]||{pk:'',uc:'',ul:''}
+              const pct=it.pct||0,col=pct>100?'#276221':pct>=75?'#C2185B':pct>=50?'#7B1FA2':pct>=25?'#E65100':'#C00000'
+              const bg=pct>100?'#F1FFF4':pct>=75?'#FFF0F5':pct>=50?'#F8F0FF':pct>=25?'#FFF8F0':'#FFF0F0'
+              const stC=it.status==='SAFE'?'#276221':it.status==='CRITICAL'?'#C00000':it.status==='Not Updated'?'#616161':'#854F0B'
+              const stB=it.status==='SAFE'?'#E8F5E9':it.status==='CRITICAL'?'#FFEBEE':it.status==='Not Updated'?'#F5F5F5':'#FFF3E0'
+              return <tr key={i} style={{background:i%2===0?'#FAFAFA':'#fff'}}>
+                <td style={{padding:'5px 8px',fontSize:11,fontWeight:600}}>{it.name}</td>
+                <td style={{padding:2,textAlign:'center'}}>{editMin?(<input type='number' min='0' value={minVals[it.name]!==undefined?minVals[it.name]:String(it.minC||0)} onChange={e=>setMinVals(p=>({...p,[it.name]:e.target.value}))} style={{width:55,padding:4,border:'2px solid #854F0B',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,background:'#FFF9E6'}}/>):<span style={{color:'#666'}}>{it.minC}</span>}</td>
+                <td style={{padding:3}}><input type="number" min="0" value={v.pk} onChange={e=>setVals(p=>({...p,[it.name]:{...v,pk:e.target.value}}))} style={{width:60,padding:4,border:`1px solid ${col}`,borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600,background:bg}}/></td>
+                <td style={{padding:3}}><input type="number" min="0" value={v.uc} onChange={e=>setVals(p=>({...p,[it.name]:{...v,uc:e.target.value}}))} style={{width:55,padding:4,border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,background:'#F5F9FF'}}/></td>
+                <td style={{padding:3}}><input type="number" min="0" value={v.ul} onChange={e=>setVals(p=>({...p,[it.name]:{...v,ul:e.target.value}}))} style={{width:55,padding:4,border:'1px solid #E0E0E0',borderRadius:6,textAlign:'center',fontSize:12,background:'#FFF5F9'}}/></td>
+                <td style={{textAlign:'center'}}><span style={{background:stB,color:stC,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{it.status}</span></td>
+              </tr>
+            })}
+            {/* ── CORRUGATED BOX ── */}
+            <tr><td colSpan={6} style={{background:'#4A235A',color:'#fff',padding:'6px 10px',fontSize:11,fontWeight:700}}>📦 CORRUGATED BOX STOCK</td></tr>
+            <tr style={{background:'#F3E5F5'}}>
+              <td style={{padding:'5px 8px',fontSize:10,fontWeight:700,color:'#4A235A'}}>Item Name</td>
+              <td style={{padding:'5px 8px',fontSize:10,fontWeight:700,color:'#4A235A',textAlign:'center'}}>Min (bundles)</td>
+              <td colSpan={2} style={{padding:'5px 8px',fontSize:10,fontWeight:700,color:'#4A235A',textAlign:'center'}}>Stock (bundles)</td>
+              <td style={{padding:'5px 8px',fontSize:10,fontWeight:700,color:'#4A235A',textAlign:'center'}}>—</td>
+              <td style={{padding:'5px 8px',fontSize:10,fontWeight:700,color:'#4A235A',textAlign:'center'}}>Status</td>
             </tr>
-          })}</tbody>
+            {items.filter(it=>it.category==='Corrugated Box').map((it,i)=>{
+              const v=vals[it.name]||{pk:'',uc:'',ul:''}
+              const pct=it.pct||0
+              const stC=it.status==='SAFE'?'#276221':it.status==='CRITICAL'?'#C00000':it.status==='Not Updated'?'#616161':'#854F0B'
+              const stB=it.status==='SAFE'?'#E8F5E9':it.status==='CRITICAL'?'#FFEBEE':it.status==='Not Updated'?'#F5F5F5':'#FFF3E0'
+              const col=pct>100?'#276221':pct>=50?'#7B1FA2':'#C00000'
+              const bg=pct>100?'#F1FFF4':pct>=50?'#F8F0FF':'#FFF0F0'
+              return <tr key={'ctn'+i} style={{background:i%2===0?'#FDF5FF':'#FAF0FF'}}>
+                <td style={{padding:'5px 8px',fontSize:11,fontWeight:600,color:'#4A235A'}}>{it.name}</td>
+                <td style={{padding:2,textAlign:'center'}}>{editMin?(<input type='number' min='0' value={minVals[it.name]!==undefined?minVals[it.name]:String(it.minC||0)} onChange={e=>setMinVals(p=>({...p,[it.name]:e.target.value}))} style={{width:55,padding:4,border:'2px solid #854F0B',borderRadius:6,textAlign:'center',fontSize:12,fontWeight:700,background:'#FFF9E6'}}/>):<span style={{color:'#666'}}>{it.minC}</span>}</td>
+                <td colSpan={2} style={{padding:3}}><input type="number" min="0" value={v.pk} onChange={e=>setVals(p=>({...p,[it.name]:{...v,pk:e.target.value}}))} style={{width:80,padding:4,border:`1px solid ${col}`,borderRadius:6,textAlign:'center',fontSize:12,fontWeight:600,background:bg}}/></td>
+                <td style={{textAlign:'center',fontSize:10,color:'#888'}}>—</td>
+                <td style={{textAlign:'center'}}><span style={{background:stB,color:stC,padding:'2px 7px',borderRadius:999,fontSize:10,fontWeight:600}}>{it.status}</span></td>
+              </tr>
+            })}
+          </tbody>
         </table>
       </div>
       {editMin&&<button onClick={async()=>{
