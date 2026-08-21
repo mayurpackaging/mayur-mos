@@ -55,11 +55,7 @@ const IMS_ITEMS = [
   {name:"650 SSRE Black Rectangle",category:"SSRE",pkg:500,minC:20},
   {name:"750 SSRE Black Rectangle",category:"SSRE",pkg:500,minC:20},
   {name:"1000 SSRE Black Rectangle",category:"SSRE",pkg:500,minC:20},
-  // Old names kept for backward compat
-  {name:"500 Tamper Black Rectangle",category:"Rectangle",pkg:500,minC:20},
-  {name:"650 Tamper Black Rectangle",category:"Rectangle",pkg:500,minC:20},
-  {name:"750 Tamper Black Rectangle",category:"Rectangle",pkg:500,minC:20},
-  {name:"1000 Tamper Black Rectangle",category:"Rectangle",pkg:500,minC:20},
+
   // ── GLASS / SIPPER ──
   {name:"Cafe Glass With Sipper Lid 350 ml",category:"Glass",pkg:500,minC:20},
   {name:"Cafe Glass With Sipper Lid 500 ml",category:"Glass",pkg:300,minC:20},
