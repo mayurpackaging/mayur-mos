@@ -259,7 +259,7 @@ export default function MOS() {
   const doLogin = async () => {
     if (!username||!password){setLoginErr('Username aur password daalo!');return}
     setLoading(true);setLoginErr('')
-    const res = await fetch('/api/auth',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password}),credentials:'include'}).then(r=>r.json())
+    const res = await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password}),credentials:'include'}).then(r=>r.json())
     setLoading(false)
     if(res.success){
       setUser(res.user);setScreen('main')
