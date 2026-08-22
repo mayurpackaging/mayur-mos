@@ -334,7 +334,7 @@ export default function MOS() {
           </div>
           <button onClick={async()=>{
   try{localStorage.removeItem('mayur_user')}catch(e){}
-  await fetch('/api/auth',{credentials:'include',method:'DELETE',credentials:'include'})
+  await fetch('/api/auth',{method:'DELETE',credentials:'include'})
   setUser(null);setScreen('login');setUsername('');setPassword('')
 }} style={{background:'transparent',border:'1px solid rgba(255,255,255,.3)',color:'#fff',fontSize:11,padding:'5px 12px',borderRadius:8,cursor:'pointer'}}>Logout</button>
         </div>
