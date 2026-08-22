@@ -259,10 +259,11 @@ export default function MOS() {
   const doLogin = async () => {
     if (!username||!password){setLoginErr('Username aur password daalo!');return}
     setLoading(true);setLoginErr('')
-    const res = await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})}).then(r=>r.json())
+    const res = await fetch('/api/auth',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password}),credentials:'include'}).then(r=>r.json())
     setLoading(false)
     if(res.success){
       setUser(res.user);setScreen('main')
+      // Session managed via HTTP-only cookie (set by server)
       try{localStorage.setItem('mayur_user',JSON.stringify(res.user))}catch(e){}
       // URL mein ?scan=PartName ho toh seedhа spares entry kholo
       const sp=typeof window!=='undefined'?new URLSearchParams(window.location.search).get('scan'):null
@@ -331,7 +332,11 @@ export default function MOS() {
             <div style={{width:24,height:24,borderRadius:'50%',background:'#D62828',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{(user.name||'U').charAt(0)}</div>
             <div style={{color:'#fff',fontSize:11,fontWeight:600,lineHeight:1.2}}>{user.name}<div style={{fontSize:9,color:'rgba(255,255,255,0.6)',fontWeight:400}}>{user.role}</div></div>
           </div>
-          <button onClick={()=>{try{localStorage.removeItem('mayur_user')}catch(e){};setUser(null);setScreen('login');setUsername('');setPassword('')}} style={{background:'transparent',border:'1px solid rgba(255,255,255,.3)',color:'#fff',fontSize:11,padding:'5px 12px',borderRadius:8,cursor:'pointer'}}>Logout</button>
+          <button onClick={async()=>{
+  try{localStorage.removeItem('mayur_user')}catch(e){}
+  await fetch('/api/auth',{credentials:'include',method:'DELETE',credentials:'include'})
+  setUser(null);setScreen('login');setUsername('');setPassword('')
+}} style={{background:'transparent',border:'1px solid rgba(255,255,255,.3)',color:'#fff',fontSize:11,padding:'5px 12px',borderRadius:8,cursor:'pointer'}}>Logout</button>
         </div>
       </div>
       {tab!=='home'&&<div style={S.nav}>
@@ -1608,7 +1613,7 @@ function IMSTab({user}:{user:User}) {
   const save=async()=>{
     const entries=items.map(it=>({itemName:it.name,category:it.category,stockCartons:parseFloat(vals[it.name]?.pk||'0')||0,unpackCartons:parseFloat(vals[it.name]?.uc||'0')||0,unpackLid:parseFloat(vals[it.name]?.ul||'0')||0}))
     setSaving(true)
-    const res=await fetch('/api/ims',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plant,enteredBy:user.name,entries})}).then(r=>r.json())
+    const res=await fetch('/api/ims',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plant,enteredBy:user.name,entries})}).then(r=>r.json())
     setSaving(false);showToast(res.msg,res.success)
   }
   if(loading) return <div style={{textAlign:'center',padding:32,color:'#666'}}>Loading stock...</div>
@@ -1757,7 +1762,7 @@ function IMSTab({user}:{user:User}) {
         if(Object.keys(minVals).length===0){setToast({msg:'Koi change nahi kiya!',ok:false});return}
         setSavingMin(true)
         const updates=Object.entries(minVals).map(([name,val])=>({name,minC:parseFloat(val)||0}))
-        const res=await fetch('/api/ims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates})}).then(r=>r.json()).catch(()=>({success:false,msg:'Error!'}))
+        const res=await fetch('/api/ims',{credentials:'include',method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates})}).then(r=>r.json()).catch(()=>({success:false,msg:'Error!'}))
         setSavingMin(false);setToast({msg:res.msg||'Saved!',ok:res.success})
         if(res.success){setEditMin(false);setMinVals({});}
       }} disabled={savingMin} style={{...S.sb,marginTop:8,background:'#854F0B'}}>{savingMin?'Saving...':'💾 Save Min Stock Changes'}</button>}
@@ -1815,7 +1820,7 @@ function QCAlertBanner({user}:{user:User}) {
           <div style={{display:'flex',gap:6}}>
             <button disabled={saving||!resolution} onClick={async()=>{
               setSaving(true)
-              await fetch('/api/qcalerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'resolve',id:a.id,resolution,resolvedBy:user.name})}).then(r=>r.json())
+              await fetch('/api/qcalerts',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'resolve',id:a.id,resolution,resolvedBy:user.name})}).then(r=>r.json())
               setSaving(false)
               setResolveId(null)
               setResolution('')
@@ -1932,7 +1937,7 @@ function ProductionTab({user}:{user:User}) {
 
     for(const prod of products){
       if(!prod.product) continue
-      const res=await fetch('/api/production',{
+      const res=await fetch('/api/production',{credentials:'include',
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
@@ -2223,7 +2228,7 @@ function RejectionTab({user}:{user:User}) {
   const save=async()=>{
     if(!form.plant||!form.product){setToast({msg:'Plant aur Product select karo!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/rejection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,enteredBy:user.name})}).then(r=>r.json())
+    const res=await fetch('/api/rejection',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,enteredBy:user.name})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
   }
   return <div style={S.card}>
@@ -2335,7 +2340,7 @@ function MouldChangeTab({user}:{user:User}) {
       setToast({msg:`${form.plant} - ${form.machine} ka mould change already chal raha hai!`,ok:false});return
     }
     setSaving(true)
-    const res=await fetch('/api/mouldchange',{
+    const res=await fetch('/api/mouldchange',{credentials:'include',
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'start',...form,estimatedTime:parseFloat(form.estimatedTime)||0,enteredBy:user.name})
     }).then(r=>r.json())
@@ -2349,7 +2354,7 @@ function MouldChangeTab({user}:{user:User}) {
 
   const updateStep=async(step:string,entryId:string)=>{
     setSaving(true)
-    const res=await fetch('/api/mouldchange',{
+    const res=await fetch('/api/mouldchange',{credentials:'include',
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'update_step',id:entryId,step,remarks:form.remarks,enteredBy:user.name})
     }).then(r=>r.json())
@@ -2633,7 +2638,7 @@ function MouldPMTab({user}:{user:User}) {
   const saveSetup=async()=>{
     if(!setupForm.mouldName||!setupForm.pmShots){setToast({msg:'Mould aur PM shots daalo!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/mouldpm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'setup',...setupForm})}).then(r=>r.json())
+    const res=await fetch('/api/mouldpm',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'setup',...setupForm})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success});if(res.success)load()
   }
 
@@ -2643,7 +2648,7 @@ function MouldPMTab({user}:{user:User}) {
     // Match by base name (ignore code in brackets) so mould_master frequency mil jaye
     const baseName=(s:string)=>(s||'').replace(/\s*\([^)]*\)\s*$/,'').trim().toLowerCase()
     const mould=moulds.find(m=>m.mould_name===doneForm.mouldName)||moulds.find(m=>baseName(m.mould_name)===baseName(doneForm.mouldName))
-    const res=await fetch('/api/mouldpm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'done',...doneForm,pmFrequency:mould?.pm_frequency_shots||0,checks,ngCount:Object.values(checks).filter(v=>v==='NG').length})}).then(r=>r.json())
+    const res=await fetch('/api/mouldpm',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'done',...doneForm,pmFrequency:mould?.pm_frequency_shots||0,checks,ngCount:Object.values(checks).filter(v=>v==='NG').length})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success});if(res.success){load();setChecks({})}
   }
 
@@ -2824,7 +2829,7 @@ function BreakdownTab({user}:{user:User}) {
       setToast({msg:'Plant, Machine aur Problem bharo!',ok:false});return
     }
     setSaving(true)
-    const res=await fetch('/api/breakdown',{
+    const res=await fetch('/api/breakdown',{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -2846,7 +2851,7 @@ function BreakdownTab({user}:{user:User}) {
 
   const startWork=async(id:string)=>{
     setSaving(true)
-    const res=await fetch('/api/breakdown',{
+    const res=await fetch('/api/breakdown',{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'start_work',id,workStartedTime:new Date().toISOString(),enteredBy:user.name})
@@ -2859,7 +2864,7 @@ function BreakdownTab({user}:{user:User}) {
   const resolve=async(id:string)=>{
     if(!resolveForm.solution){setToast({msg:'Solution likho!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/breakdown',{
+    const res=await fetch('/api/breakdown',{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -3806,7 +3811,7 @@ function DispatchTab({user}:{user:User}) {
     })
     if(dispLines.length===0){setToast({msg:'Koi item nahi bhara!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date,customer,vehicleType:vehicleType==='5'?'Choti Gaadi':'Badi Gaadi',vehicleNo,driverName,deliveryAddress,notes,dispatchBy:user.name,lines:dispLines})}).then(r=>r.json())
+    const res=await fetch('/api/dispatch',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date,customer,vehicleType:vehicleType==='5'?'Choti Gaadi':'Badi Gaadi',vehicleNo,driverName,deliveryAddress,notes,dispatchBy:user.name,lines:dispLines})}).then(r=>r.json())
     setSaving(false)
     if(res.success){
       setToast({msg:res.msg,ok:true})
@@ -4122,7 +4127,7 @@ function SparesTab({user,scanPart,clearScan}:{user:User,scanPart?:string,clearSc
     setSaving(true)
     // Save vendor name for next time
     if(vendor) localStorage.setItem('lastVendor', vendor)
-    const res=await fetch('/api/spares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendor,slipNo,date,action,doneBy:user.name,items:validItems,plant:usedForPlant,machine:usedForMachine,mouldNo:usedForMould,usedFor})}).then(r=>r.json())
+    const res=await fetch('/api/spares',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendor,slipNo,date,action,doneBy:user.name,items:validItems,plant:usedForPlant,machine:usedForMachine,mouldNo:usedForMould,usedFor})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
     if(res.success){load();setSpareItems([{partName:'',category:'',unit:'Pcs',qty:'',minQty:'',pricePerPc:'',total:0,plant:'',room:'',almirah:'',boxNo:'',storageType:'Box',lastVendor:'',lastPrice:0,currentStock:0,historyInfo:''}]);setVendor('');setSlipNo('');setUsedForPlant('');setUsedForMachine('');setUsedForMould('');setUsedFor('Machine')}
   }
@@ -4311,7 +4316,7 @@ function SparesTab({user,scanPart,clearScan}:{user:User,scanPart?:string,clearSc
               <button onClick={async()=>{
                 setEditSaving(true)
                 const status = parseFloat(editForm.current_stock)===0?'Out of Stock':parseFloat(editForm.current_stock)<parseFloat(editForm.min_qty||0)?'Low':'OK'
-                await fetch('/api/spares',{method:'PUT',headers:{'Content-Type':'application/json'},
+                await fetch('/api/spares',{credentials:'include',method:'PUT',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({id:editSpare.id,...editForm,status,updatedBy:user.name})
                 }).then(r=>r.json())
                 setEditSaving(false)
@@ -4626,7 +4631,7 @@ function SparesTab({user,scanPart,clearScan}:{user:User,scanPart?:string,clearSc
           <div style={{display:'flex',gap:8,marginTop:12}}>
             <button onClick={async()=>{
               setEditSaving(true)
-              await fetch('/api/spares',{method:'PUT',headers:{'Content-Type':'application/json'},
+              await fetch('/api/spares',{credentials:'include',method:'PUT',headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({id:editSpare.id,_movement:true,...editForm,updatedBy:user.name})
               }).then(r=>r.json())
               setEditSaving(false)
@@ -4815,11 +4820,11 @@ function QualityTab({user}:{user:User}) {
     setSaving(true)
 
     // Save quality checks
-    await fetch('/api/quality',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries})}).then(r=>r.json())
+    await fetch('/api/quality',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries})}).then(r=>r.json())
 
     // Save alerts
     if(alerts.length>0){
-      await fetch('/api/qcalerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alerts})}).then(r=>r.json()).catch(()=>{})
+      await fetch('/api/qcalerts',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alerts})}).then(r=>r.json()).catch(()=>{})
     }
 
     setSaving(false)
@@ -5097,7 +5102,7 @@ function BatchTab({user}:{user:User}) {
     const found=items.find(i=>i.name===form.item)
     const pkg=found?.pkg||500
     const units=Math.round(parseFloat(form.qtyCartons)*pkg)
-    const res=await fetch('/api/production',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    const res=await fetch('/api/production',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       date:form.date,shift:form.shift==='Day'?'Day (8am-8pm)':'Night (8pm-8am)',
       plant:form.plant,machine:form.machine,operator:form.operator,
       product:form.item,mould:form.mouldNo,cavities:'',cycleTime:'',material:'',
@@ -5181,7 +5186,7 @@ function SalesTab({user}:{user:User}) {
     if(!form.customer||!form.item){setToast({msg:'Customer aur Item daalo!',ok:false});return}
     setSaving(true)
     // Save as dispatch order for now
-    const res=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    const res=await fetch('/api/dispatch',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       date:nd(),customer:form.customer,vehicleType:'Order',vehicleNo:'',driverName:'',
       deliveryAddress:'',notes:`Source: ${form.source} | Rate: ₹${form.ratePerUnit} | Delivery: ${form.deliveryDate} | Priority: ${form.priority} | ${form.notes}`,
       dispatchBy:user.name,
@@ -5253,7 +5258,7 @@ function PlanningTab({user}:{user:User}) {
   const save=async()=>{
     if(!form.plant||!form.product||!form.plannedQty){setToast({msg:'Plant, Product aur Qty daalo!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/planning',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    const res=await fetch('/api/planning',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       date:form.plannedDate,shift:form.shift,
       plant:form.plant,machine:form.machine,product:form.product,
       plannedQty:form.plannedQty,priority:form.priority,notes:form.notes,
@@ -5345,7 +5350,7 @@ function UsersTab({user}:{user:User}) {
 
   const load=useCallback(()=>{
     // Load users from Supabase via a simple fetch
-    fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'list'})})
+    fetch('/api/auth',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'list'})})
       .then(r=>r.json()).then(d=>{if(d.users)setUsers(d.users);setLoading(false)})
       .catch(()=>setLoading(false))
   },[])
@@ -6090,7 +6095,7 @@ function MISAlertsSection() {
 
   const sendAlert=async(type:string,label:string)=>{
     setSending(type)
-    const res=await fetch('/api/alerts',{
+    const res=await fetch('/api/alerts',{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type})
@@ -6448,7 +6453,7 @@ function MaintenanceTab({user}:{user:User}) {
       }))
     )
 
-    const res=await fetch('/api/maintenance',{
+    const res=await fetch('/api/maintenance',{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -6460,7 +6465,7 @@ function MaintenanceTab({user}:{user:User}) {
 
     // Save shots if Daily
     if(activeFreq==='Daily'&&shots.length>0){
-      await fetch('/api/maintenance',{
+      await fetch('/api/maintenance',{credentials:'include',
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({type:'shots',date,shift,plant,doneBy:user.name,shots})
@@ -6790,7 +6795,7 @@ function BulkProductionTab({user}:{user:User}) {
     if(saving){return}
     setSaving(true)
     console.log('Saving setup:', {plant, date, machines: machineSetup})
-    const res=await fetch('/api/machine-setup',{
+    const res=await fetch('/api/machine-setup',{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -6881,7 +6886,7 @@ function BulkProductionTab({user}:{user:User}) {
       if(!ok){setSaving(false);return}
     }
     setSaving(true)
-    const res=await fetch('/api/machine-setup',{
+    const res=await fetch('/api/machine-setup',{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -6896,12 +6901,12 @@ function BulkProductionTab({user}:{user:User}) {
       // Auto save mould change for MC entries
       const mcEntries=filledEntries.filter(e=>e.isMC&&e.oldMould&&e.mould)
       for(const mc of mcEntries){
-        const mcRes=await fetch('/api/mouldchange',{
+        const mcRes=await fetch('/api/mouldchange',{credentials:'include',
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({type:'start',date,shift:shift==='day'?'Day':'Night',plant,machine:mc.machine,oldMould:mc.oldMould||'',newMould:mc.mould||'',operator:mc.operator||'',enteredBy:user.name,estimatedTime:0})
         }).then(r=>r.json())
         if(mcRes.success&&mcRes.id){
-          await fetch('/api/mouldchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'update_step',id:mcRes.id,step:'run'})})
+          await fetch('/api/mouldchange',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'update_step',id:mcRes.id,step:'run'})})
         }
       }
       setEntries(prev=>prev.map(e=>({...e,good:'',rejection:'',down:'',remarks:'',editId:null})))
@@ -6918,7 +6923,7 @@ function BulkProductionTab({user}:{user:User}) {
   const saveEdit=async(prod:any,slotName?:string)=>{
     setSaving(true)
     const useSlot=slotName||prod.production_slots?.[0]?.slot_name||slot
-    const res=await fetch('/api/machine-setup',{
+    const res=await fetch('/api/machine-setup',{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -8633,7 +8638,7 @@ Extract every single entry you can see. Return ONLY the JSON array.`
       const mouldCode=mouldMatch?.code||''
 
       if(entry.type==='Breakdown'||entry.type==='breakdown'){
-        await fetch('/api/breakdown',{
+        await fetch('/api/breakdown',{credentials:'include',
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({
@@ -8650,7 +8655,7 @@ Extract every single entry you can see. Return ONLY the JSON array.`
         }).then(r=>r.json()).then(async(res)=>{
           if(res.success){
             // Auto resolve it
-            await fetch('/api/breakdown',{
+            await fetch('/api/breakdown',{credentials:'include',
               method:'POST',
               headers:{'Content-Type':'application/json'},
               body:JSON.stringify({
@@ -8667,7 +8672,7 @@ Extract every single entry you can see. Return ONLY the JSON array.`
         })
       } else {
         // PM or Loading
-        await fetch('/api/mouldpm',{
+        await fetch('/api/mouldpm',{credentials:'include',
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({
@@ -8771,7 +8776,7 @@ function QCAlertsTab({user}:{user:User}) {
   const handleResolve=async()=>{
     if(!resolution.trim()){setToast({msg:'Action / resolution likho!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/qcalerts',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/qcalerts',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'resolve',id:selected.id,resolvedBy,resolution})
     }).then(r=>r.json())
     setSaving(false)
@@ -8781,7 +8786,7 @@ function QCAlertsTab({user}:{user:User}) {
 
   const handleReopen=async()=>{
     setSaving(true)
-    const res=await fetch('/api/qcalerts',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/qcalerts',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'reopen',id:selected.id})
     }).then(r=>r.json())
     setSaving(false)
@@ -9055,26 +9060,26 @@ function ProcessCheckTab({user}:{user:User}) {
 
   const tgAddStaff=async()=>{
     if(!tgForm.staffName||!tgForm.chatId){setTgToast({msg:'Naam aur Chat ID daalo!',ok:false});return}
-    const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/telegram',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'add_staff',...tgForm})}).then(r=>r.json())
     setTgToast({msg:res.msg,ok:res.success})
     if(res.success){setTgForm({department:'production',staffName:'',chatId:'',plant:''});loadTelegram()}
   }
   const tgDelStaff=async(id:string)=>{
-    const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/telegram',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'delete_staff',id})}).then(r=>r.json())
     if(res.success) loadTelegram()
   }
   const tgSaveToken=async()=>{
     if(!tgToken){setTgToast({msg:'Token daalo!',ok:false});return}
-    const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/telegram',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'save_token',token:tgToken})}).then(r=>r.json())
     setTgToast({msg:res.msg,ok:res.success})
     if(res.success){setTgToken('');loadTelegram()}
   }
   const tgSendNow=async()=>{
     setTgSending(true)
-    const res=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/telegram',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'send_reminders',date})}).then(r=>r.json())
     setTgSending(false)
     setTgToast({msg:res.msg,ok:res.success})
@@ -9108,7 +9113,7 @@ function ProcessCheckTab({user}:{user:User}) {
 
   const saveSettings=async()=>{
     setSaving(true)
-    const res=await fetch('/api/processcheck',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/processcheck',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'save_settings',...form,updatedBy:user.name})
     }).then(r=>r.json())
     setSaving(false)
@@ -9609,7 +9614,7 @@ function GreaseTab({user}:{user:User}) {
   const saveUse=async()=>{
     if(!useForm.greaseName||!useForm.machine||!useForm.qty){setToast({msg:'Grease, machine aur qty daalo!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/grease',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/grease',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'used',...useForm,doneBy:user.name})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
     if(res.success){setUseForm({greaseName:'',machine:'',plant:useForm.plant,qty:'',machineCounter:'',remarks:''});load()}
@@ -9617,7 +9622,7 @@ function GreaseTab({user}:{user:User}) {
   const saveIn=async()=>{
     if(!inForm.greaseName||!inForm.qty){setToast({msg:'Grease aur qty daalo!',ok:false});return}
     setSaving(true)
-    const res=await fetch('/api/grease',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('/api/grease',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'stock_in',...inForm,doneBy:user.name})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg,ok:res.success})
     if(res.success){setInForm({greaseName:'',qty:'',vendor:'',price:'',plant:inForm.plant,remarks:''});load()}
@@ -10272,14 +10277,14 @@ function IMSSmartTab({user}:{user:User}) {
       physical_ctn:parseFloat(entries[it.item_name]?.ctn||'0')||0,
       unpack_packets:parseFloat(entries[it.item_name]?.pkt||'0')||0,
     })).filter((e:any)=>e.physical_ctn>0||e.unpack_packets>0)
-    const res=await fetch('/api/ims-smart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'save_stock',date,entries:list,user:user.name})}).then(r=>r.json())
+    const res=await fetch('/api/ims-smart',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'save_stock',date,entries:list,user:user.name})}).then(r=>r.json())
     setSaving(false);setToast({msg:res.msg||'Saved',ok:res.success})
     if(res.success){load()}
   }
 
   const saveSetting=async(item:any)=>{
     const f=setForm[item.item_name]
-    const res=await fetch('/api/ims-smart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'update_settings',item:{item_name:item.item_name,category:item.category,...f}})}).then(r=>r.json())
+    const res=await fetch('/api/ims-smart',{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'update_settings',item:{item_name:item.item_name,category:item.category,...f}})}).then(r=>r.json())
     setToast({msg:res.msg||'Saved',ok:res.success})
     if(res.success)load()
   }
