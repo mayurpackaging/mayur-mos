@@ -10,9 +10,7 @@ function verifyToken(token: string): boolean {
     const parts = decoded.split(':')
     if (parts.length < 4) return false
     const [username, role, timestamp, hmac] = parts
-    // Check expiry 24 hours
     if (Date.now() - Number(timestamp) > 24 * 60 * 60 * 1000) return false
-    // Verify HMAC
     const payload = `${username}:${role}:${timestamp}`
     const expectedHmac = crypto.createHmac('sha256', secret).update(payload).digest('hex')
     return hmac === expectedHmac
@@ -22,12 +20,10 @@ function verifyToken(token: string): boolean {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Public routes — no auth needed
   if (pathname === '/' || pathname.startsWith('/api/auth')) {
     return NextResponse.next()
   }
 
-  // Protect all API routes
   if (pathname.startsWith('/api/')) {
     const token = request.cookies.get('mos_session')?.value
     if (!token || !verifyToken(token)) {
